@@ -4,10 +4,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { get, push, ref, set } from "firebase/database";
 import { auth, db } from "../../lib/firebase";
+
+import MobileShell from "../../components/ui/MobileShell";
+import FloatingTopBar from "../../components/ui/FloatingTopBar";
+import BottomSheet from "../../components/ui/BottomSheet";
+import MapPlaceholder from "../../components/ui/MapPlaceholder";
+import ActionCard from "../../components/ui/ActionCard";
 
 const cityOptions = [
   "harare",
@@ -72,13 +77,11 @@ export default function RiderPage() {
 
       try {
         setLoadingProfile(true);
-
         const snap = await get(ref(db, `profiles/${currentUser.uid}`));
         const profileData = snap.val();
 
         if (!profileData) {
           setError("Profile not found.");
-          setLoadingProfile(false);
           return;
         }
 
@@ -140,9 +143,7 @@ export default function RiderPage() {
 
         setSuccess("Pickup GPS captured.");
       },
-      () => {
-        setError("Failed to get your location.");
-      },
+      () => setError("Failed to get your location."),
       { enableHighAccuracy: true, timeout: 12000, maximumAge: 1000 }
     );
   };
@@ -174,11 +175,6 @@ export default function RiderPage() {
       return;
     }
 
-    if (cleanPeople <= 0) {
-      setError("Enter valid number of people.");
-      return;
-    }
-
     try {
       setSubmitting(true);
 
@@ -186,7 +182,7 @@ export default function RiderPage() {
       const requestId = requestRef.key;
       const now = Date.now();
 
-      const payload = {
+      await set(requestRef, {
         riderId: user.uid,
         riderName: profile.fullName || "Rider",
         riderPhone: profile.phone || "",
@@ -203,9 +199,7 @@ export default function RiderPage() {
         status: "open",
         createdAt: now,
         expiresAt: now + 1000 * 60 * 10,
-      };
-
-      await set(requestRef, payload);
+      });
 
       setActiveRequestId(requestId);
       setSuccess("Ride request created successfully.");
@@ -236,280 +230,176 @@ export default function RiderPage() {
 
   if (!authReady || loadingProfile) {
     return (
-      <main className="nx-shell">
+      <MobileShell>
         <div
-          className="nx-container"
           style={{
             minHeight: "100vh",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
+            padding: 20,
           }}
         >
-          <div
-            className="nx-card"
-            style={{
-              width: "100%",
-              padding: 24,
-              borderRadius: 28,
-              textAlign: "center",
-            }}
-          >
-            <div className="nx-title" style={{ fontSize: 24 }}>
+          <ActionCard style={{ width: "100%", textAlign: "center" }}>
+            <div style={{ fontSize: 24, fontWeight: 1000 }}>
               Loading rider app...
             </div>
-            <div className="nx-subtitle" style={{ marginTop: 8 }}>
-              Preparing your dashboard.
+            <div style={{ fontSize: 13, color: "#9fb3c8", marginTop: 8 }}>
+              Preparing your dashboard
             </div>
-          </div>
+          </ActionCard>
         </div>
-      </main>
+      </MobileShell>
     );
   }
 
   return (
-    <main className="nx-shell">
-      <div className="nx-container" style={{ paddingTop: 18, paddingBottom: 28 }}>
-        {/* top bar */}
-        <div
-          className="nx-glass"
-          style={{
-            borderRadius: 22,
-            padding: "14px 16px",
-            marginBottom: 16,
-          }}
-        >
-          <div className="nx-between" style={{ gap: 12 }}>
-            <div className="nx-logo">
-              <div className="nx-logo-mark" />
-              <div>
-                <div style={{ fontWeight: 1000, fontSize: 18 }}>NEXRIDE</div>
-                <div className="nx-soft-text">Rider dashboard</div>
-              </div>
-            </div>
+    <MobileShell>
+      <MapPlaceholder
+        label="Rider map"
+        sublabel="Pickup, driver offers, and live trips will appear here"
+      />
 
-            <button
-              onClick={handleLogout}
-              className="nx-btn nx-btn-secondary"
-              style={{
-                width: "auto",
-                padding: "10px 14px",
-                borderRadius: 14,
-              }}
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-
-        {/* hero */}
-        <section
-          className="nx-card"
-          style={{
-            padding: 18,
-            borderRadius: 28,
-            marginBottom: 16,
-            position: "relative",
-            overflow: "hidden",
-          }}
-        >
-          <div
+      <FloatingTopBar
+        title="NEXRIDE"
+        subtitle={`${profile?.fullName || "Rider"} • ${cityLabel(city)}`}
+        right={
+          <button
+            onClick={handleLogout}
             style={{
-              position: "absolute",
-              top: -70,
-              right: -40,
-              width: 180,
-              height: 180,
-              borderRadius: "50%",
-              background: "rgba(0, 198, 255, 0.12)",
-              filter: "blur(18px)",
-            }}
-          />
-          <div
-            style={{
-              position: "relative",
-              zIndex: 2,
+              border: "1px solid rgba(255,255,255,0.12)",
+              background: "rgba(255,255,255,0.04)",
+              color: "#fff",
+              borderRadius: 14,
+              padding: "10px 14px",
+              fontWeight: 800,
             }}
           >
-            <div className="nx-pill" style={{ marginBottom: 14 }}>
-              <span className="nx-badge-online" />
-              Ready to request
-            </div>
+            Logout
+          </button>
+        }
+      />
 
-            <div className="nx-title" style={{ fontSize: 28, marginBottom: 8 }}>
-              Welcome{profile?.fullName ? `, ${profile.fullName.split(" ")[0]}` : ""}
+      <BottomSheet height="56vh">
+        <div style={{ display: "grid", gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 21, fontWeight: 1000 }}>Request a ride</div>
+            <div style={{ fontSize: 13, color: "#9fb3c8", marginTop: 4 }}>
+              Set your route, offer your price, and wait for drivers to respond.
             </div>
+          </div>
 
-            <div className="nx-subtitle" style={{ marginBottom: 14 }}>
-              Request your ride, set your price, and wait for nearby drivers to respond.
-            </div>
+          <form onSubmit={handleRequestRide} style={{ display: "grid", gap: 12 }}>
+            <ActionCard>
+              <div style={{ display: "grid", gap: 10 }}>
+                <select
+                  value={city}
+                  onChange={(e) => {
+                    const nextCity = e.target.value;
+                    setCity(nextCity);
+                    try {
+                      localStorage.setItem("nexride-last-place", nextCity);
+                    } catch {}
+                  }}
+                  className="nx-input"
+                >
+                  {cityOptions.map((item) => (
+                    <option key={item} value={item}>
+                      {cityLabel(item)}
+                    </option>
+                  ))}
+                </select>
 
-            <div className="nx-grid" style={{ gap: 10 }}>
-              <div className="nx-glass" style={{ borderRadius: 18, padding: 14 }}>
-                <div className="nx-between">
-                  <div>
-                    <div style={{ fontWeight: 900 }}>Current city</div>
-                    <div className="nx-soft-text" style={{ marginTop: 4 }}>
-                      {cityLabel(city)}
-                    </div>
-                  </div>
-                  <div className="nx-pill">Cash beta</div>
+                <input
+                  className="nx-input"
+                  placeholder="Pickup location"
+                  value={pickupName}
+                  onChange={(e) => setPickupName(e.target.value)}
+                />
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10 }}>
+                  <input
+                    className="nx-input"
+                    placeholder="Pickup latitude"
+                    value={pickupLat}
+                    onChange={(e) => setPickupLat(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={useMyCurrentLocation}
+                    style={{
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "rgba(255,255,255,0.04)",
+                      color: "#fff",
+                      borderRadius: 16,
+                      padding: "0 16px",
+                      fontWeight: 900,
+                    }}
+                  >
+                    GPS
+                  </button>
+                </div>
+
+                <input
+                  className="nx-input"
+                  placeholder="Pickup longitude"
+                  value={pickupLng}
+                  onChange={(e) => setPickupLng(e.target.value)}
+                />
+
+                <input
+                  className="nx-input"
+                  placeholder="Dropoff location"
+                  value={dropoffName}
+                  onChange={(e) => setDropoffName(e.target.value)}
+                />
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <input
+                    className="nx-input"
+                    placeholder="Dropoff latitude"
+                    value={dropoffLat}
+                    onChange={(e) => setDropoffLat(e.target.value)}
+                  />
+                  <input
+                    className="nx-input"
+                    placeholder="Dropoff longitude"
+                    value={dropoffLng}
+                    onChange={(e) => setDropoffLng(e.target.value)}
+                  />
                 </div>
               </div>
-            </div>
-          </div>
-        </section>
+            </ActionCard>
 
-        {/* request form */}
-        <section
-          className="nx-card"
-          style={{
-            padding: 18,
-            borderRadius: 28,
-            marginBottom: 16,
-          }}
-        >
-          <div style={{ marginBottom: 14 }}>
-            <div className="nx-section-title">Request a ride</div>
-            <div className="nx-soft-text" style={{ marginTop: 4 }}>
-              Fill in the trip details below.
-            </div>
-          </div>
-
-          <form onSubmit={handleRequestRide} className="nx-grid">
-            <div className="nx-grid" style={{ gap: 8 }}>
-              <label className="nx-soft-text">City</label>
-              <select
-                className="nx-input"
-                value={city}
-                onChange={(e) => {
-                  const nextCity = e.target.value;
-                  setCity(nextCity);
-                  try {
-                    localStorage.setItem("nexride-last-place", nextCity);
-                  } catch {}
-                }}
-              >
-                {cityOptions.map((item) => (
-                  <option key={item} value={item}>
-                    {cityLabel(item)}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="nx-grid" style={{ gap: 8 }}>
-              <label className="nx-soft-text">Pickup location</label>
-              <input
-                className="nx-input"
-                type="text"
-                placeholder="Enter pickup point"
-                value={pickupName}
-                onChange={(e) => setPickupName(e.target.value)}
-              />
-            </div>
-
-            <div className="nx-grid" style={{ gridTemplateColumns: "1fr auto", gap: 10 }}>
-              <input
-                className="nx-input"
-                type="text"
-                placeholder="Pickup latitude (optional)"
-                value={pickupLat}
-                onChange={(e) => setPickupLat(e.target.value)}
-              />
-              <button
-                type="button"
-                className="nx-btn nx-btn-secondary"
-                style={{
-                  width: "auto",
-                  padding: "0 16px",
-                  minHeight: 50,
-                  borderRadius: 16,
-                }}
-                onClick={useMyCurrentLocation}
-              >
-                Use GPS
-              </button>
-            </div>
-
-            <div className="nx-grid" style={{ gap: 8 }}>
-              <input
-                className="nx-input"
-                type="text"
-                placeholder="Pickup longitude (optional)"
-                value={pickupLng}
-                onChange={(e) => setPickupLng(e.target.value)}
-              />
-            </div>
-
-            <div className="nx-grid" style={{ gap: 8 }}>
-              <label className="nx-soft-text">Dropoff location</label>
-              <input
-                className="nx-input"
-                type="text"
-                placeholder="Enter destination"
-                value={dropoffName}
-                onChange={(e) => setDropoffName(e.target.value)}
-              />
-            </div>
-
-            <div className="nx-grid" style={{ gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <input
-                className="nx-input"
-                type="text"
-                placeholder="Dropoff latitude (optional)"
-                value={dropoffLat}
-                onChange={(e) => setDropoffLat(e.target.value)}
-              />
-              <input
-                className="nx-input"
-                type="text"
-                placeholder="Dropoff longitude (optional)"
-                value={dropoffLng}
-                onChange={(e) => setDropoffLng(e.target.value)}
-              />
-            </div>
-
-            <div className="nx-grid" style={{ gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <div className="nx-grid" style={{ gap: 8 }}>
-                <label className="nx-soft-text">Your offer ($)</label>
+            <ActionCard>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                 <input
                   className="nx-input"
                   type="number"
                   min="1"
                   step="0.01"
-                  placeholder="4"
+                  placeholder="Your offer ($)"
                   value={offerPrice}
                   onChange={(e) => setOfferPrice(e.target.value)}
                 />
-              </div>
-
-              <div className="nx-grid" style={{ gap: 8 }}>
-                <label className="nx-soft-text">People</label>
                 <input
                   className="nx-input"
                   type="number"
                   min="1"
-                  placeholder="1"
+                  placeholder="People"
                   value={people}
                   onChange={(e) => setPeople(e.target.value)}
                 />
               </div>
-            </div>
 
-            <div className="nx-grid" style={{ gap: 8 }}>
-              <label className="nx-soft-text">Notes (optional)</label>
               <textarea
                 className="nx-input"
-                placeholder="Add any extra trip details"
+                placeholder="Extra trip details"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                style={{
-                  minHeight: 96,
-                  resize: "none",
-                }}
+                style={{ minHeight: 90, resize: "none", marginTop: 10 }}
               />
-            </div>
+            </ActionCard>
 
             {error ? (
               <div
@@ -544,70 +434,34 @@ export default function RiderPage() {
             ) : null}
 
             <button
-              className="nx-btn nx-btn-primary"
               type="submit"
               disabled={!canSubmit || submitting}
+              style={{
+                width: "100%",
+                border: "none",
+                borderRadius: 18,
+                padding: "16px",
+                fontSize: 15,
+                fontWeight: 1000,
+                color: "#001018",
+                background: "linear-gradient(90deg,#00c6ff,#0066ff)",
+                boxShadow: "0 14px 30px rgba(0,102,255,0.24)",
+              }}
             >
               {submitting ? "Requesting ride..." : "Request ride"}
             </button>
           </form>
-        </section>
 
-        {/* active request preview */}
-        <section
-          className="nx-card"
-          style={{
-            padding: 18,
-            borderRadius: 28,
-            marginBottom: 16,
-          }}
-        >
-          <div className="nx-between" style={{ marginBottom: 10 }}>
-            <div>
-              <div className="nx-section-title">Latest request</div>
-              <div className="nx-soft-text" style={{ marginTop: 4 }}>
-                Your latest ride request ID will show here.
-              </div>
-            </div>
-            <div className="nx-pill">MVP</div>
-          </div>
-
-          <div className="nx-glass" style={{ borderRadius: 18, padding: 14 }}>
-            <div style={{ fontWeight: 900, marginBottom: 6 }}>Request status</div>
-            <div className="nx-soft-text">
+          <ActionCard>
+            <div style={{ fontWeight: 900, marginBottom: 6 }}>Latest request</div>
+            <div style={{ fontSize: 13, color: "#9fb3c8" }}>
               {activeRequestId
                 ? `Created successfully — ID: ${activeRequestId}`
                 : "No new request in this session yet."}
             </div>
-          </div>
-        </section>
-
-        {/* next steps */}
-        <section
-          className="nx-glass"
-          style={{
-            borderRadius: 22,
-            padding: 16,
-          }}
-        >
-          <div className="nx-between" style={{ marginBottom: 8 }}>
-            <div style={{ fontWeight: 900 }}>Next upgrade</div>
-            <div className="nx-pill">Coming next</div>
-          </div>
-
-          <div className="nx-soft-text" style={{ marginBottom: 14 }}>
-            Next we connect this rider page to live driver offers, accepted trips, and tracking.
-          </div>
-
-          <div className="nx-grid">
-            <Link href="/driver">
-              <button className="nx-btn nx-btn-secondary" type="button">
-                Open driver app
-              </button>
-            </Link>
-          </div>
-        </section>
-      </div>
-    </main>
+          </ActionCard>
+        </div>
+      </BottomSheet>
+    </MobileShell>
   );
-}
+      }
