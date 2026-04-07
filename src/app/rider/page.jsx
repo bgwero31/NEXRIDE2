@@ -11,7 +11,7 @@ import { auth, db } from "../../lib/firebase";
 import MobileShell from "../../components/ui/MobileShell";
 import FloatingTopBar from "../../components/ui/FloatingTopBar";
 import BottomSheet from "../../components/ui/BottomSheet";
-import MapPlaceholder from "../../components/ui/MapPlaceholder";
+import RiderMap from "../../components/rider/RiderMap";
 import ActionCard from "../../components/ui/ActionCard";
 
 import RequestSheet from "../../components/rider/RequestSheet";
@@ -407,30 +407,11 @@ export default function RiderPage() {
 
   return (
     <MobileShell>
-      <MapPlaceholder
-        label={
-          mode === "trip"
-            ? "Live trip"
-            : mode === "offers"
-            ? "Driver offers"
-            : mode === "waiting"
-            ? "Searching drivers"
-            : mode === "completed"
-            ? "Trip completed"
-            : "Rider map"
-        }
-        sublabel={
-          mode === "trip"
-            ? "Driver movement and trip updates will appear here"
-            : mode === "offers"
-            ? "Nearby driver offers will appear here"
-            : mode === "waiting"
-            ? "Waiting for drivers to respond"
-            : mode === "completed"
-            ? "Your last completed trip summary"
-            : "Set pickup, destination, and price"
-        }
-      />
+<RiderMap
+  mode={mode}
+  requestData={requestData}
+  tripData={tripData}
+/>
 
       <FloatingTopBar
         title="NEXRIDE"
