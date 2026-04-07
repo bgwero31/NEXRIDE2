@@ -4,22 +4,66 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import {
   get,
   onValue,
   push,
   ref,
-  remove,
   set,
   update,
 } from "firebase/database";
 import { auth, db } from "../../lib/firebase";
 
+import MobileShell from "../../components/ui/MobileShell";
+import FloatingTopBar from "../../components/ui/FloatingTopBar";
+import BottomSheet from "../../components/ui/BottomSheet";
+import MapPlaceholder from "../../components/ui/MapPlaceholder";
+import ActionCard from "../../components/ui/ActionCard";
+
 function cityLabel(city) {
   if (!city) return "Unknown";
   return city.charAt(0).toUpperCase() + city.slice(1);
+}
+
+function statusPill(status) {
+  const base = {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "6px 10px",
+    borderRadius: 999,
+    fontSize: 11,
+    fontWeight: 900,
+    letterSpacing: 0.4,
+    border: "1px solid transparent",
+    textTransform: "uppercase",
+  };
+
+  if (status === "accepted" || status === "matched") {
+    return {
+      ...base,
+      color: "#d9f6ff",
+      background: "rgba(0,198,255,0.12)",
+      border: "1px solid rgba(0,198,255,0.25)",
+    };
+  }
+
+  if (status === "open") {
+    return {
+      ...base,
+      color: "#eaffdc",
+      background: "rgba(45,200,95,0.12)",
+      border: "1px solid rgba(45,200,95,0.22)",
+    };
+  }
+
+  return {
+    ...base,
+    color: "#fff0d2",
+    background: "rgba(255,170,30,0.12)",
+    border: "1px solid rgba(255,170,30,0.22)",
+  };
 }
 
 export default function DriverPage() {
@@ -71,7 +115,6 @@ export default function DriverPage() {
 
         if (!profileData) {
           setError("Driver profile not found.");
-          setLoadingProfile(false);
           return;
         }
 
@@ -120,17 +163,13 @@ export default function DriverPage() {
 
     const driverNode = ref(db, `driversOnline/${city}/${user.uid}`);
 
-    const markOffline = async () => {
+    const handleUnload = () => {
       try {
-        await update(driverNode, {
+        update(driverNode, {
           online: false,
           lastSeen: Date.now(),
         });
       } catch {}
-    };
-
-    const handleUnload = () => {
-      markOffline();
     };
 
     window.addEventListener("beforeunload", handleUnload);
@@ -209,7 +248,6 @@ export default function DriverPage() {
       const tripRef = push(ref(db, `activeTrips`));
       const tripId = tripRef.key;
       const now = Date.now();
-
       const otp = String(Math.floor(100000 + Math.random() * 900000));
 
       const payload = {
@@ -326,351 +364,305 @@ export default function DriverPage() {
 
   if (!authReady || loadingProfile) {
     return (
-      <main className="nx-shell">
+      <MobileShell>
         <div
-          className="nx-container"
           style={{
             minHeight: "100vh",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
+            padding: 20,
           }}
         >
-          <div
-            className="nx-card"
-            style={{
-              width: "100%",
-              padding: 24,
-              borderRadius: 28,
-              textAlign: "center",
-            }}
-          >
-            <div className="nx-title" style={{ fontSize: 24 }}>
+          <ActionCard style={{ width: "100%", textAlign: "center" }}>
+            <div style={{ fontSize: 24, fontWeight: 1000 }}>
               Loading driver app...
             </div>
-            <div className="nx-subtitle" style={{ marginTop: 8 }}>
-              Preparing your dashboard.
+            <div style={{ fontSize: 13, color: "#9fb3c8", marginTop: 8 }}>
+              Preparing your dashboard
             </div>
-          </div>
+          </ActionCard>
         </div>
-      </main>
+      </MobileShell>
     );
   }
 
   return (
-    <main className="nx-shell">
-      <div className="nx-container" style={{ paddingTop: 18, paddingBottom: 28 }}>
-        {/* top bar */}
-        <div
-          className="nx-glass"
-          style={{
-            borderRadius: 22,
-            padding: "14px 16px",
-            marginBottom: 16,
-          }}
-        >
-          <div className="nx-between" style={{ gap: 12 }}>
-            <div className="nx-logo">
-              <div className="nx-logo-mark" />
-              <div>
-                <div style={{ fontWeight: 1000, fontSize: 18 }}>NEXRIDE</div>
-                <div className="nx-soft-text">Driver dashboard</div>
-              </div>
-            </div>
+    <MobileShell>
+      <MapPlaceholder
+        label="Driver map"
+        sublabel="Nearby requests, pickup routes, and live trips will appear here"
+      />
 
-            <button
-              onClick={handleLogout}
-              className="nx-btn nx-btn-secondary"
+      <FloatingTopBar
+        title="NEXRIDE DRIVER"
+        subtitle={`${profile?.fullName || "Driver"} • ${cityLabel(city)}`}
+        right={
+          <button
+            onClick={handleLogout}
+            style={{
+              border: "1px solid rgba(255,255,255,0.12)",
+              background: "rgba(255,255,255,0.04)",
+              color: "#fff",
+              borderRadius: 14,
+              padding: "10px 14px",
+              fontWeight: 800,
+            }}
+          >
+            Logout
+          </button>
+        }
+      />
+
+      <BottomSheet height="58vh">
+        <div style={{ display: "grid", gap: 12 }}>
+          <ActionCard>
+            <div
               style={{
-                width: "auto",
-                padding: "10px 14px",
-                borderRadius: 14,
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 12,
+                alignItems: "center",
               }}
             >
-              Logout
-            </button>
-          </div>
-        </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 22, fontWeight: 1000 }}>
+                  {profile?.carName || "Your car"}
+                </div>
+                <div style={{ fontSize: 13, color: "#9fb3c8", marginTop: 4 }}>
+                  {profile?.plateNumber || "No plate"} • {cityLabel(city)}
+                </div>
+              </div>
 
-        {/* hero */}
-        <section
-          className="nx-card"
-          style={{
-            padding: 18,
-            borderRadius: 28,
-            marginBottom: 16,
-            position: "relative",
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              position: "absolute",
-              top: -70,
-              right: -40,
-              width: 180,
-              height: 180,
-              borderRadius: "50%",
-              background: "rgba(0, 198, 255, 0.12)",
-              filter: "blur(18px)",
-            }}
-          />
+              <div
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 999,
+                  fontSize: 12,
+                  fontWeight: 900,
+                  color: online ? "#dfffe9" : "#f3f6fa",
+                  background: online
+                    ? "rgba(31,214,122,0.12)"
+                    : "rgba(255,255,255,0.06)",
+                  border: online
+                    ? "1px solid rgba(31,214,122,0.25)"
+                    : "1px solid rgba(255,255,255,0.08)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {online ? "ONLINE" : "OFFLINE"}
+              </div>
+            </div>
 
-          <div style={{ position: "relative", zIndex: 2 }}>
-            <div className="nx-between" style={{ marginBottom: 14, alignItems: "flex-start" }}>
+            <div style={{ marginTop: 14 }}>
+              <button
+                onClick={toggleOnline}
+                disabled={savingOnline}
+                style={{
+                  width: "100%",
+                  border: "none",
+                  borderRadius: 18,
+                  padding: "15px 16px",
+                  fontSize: 15,
+                  fontWeight: 1000,
+                  color: online ? "#fff" : "#001018",
+                  background: online
+                    ? "rgba(255,255,255,0.06)"
+                    : "linear-gradient(90deg,#00c6ff,#0066ff)",
+                  borderColor: "rgba(255,255,255,0.1)",
+                  boxShadow: online
+                    ? "none"
+                    : "0 14px 30px rgba(0,102,255,0.24)",
+                }}
+              >
+                {savingOnline
+                  ? "Saving..."
+                  : online
+                  ? "Go offline"
+                  : "Go online"}
+              </button>
+            </div>
+          </ActionCard>
+
+          {error ? (
+            <div
+              style={{
+                padding: 12,
+                borderRadius: 14,
+                background: "rgba(255, 91, 91, 0.08)",
+                border: "1px solid rgba(255, 91, 91, 0.18)",
+                color: "#ffd5d5",
+                fontSize: 13,
+                fontWeight: 700,
+              }}
+            >
+              {error}
+            </div>
+          ) : null}
+
+          {success ? (
+            <div
+              style={{
+                padding: 12,
+                borderRadius: 14,
+                background: "rgba(31, 214, 122, 0.08)",
+                border: "1px solid rgba(31, 214, 122, 0.18)",
+                color: "#d5ffe7",
+                fontSize: 13,
+                fontWeight: 700,
+              }}
+            >
+              {success}
+            </div>
+          ) : null}
+
+          <ActionCard>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 10,
+                alignItems: "flex-start",
+                marginBottom: 10,
+              }}
+            >
               <div>
-                <div className="nx-title" style={{ fontSize: 28, marginBottom: 8 }}>
-                  Welcome{profile?.fullName ? `, ${profile.fullName.split(" ")[0]}` : ""}
-                </div>
-                <div className="nx-subtitle">
-                  Go online and respond to nearby rider requests in {cityLabel(city)}.
+                <div style={{ fontSize: 18, fontWeight: 900 }}>Active trip</div>
+                <div style={{ fontSize: 12, color: "#9fb3c8", marginTop: 4 }}>
+                  Current accepted ride
                 </div>
               </div>
 
-              <div className="nx-pill">
-                <span
-                  className="nx-badge-online"
-                  style={{
-                    background: online ? "var(--green)" : "#777",
-                    boxShadow: online ? "0 0 12px rgba(31, 214, 122, 0.8)" : "none",
-                  }}
-                />
-                {online ? "Online" : "Offline"}
+              <div style={statusPill(activeTrip ? activeTrip.status : "idle")}>
+                {activeTrip ? activeTrip.status : "none"}
               </div>
             </div>
 
-            <div className="nx-grid" style={{ gap: 10 }}>
-              <div className="nx-glass" style={{ borderRadius: 18, padding: 14 }}>
-                <div className="nx-between">
-                  <div>
-                    <div style={{ fontWeight: 900 }}>
-                      {profile?.carName || "Driver vehicle"}
-                    </div>
-                    <div className="nx-soft-text" style={{ marginTop: 4 }}>
-                      {profile?.plateNumber || "No plate"} • {cityLabel(city)}
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={toggleOnline}
-                    disabled={savingOnline}
-                    className={`nx-btn ${online ? "nx-btn-secondary" : "nx-btn-primary"}`}
-                    style={{
-                      width: "auto",
-                      padding: "10px 14px",
-                      borderRadius: 14,
-                    }}
-                  >
-                    {savingOnline ? "Saving..." : online ? "Go offline" : "Go online"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* alerts */}
-        {error ? (
-          <div
-            style={{
-              padding: 12,
-              borderRadius: 14,
-              background: "rgba(255, 91, 91, 0.08)",
-              border: "1px solid rgba(255, 91, 91, 0.18)",
-              color: "#ffd5d5",
-              fontSize: 13,
-              fontWeight: 700,
-              marginBottom: 14,
-            }}
-          >
-            {error}
-          </div>
-        ) : null}
-
-        {success ? (
-          <div
-            style={{
-              padding: 12,
-              borderRadius: 14,
-              background: "rgba(31, 214, 122, 0.08)",
-              border: "1px solid rgba(31, 214, 122, 0.18)",
-              color: "#d5ffe7",
-              fontSize: 13,
-              fontWeight: 700,
-              marginBottom: 14,
-            }}
-          >
-            {success}
-          </div>
-        ) : null}
-
-        {/* active trip */}
-        <section
-          className="nx-card"
-          style={{
-            padding: 18,
-            borderRadius: 28,
-            marginBottom: 16,
-          }}
-        >
-          <div className="nx-between" style={{ marginBottom: 10 }}>
-            <div>
-              <div className="nx-section-title">Active trip</div>
-              <div className="nx-soft-text" style={{ marginTop: 4 }}>
-                Current accepted ride will show here.
-              </div>
-            </div>
-            <div className="nx-pill">{activeTrip ? "Live" : "None"}</div>
-          </div>
-
-          <div className="nx-glass" style={{ borderRadius: 18, padding: 14 }}>
             {activeTrip ? (
-              <div className="nx-grid" style={{ gap: 10 }}>
-                <div style={{ fontWeight: 900, fontSize: 16 }}>
+              <div style={{ display: "grid", gap: 10 }}>
+                <div style={{ fontSize: 16, fontWeight: 900 }}>
                   {activeTrip.pickupName} → {activeTrip.dropoffName}
                 </div>
-                <div className="nx-soft-text">
-                  Rider: {activeTrip.riderName} • Price: ${Number(activeTrip.agreedPrice || 0).toFixed(2)}
+                <div style={{ fontSize: 13, color: "#9fb3c8" }}>
+                  Rider: {activeTrip.riderName} • Price: $
+                  {Number(activeTrip.agreedPrice || 0).toFixed(2)}
                 </div>
-                <div className="nx-soft-text">
+                <div style={{ fontSize: 13, color: "#9fb3c8" }}>
                   OTP: {activeTrip.otp}
                 </div>
-                <div className="nx-pill">{activeTrip.status}</div>
               </div>
             ) : (
-              <div className="nx-soft-text">
+              <div style={{ fontSize: 13, color: "#9fb3c8" }}>
                 No active trip yet.
               </div>
             )}
-          </div>
-        </section>
+          </ActionCard>
 
-        {/* request list */}
-        <section
-          className="nx-card"
-          style={{
-            padding: 18,
-            borderRadius: 28,
-            marginBottom: 16,
-          }}
-        >
-          <div className="nx-between" style={{ marginBottom: 12 }}>
-            <div>
-              <div className="nx-section-title">Nearby requests</div>
-              <div className="nx-soft-text" style={{ marginTop: 4 }}>
-                Open ride requests in {cityLabel(city)}.
-              </div>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 900 }}>Nearby requests</div>
+            <div style={{ fontSize: 12, color: "#9fb3c8", marginTop: 4 }}>
+              Open ride requests in {cityLabel(city)}
             </div>
-            <div className="nx-pill">{visibleRequests.length} open</div>
           </div>
 
           {!online ? (
-            <div className="nx-glass" style={{ borderRadius: 18, padding: 14 }}>
+            <ActionCard>
               <div style={{ fontWeight: 900, marginBottom: 6 }}>You are offline</div>
-              <div className="nx-soft-text">
-                Go online first to start accepting rider requests.
+              <div style={{ fontSize: 13, color: "#9fb3c8" }}>
+                Go online first to start receiving requests.
               </div>
-            </div>
+            </ActionCard>
           ) : visibleRequests.length === 0 ? (
-            <div className="nx-glass" style={{ borderRadius: 18, padding: 14 }}>
+            <ActionCard>
               <div style={{ fontWeight: 900, marginBottom: 6 }}>No open requests</div>
-              <div className="nx-soft-text">
+              <div style={{ fontSize: 13, color: "#9fb3c8" }}>
                 Waiting for riders to request trips in your city.
               </div>
-            </div>
+            </ActionCard>
           ) : (
-            <div className="nx-grid">
-              {visibleRequests.map((item) => (
+            visibleRequests.map((item) => (
+              <ActionCard key={item.id}>
                 <div
-                  key={item.id}
-                  className="nx-glass"
                   style={{
-                    borderRadius: 20,
-                    padding: 14,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    alignItems: "flex-start",
                   }}
                 >
-                  <div className="nx-between" style={{ alignItems: "flex-start", gap: 12 }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 6 }}>
-                        {item.pickupName} → {item.dropoffName}
-                      </div>
-                      <div className="nx-soft-text" style={{ marginBottom: 8 }}>
-                        Rider: {item.riderName || "Rider"}
-                      </div>
-                      <div className="nx-soft-text" style={{ marginBottom: 6 }}>
-                        Offer: ${Number(item.offerPrice || 0).toFixed(2)} • People: {item.people || 1}
-                      </div>
-                      {item.notes ? (
-                        <div className="nx-soft-text">
-                          Note: {item.notes}
-                        </div>
-                      ) : null}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 16, fontWeight: 900 }}>
+                      {item.pickupName} → {item.dropoffName}
                     </div>
-
-                    <div className="nx-pill">{item.status}</div>
+                    <div style={{ fontSize: 13, color: "#9fb3c8", marginTop: 6 }}>
+                      Rider: {item.riderName || "Rider"}
+                    </div>
+                    <div style={{ fontSize: 13, color: "#9fb3c8", marginTop: 4 }}>
+                      Offer: ${Number(item.offerPrice || 0).toFixed(2)} • People:{" "}
+                      {item.people || 1}
+                    </div>
+                    {item.notes ? (
+                      <div style={{ fontSize: 13, color: "#b7c9d9", marginTop: 6 }}>
+                        {item.notes}
+                      </div>
+                    ) : null}
                   </div>
 
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
-                      gap: 10,
-                      marginTop: 14,
-                    }}
-                  >
-                    <button
-                      className="nx-btn nx-btn-primary"
-                      onClick={() => acceptRequest(item)}
-                      disabled={!!workingRequestId || !!activeTrip}
-                      style={{ padding: "12px 14px", borderRadius: 14 }}
-                    >
-                      {workingRequestId === item.id ? "Accepting..." : "Accept"}
-                    </button>
-
-                    <button
-                      className="nx-btn nx-btn-secondary"
-                      onClick={() => openNegotiate(item)}
-                      disabled={!!activeTrip}
-                      style={{ padding: "12px 14px", borderRadius: 14 }}
-                    >
-                      Negotiate
-                    </button>
+                  <div style={statusPill(item.status || "open")}>
+                    {item.status || "open"}
                   </div>
                 </div>
-              ))}
-            </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: 10,
+                    marginTop: 14,
+                  }}
+                >
+                  <button
+                    onClick={() => acceptRequest(item)}
+                    disabled={!!workingRequestId || !!activeTrip}
+                    style={{
+                      width: "100%",
+                      border: "none",
+                      borderRadius: 16,
+                      padding: "13px 14px",
+                      fontSize: 14,
+                      fontWeight: 1000,
+                      color: "#001018",
+                      background: "linear-gradient(90deg,#00c6ff,#0066ff)",
+                      boxShadow: "0 10px 24px rgba(0,102,255,0.22)",
+                    }}
+                  >
+                    {workingRequestId === item.id ? "Accepting..." : "Accept"}
+                  </button>
+
+                  <button
+                    onClick={() => openNegotiate(item)}
+                    disabled={!!activeTrip}
+                    style={{
+                      width: "100%",
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      borderRadius: 16,
+                      padding: "13px 14px",
+                      fontSize: 14,
+                      fontWeight: 900,
+                      color: "#fff",
+                      background: "rgba(255,255,255,0.04)",
+                    }}
+                  >
+                    Negotiate
+                  </button>
+                </div>
+              </ActionCard>
+            ))
           )}
-        </section>
+        </div>
+      </BottomSheet>
 
-        {/* next steps */}
-        <section
-          className="nx-glass"
-          style={{
-            borderRadius: 22,
-            padding: 16,
-          }}
-        >
-          <div className="nx-between" style={{ marginBottom: 8 }}>
-            <div style={{ fontWeight: 900 }}>Next upgrade</div>
-            <div className="nx-pill">Coming next</div>
-          </div>
-
-          <div className="nx-soft-text" style={{ marginBottom: 14 }}>
-            Next we connect live trip tracking, OTP verification, driver location updates, and completed ride flow.
-          </div>
-
-             <div className="nx-grid">
-            <Link href="/rider">
-              <button className="nx-btn nx-btn-secondary" type="button">
-                Open rider app
-              </button>
-            </Link>
-          </div>
-        </section>
-      </div>
-
-      {/* negotiate modal */}
-      {negotiatingFor ? (
+{negotiatingFor ? (
         <div
           style={{
             position: "fixed",
@@ -685,48 +677,45 @@ export default function DriverPage() {
           }}
         >
           <div
-            className="nx-card"
             style={{
               width: "100%",
               maxWidth: 420,
-              padding: 18,
+              background:
+                "linear-gradient(180deg, rgba(13,17,23,0.98), rgba(7,10,15,0.99))",
+              border: "1px solid rgba(255,255,255,0.08)",
               borderRadius: 24,
+              padding: 18,
+              boxShadow: "0 24px 60px rgba(0,0,0,0.52)",
             }}
           >
             <div style={{ fontWeight: 1000, fontSize: 20, marginBottom: 8 }}>
               Negotiate offer
             </div>
-            <div className="nx-subtitle" style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 13, color: "#9fb3c8", marginBottom: 14 }}>
               Send a custom price to {negotiatingFor.riderName || "this rider"}.
             </div>
 
-            <div className="nx-grid">
-              <div className="nx-grid" style={{ gap: 8 }}>
-                <label className="nx-soft-text">Proposed price ($)</label>
-                <input
-                  className="nx-input"
-                  type="number"
-                  min="1"
-                  step="0.01"
-                  value={proposedPrice}
-                  onChange={(e) => setProposedPrice(e.target.value)}
-                  placeholder="Enter your price"
-                />
-              </div>
+            <div style={{ display: "grid", gap: 12 }}>
+              <input
+                className="nx-input"
+                type="number"
+                min="1"
+                step="0.01"
+                value={proposedPrice}
+                onChange={(e) => setProposedPrice(e.target.value)}
+                placeholder="Proposed price ($)"
+              />
 
-              <div className="nx-grid" style={{ gap: 8 }}>
-                <label className="nx-soft-text">Message (optional)</label>
-                <textarea
-                  className="nx-input"
-                  value={proposedMessage}
-                  onChange={(e) => setProposedMessage(e.target.value)}
-                  placeholder="I can be there in 4 minutes"
-                  style={{
-                    minHeight: 90,
-                    resize: "none",
-                  }}
-                />
-              </div>
+              <textarea
+                className="nx-input"
+                value={proposedMessage}
+                onChange={(e) => setProposedMessage(e.target.value)}
+                placeholder="I can be there in 4 minutes"
+                style={{
+                  minHeight: 90,
+                  resize: "none",
+                }}
+              />
 
               <div
                 style={{
@@ -736,21 +725,40 @@ export default function DriverPage() {
                 }}
               >
                 <button
-                  className="nx-btn nx-btn-secondary"
                   type="button"
                   onClick={() => {
                     setNegotiatingFor(null);
                     setProposedPrice("");
                     setProposedMessage("");
                   }}
+                  style={{
+                    width: "100%",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    borderRadius: 16,
+                    padding: "13px 14px",
+                    fontSize: 14,
+                    fontWeight: 900,
+                    color: "#fff",
+                    background: "rgba(255,255,255,0.04)",
+                  }}
                 >
                   Cancel
                 </button>
 
                 <button
-                  className="nx-btn nx-btn-primary"
                   type="button"
                   onClick={sendNegotiation}
+                  style={{
+                    width: "100%",
+                    border: "none",
+                    borderRadius: 16,
+                    padding: "13px 14px",
+                    fontSize: 14,
+                    fontWeight: 1000,
+                    color: "#001018",
+                    background: "linear-gradient(90deg,#00c6ff,#0066ff)",
+                    boxShadow: "0 10px 24px rgba(0,102,255,0.22)",
+                  }}
                 >
                   Send offer
                 </button>
@@ -759,6 +767,6 @@ export default function DriverPage() {
           </div>
         </div>
       ) : null}
-    </main>
+    </MobileShell>
   );
           }
