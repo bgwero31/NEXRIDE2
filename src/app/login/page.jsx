@@ -6,7 +6,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "../../lib/firebase";
+import { get, ref } from "firebase/database";
+import { auth, db } from "../../lib/firebase";
 
 const pageStyle = {
   minHeight: "100vh",
@@ -14,24 +15,24 @@ const pageStyle = {
   position: "relative",
   overflow: "hidden",
   background:
-    "radial-gradient(circle at 20% 20%, rgba(139,92,246,0.22), transparent 24%), radial-gradient(circle at 80% 18%, rgba(168,85,247,0.18), transparent 20%), radial-gradient(circle at 50% 70%, rgba(99,102,241,0.18), transparent 28%), linear-gradient(180deg, #050510 0%, #090916 45%, #03030a 100%)",
+    "radial-gradient(circle at 20% 18%, rgba(132, 34, 255, 0.18), transparent 20%), radial-gradient(circle at 80% 22%, rgba(92, 38, 255, 0.16), transparent 22%), radial-gradient(circle at 50% 78%, rgba(162, 89, 255, 0.14), transparent 28%), linear-gradient(180deg, #04030a 0%, #080611 45%, #020205 100%)",
   color: "#fff",
 };
 
 const gridOverlay = {
   position: "absolute",
   inset: 0,
-  opacity: 0.08,
+  opacity: 0.05,
   backgroundImage:
     "linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px)",
-  backgroundSize: "34px 34px",
+  backgroundSize: "36px 36px",
   pointerEvents: "none",
 };
 
 const glowOrb = (style = {}) => ({
   position: "absolute",
   borderRadius: "999px",
-  filter: "blur(40px)",
+  filter: "blur(48px)",
   pointerEvents: "none",
   ...style,
 });
@@ -49,97 +50,41 @@ const wrapStyle = {
   zIndex: 2,
 };
 
-const shellStyle = {
+const cardStyle = {
   width: "100%",
-  position: "relative",
-};
-
-const glassCard = {
-  position: "relative",
-  width: "100%",
-  borderRadius: 30,
-  padding: 20,
+  borderRadius: 32,
+  padding: 22,
   background:
-    "linear-gradient(180deg, rgba(16,18,32,0.78), rgba(8,10,20,0.88))",
-  border: "1px solid rgba(255,255,255,0.09)",
+    "linear-gradient(180deg, rgba(10,10,18,0.82), rgba(6,6,14,0.92))",
+  border: "1px solid rgba(255,255,255,0.08)",
   backdropFilter: "blur(18px)",
-  boxShadow: "0 30px 80px rgba(0,0,0,0.42)",
+  boxShadow: "0 30px 80px rgba(0,0,0,0.44)",
+  position: "relative",
   overflow: "hidden",
 };
 
-const miniTopBar = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 10,
+const topMiniLogo = {
+  width: 56,
+  height: 56,
+  borderRadius: 20,
+  background:
+    "linear-gradient(135deg, rgba(164,88,255,1) 0%, rgba(112,53,255,1) 60%, rgba(68,47,255,1) 100%)",
+  boxShadow: "0 18px 36px rgba(112,53,255,0.35)",
   marginBottom: 18,
 };
 
-const brandRow = {
-  display: "flex",
-  alignItems: "center",
-  gap: 12,
-};
-
-const brandMark = {
-  width: 44,
-  height: 44,
-  borderRadius: 16,
-  background:
-    "linear-gradient(135deg, rgba(168,85,247,1) 0%, rgba(124,58,237,1) 45%, rgba(79,70,229,1) 100%)",
-  boxShadow: "0 16px 30px rgba(124,58,237,0.35)",
-  position: "relative",
-  overflow: "hidden",
-};
-
-const brandMarkInner = {
-  position: "absolute",
-  inset: 1,
-  borderRadius: 15,
-  background:
-    "linear-gradient(135deg, rgba(255,255,255,0.14), rgba(255,255,255,0.02))",
-};
-
-const pill = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 8,
-  padding: "8px 12px",
-  borderRadius: 999,
-  background: "rgba(255,255,255,0.05)",
-  border: "1px solid rgba(255,255,255,0.08)",
-  fontSize: 12,
-  fontWeight: 800,
-  color: "#ddd6fe",
-  whiteSpace: "nowrap",
-};
-
-const liveDot = {
-  width: 8,
-  height: 8,
-  borderRadius: 999,
-  background: "#a855f7",
-  boxShadow: "0 0 14px rgba(168,85,247,0.95)",
-};
-
-const heroTitle = {
-  fontSize: 33,
-  lineHeight: 1.02,
-  fontWeight: 1000,
-  letterSpacing: "-0.04em",
-  margin: 0,
-};
-
-const subText = {
-  fontSize: 14,
-  lineHeight: 1.55,
-  color: "#a1a1bf",
+const heroText = {
+  fontSize: 15,
+  lineHeight: 1.7,
+  color: "#aaa6c4",
+  marginTop: 14,
+  marginBottom: 26,
 };
 
 const sectionLabel = {
   fontSize: 12,
   fontWeight: 800,
-  color: "#c4b5fd",
+  color: "#c8b8ff",
   marginBottom: 8,
 };
 
@@ -155,33 +100,11 @@ const inputStyle = {
   border: "none",
   outline: "none",
   borderRadius: 16,
-  background: "rgba(10,12,24,0.96)",
+  background: "rgba(7,8,18,0.96)",
   color: "#fff",
-  padding: "15px 15px",
+  padding: "16px 16px",
   fontSize: 15,
 };
-
-const selectorGrid = {
-  display: "grid",
-  gridTemplateColumns: "1fr 1fr",
-  gap: 10,
-};
-
-const selectorBtn = (active) => ({
-  border: active
-    ? "1px solid rgba(168,85,247,0.34)"
-    : "1px solid rgba(255,255,255,0.08)",
-  background: active
-    ? "linear-gradient(180deg, rgba(168,85,247,0.20), rgba(124,58,237,0.08))"
-    : "rgba(255,255,255,0.03)",
-  color: active ? "#f5f3ff" : "#b4b4cc",
-  borderRadius: 18,
-  padding: "14px 12px",
-  fontWeight: 900,
-  fontSize: 14,
-  textAlign: "center",
-  boxShadow: active ? "0 12px 26px rgba(124,58,237,0.18)" : "none",
-});
 
 const primaryBtn = {
   width: "100%",
@@ -192,7 +115,7 @@ const primaryBtn = {
   fontWeight: 1000,
   color: "#ffffff",
   background:
-    "linear-gradient(90deg, rgba(168,85,247,1) 0%, rgba(124,58,237,1) 50%, rgba(79,70,229,1) 100%)",
+    "linear-gradient(90deg, rgba(185,97,255,1) 0%, rgba(137,69,255,1) 50%, rgba(87,73,255,1) 100%)",
   boxShadow: "0 18px 34px rgba(124,58,237,0.34)",
 };
 
@@ -217,15 +140,11 @@ const errorStyle = {
   fontWeight: 700,
 };
 
-const footerRow = {
-  marginTop: 16,
-  display: "flex",
-  justifyContent: "center",
-};
-
 const footerText = {
+  marginTop: 18,
   fontSize: 13,
-  color: "#9f9fba",
+  color: "#9a95b4",
+  textAlign: "center",
 };
 
 const animatedWordWrap = {
@@ -236,8 +155,14 @@ const animatedWordWrap = {
 
 const letterStyle = (index) => ({
   display: "inline-block",
-  animation: `nexrideReveal 700ms ease both`,
-  animationDelay: `${index * 70}ms`,
+  background:
+    "linear-gradient(180deg, #0a0a0f 0%, #171124 25%, #4c1d95 70%, #c084fc 100%)",
+  WebkitBackgroundClip: "text",
+  backgroundClip: "text",
+  color: "transparent",
+  animation: `nexrideShift 2.8s ease-in-out infinite`,
+  animationDelay: `${index * 120}ms`,
+  textShadow: "0 0 0 rgba(0,0,0,0)",
 });
 
 export default function LoginPage() {
@@ -245,7 +170,6 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState("rider");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [mounted, setMounted] = useState(false);
@@ -270,9 +194,23 @@ export default function LoginPage() {
 
     try {
       setLoading(true);
-      await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
 
-      router.push(role === "driver" ? "/driver" : "/rider");
+      const cred = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
+      const uid = cred.user.uid;
+
+      const snap = await get(ref(db, `users/${uid}`));
+      const userData = snap.val();
+
+      if (!userData?.role) {
+        router.push("/rider");
+        return;
+      }
+
+      if (userData.role === "driver") {
+        router.push("/driver");
+      } else {
+        router.push("/rider");
+      }
     } catch (err) {
       console.error(err);
       setError("Login failed. Check your details.");
@@ -284,16 +222,14 @@ export default function LoginPage() {
   return (
     <main style={pageStyle}>
       <style>{`
-        @keyframes nexrideReveal {
+        @keyframes fadeCardIn {
           0% {
             opacity: 0;
-            transform: translateY(14px) scale(0.96);
-            filter: blur(4px);
+            transform: translateY(24px);
           }
           100% {
             opacity: 1;
-            transform: translateY(0) scale(1);
-            filter: blur(0);
+            transform: translateY(0);
           }
         }
 
@@ -303,14 +239,26 @@ export default function LoginPage() {
           100% { transform: translateY(0px); }
         }
 
-        @keyframes fadeCardIn {
+        @keyframes nexrideShift {
           0% {
+            transform: translateY(12px);
             opacity: 0;
-            transform: translateY(24px);
+            filter: blur(4px);
+          }
+          18% {
+            transform: translateY(0);
+            opacity: 1;
+            filter: blur(0);
+          }
+          70% {
+            transform: translateY(0);
+            opacity: 1;
+            filter: blur(0);
           }
           100% {
-            opacity: 1;
             transform: translateY(0);
+            opacity: 1;
+            filter: blur(0);
           }
         }
       `}</style>
@@ -343,16 +291,16 @@ export default function LoginPage() {
           height: 220,
           bottom: -30,
           left: "15%",
-          background: "rgba(79,70,229,0.18)",
+          background: "rgba(87,73,255,0.18)",
           animation: "floatGlow 8s ease-in-out infinite",
         })}
       />
 
       <div style={wrapStyle}>
-        <div style={shellStyle}>
+        <div style={{ width: "100%" }}>
           <div
             style={{
-              ...glassCard,
+              ...cardStyle,
               animation: mounted ? "fadeCardIn 700ms ease both" : "none",
             }}
           >
@@ -361,90 +309,40 @@ export default function LoginPage() {
                 position: "absolute",
                 inset: 0,
                 background:
-                  "linear-gradient(135deg, rgba(255,255,255,0.08), transparent 26%, transparent 70%, rgba(255,255,255,0.04))",
+                  "linear-gradient(135deg, rgba(255,255,255,0.06), transparent 26%, transparent 70%, rgba(255,255,255,0.03))",
                 pointerEvents: "none",
               }}
             />
 
-            <div style={miniTopBar}>
-              <div style={brandRow}>
-                <div style={brandMark}>
-                  <div style={brandMarkInner} />
-                </div>
+            <div style={topMiniLogo} />
 
-                <div>
-                  <div
-                    style={{
-                      fontWeight: 1000,
-                      fontSize: 12,
-                      color: "#d8b4fe",
-                      letterSpacing: "0.22em",
-                      marginBottom: 3,
-                    }}
-                  >
-                    PREMIUM ACCESS
-                  </div>
+            <h1
+              style={{
+                fontSize: 64,
+                lineHeight: 0.95,
+                fontWeight: 1000,
+                letterSpacing: "-0.06em",
+                margin: 0,
+              }}
+            >
+              <span style={animatedWordWrap}>
+                {brandLetters.map((letter, index) => (
+                  <span key={`${letter}-${index}`} style={letterStyle(index)}>
+                    {letter}
+                  </span>
+                ))}
+              </span>
+            </h1>
 
-                  <div
-                    style={{
-                      fontWeight: 900,
-                      fontSize: 14,
-                      color: "#f5f3ff",
-                    }}
-                  >
-                    Welcome back
-                  </div>
-                </div>
-              </div>
-
-              <div style={pill}>
-                <span style={liveDot} />
-                Secure Login
-              </div>
-            </div>
-
-            <div style={{ marginBottom: 22 }}>
-              <h1 style={heroTitle}>
-                <span style={animatedWordWrap}>
-                  {brandLetters.map((letter, index) => (
-                    <span key={`${letter}-${index}`} style={letterStyle(index)}>
-                      {letter}
-                    </span>
-                  ))}
-                </span>
-              </h1>
-
-              <div style={{ ...subText, marginTop: 10, maxWidth: 320 }}>
-                Sign in to your rider or driver dashboard with a cleaner,
-                premium glass experience built for a modern ride-hailing app.
-              </div>
+            <div style={heroText}>
+              Sign in to your dashboard with a premium glass experience built
+              for a modern ride-hailing app.
             </div>
 
             <form
               onSubmit={handleLogin}
               style={{ display: "grid", gap: 14, position: "relative", zIndex: 2 }}
             >
-              <div>
-                <div style={sectionLabel}>Choose account</div>
-                <div style={selectorGrid}>
-                  <button
-                    type="button"
-                    onClick={() => setRole("rider")}
-                    style={selectorBtn(role === "rider")}
-                  >
-                    Rider
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setRole("driver")}
-                    style={selectorBtn(role === "driver")}
-                  >
-                    Driver
-                  </button>
-                </div>
-              </div>
-
               <div>
                 <div style={sectionLabel}>Email address</div>
                 <div style={inputShell}>
@@ -474,9 +372,7 @@ export default function LoginPage() {
               {error ? <div style={errorStyle}>{error}</div> : null}
 
               <button style={primaryBtn} type="submit" disabled={loading}>
-                {loading
-                  ? "Signing in..."
-                  : `Login as ${role === "driver" ? "Driver" : "Rider"}`}
+                {loading ? "Signing in..." : "Login"}
               </button>
 
               <Link href="/signup">
@@ -486,11 +382,7 @@ export default function LoginPage() {
               </Link>
             </form>
 
-            <div style={footerRow}>
-              <div style={footerText}>
-                Your journey begins behind the glass.
-              </div>
-            </div>
+            <div style={footerText}>Move smart. Ride NEXRIDE.</div>
           </div>
         </div>
       </div>
