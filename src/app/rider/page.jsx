@@ -433,7 +433,7 @@ export default function RiderPage() {
         }
       />
 
-      <BottomSheet height="50vh">
+      <BottomSheet height="36vh">
         {mode === "request" && (
           <RequestSheet
             user={user}
