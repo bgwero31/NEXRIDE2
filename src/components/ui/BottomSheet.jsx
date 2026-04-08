@@ -2,7 +2,7 @@
 
 export default function BottomSheet({
   children,
-  height = "28vh",
+  height = "20vh",
   padding = 12,
 }) {
   return (
@@ -14,14 +14,14 @@ export default function BottomSheet({
         bottom: 10,
         zIndex: 20,
         minHeight: height,
-        maxHeight: "58vh",
+        maxHeight: "52vh",
         overflowY: "auto",
         background:
-          "linear-gradient(180deg, rgba(7,18,38,0.68), rgba(4,10,22,0.86))",
+          "linear-gradient(180deg, rgba(10,12,22,0.52), rgba(8,10,18,0.82))",
         borderRadius: 28,
         border: "1px solid rgba(255,255,255,0.08)",
         boxShadow: "0 18px 60px rgba(0,0,0,0.28)",
-        backdropFilter: "blur(18px)",
+        backdropFilter: "blur(16px)",
         padding,
       }}
     >
