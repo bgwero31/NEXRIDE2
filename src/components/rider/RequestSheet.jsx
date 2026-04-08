@@ -22,6 +22,38 @@ function cityLabel(city) {
   return city.charAt(0).toUpperCase() + city.slice(1);
 }
 
+const cardStyle = {
+  borderRadius: 28,
+  padding: 14,
+  background:
+    "linear-gradient(180deg, rgba(7,18,38,0.78) 0%, rgba(5,14,30,0.90) 100%)",
+  border: "1px solid rgba(255,255,255,0.09)",
+  backdropFilter: "blur(18px)",
+  boxShadow: "0 18px 50px rgba(0,0,0,0.24)",
+};
+
+const inputStyle = {
+  width: "100%",
+  border: "1px solid rgba(255,255,255,0.08)",
+  outline: "none",
+  borderRadius: 20,
+  background: "rgba(255,255,255,0.05)",
+  color: "#fff",
+  padding: "15px 16px",
+  fontSize: 15,
+  boxSizing: "border-box",
+};
+
+const gpsBtnStyle = {
+  border: "1px solid rgba(255,255,255,0.10)",
+  background: "rgba(255,255,255,0.06)",
+  color: "#fff",
+  borderRadius: 20,
+  padding: "0 16px",
+  fontWeight: 1000,
+  minWidth: 84,
+};
+
 export default function RequestSheet({
   user,
   profile,
@@ -88,15 +120,10 @@ export default function RequestSheet({
       },
       (err) => {
         console.error(err);
-        if (err.code === 1) {
-          setError("Location permission denied.");
-        } else if (err.code === 2) {
-          setError("Location unavailable.");
-        } else if (err.code === 3) {
-          setError("Location request timed out.");
-        } else {
-          setError("Failed to get your location.");
-        }
+        if (err.code === 1) setError("Location permission denied.");
+        else if (err.code === 2) setError("Location unavailable.");
+        else if (err.code === 3) setError("Location request timed out.");
+        else setError("Failed to get your location.");
         setLocating(false);
       },
       {
@@ -185,12 +212,12 @@ export default function RequestSheet({
 
   return (
     <div style={{ display: "grid", gap: 10 }}>
-      <div style={{ padding: "0 2px" }}>
+      <div style={{ padding: "0 4px" }}>
         <div
           style={{
-            fontSize: 28,
+            fontSize: 30,
             fontWeight: 1000,
-            letterSpacing: "-0.04em",
+            letterSpacing: "-0.05em",
             color: "#fff",
             lineHeight: 1,
           }}
@@ -200,27 +227,17 @@ export default function RequestSheet({
         <div
           style={{
             fontSize: 13,
-            color: "#96a3b8",
+            color: "#a7bfd8",
             marginTop: 6,
             lineHeight: 1.45,
           }}
         >
-          Book your next ride with a cleaner NEXRIDE flow.
+          Fast, clean ride booking in the NEXRIDE style.
         </div>
       </div>
 
       <form onSubmit={handleRequestRide} style={{ display: "grid", gap: 10 }}>
-        <div
-          style={{
-            borderRadius: 24,
-            padding: 12,
-            background:
-              "linear-gradient(180deg, rgba(10,12,20,0.82), rgba(8,10,18,0.92))",
-            border: "1px solid rgba(255,255,255,0.07)",
-            backdropFilter: "blur(16px)",
-            boxShadow: "0 18px 40px rgba(0,0,0,0.22)",
-          }}
-        >
+        <div style={cardStyle}>
           <div style={{ display: "grid", gap: 10 }}>
             <select
               value={city}
@@ -231,7 +248,7 @@ export default function RequestSheet({
                   localStorage.setItem("nexride-last-place", nextCity);
                 } catch {}
               }}
-              className="nx-input"
+              style={inputStyle}
             >
               {cityOptions.map((item) => (
                 <option key={item} value={item}>
@@ -248,7 +265,7 @@ export default function RequestSheet({
               }}
             >
               <input
-                className="nx-input"
+                style={inputStyle}
                 placeholder="Pickup location"
                 value={pickupName}
                 onChange={(e) => setPickupName(e.target.value)}
@@ -258,22 +275,14 @@ export default function RequestSheet({
                 type="button"
                 onClick={useMyCurrentLocation}
                 disabled={locating}
-                style={{
-                  border: "1px solid rgba(255,255,255,0.10)",
-                  background: "rgba(255,255,255,0.04)",
-                  color: "#fff",
-                  borderRadius: 18,
-                  padding: "0 16px",
-                  fontWeight: 1000,
-                  minWidth: 78,
-                }}
+                style={gpsBtnStyle}
               >
                 {locating ? "..." : "GPS"}
               </button>
             </div>
 
             <input
-              className="nx-input"
+              style={inputStyle}
               placeholder="Dropoff location"
               value={dropoffName}
               onChange={(e) => setDropoffName(e.target.value)}
@@ -287,7 +296,7 @@ export default function RequestSheet({
               }}
             >
               <input
-                className="nx-input"
+                style={inputStyle}
                 type="number"
                 min="1"
                 step="0.01"
@@ -297,7 +306,7 @@ export default function RequestSheet({
               />
 
               <input
-                className="nx-input"
+                style={inputStyle}
                 type="number"
                 min="1"
                 placeholder="People"
@@ -307,14 +316,14 @@ export default function RequestSheet({
             </div>
 
             <textarea
-              className="nx-input"
+              style={{
+                ...inputStyle,
+                minHeight: 76,
+                resize: "none",
+              }}
               placeholder="Extra trip details (optional)"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              style={{
-                minHeight: 74,
-                resize: "none",
-              }}
             />
           </div>
         </div>
@@ -357,13 +366,13 @@ export default function RequestSheet({
           style={{
             width: "100%",
             border: "none",
-            borderRadius: 22,
+            borderRadius: 24,
             padding: "16px",
             fontSize: 16,
             fontWeight: 1000,
             color: "#fff",
-            background: "linear-gradient(90deg,#8b5cf6,#6d28d9,#4f46e5)",
-            boxShadow: "0 16px 32px rgba(109,40,217,0.24)",
+            background: "linear-gradient(90deg,#19b5ff,#0a7cff,#2563eb)",
+            boxShadow: "0 16px 32px rgba(10,124,255,0.25)",
           }}
         >
           {submitting ? "Requesting..." : "Request ride"}
@@ -371,4 +380,4 @@ export default function RequestSheet({
       </form>
     </div>
   );
-}
+      }
