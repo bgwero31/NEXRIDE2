@@ -8,6 +8,11 @@ function formatMoney(value) {
   return Number(value || 0).toFixed(2);
 }
 
+function cityLabel(city) {
+  if (!city) return "Unknown";
+  return city.charAt(0).toUpperCase() + city.slice(1);
+}
+
 export default function CompletedSheet({
   completedTrip,
   onRequestAgain,
@@ -15,16 +20,16 @@ export default function CompletedSheet({
   if (!completedTrip) return null;
 
   return (
-    <div style={{ display: "grid", gap: 12 }}>
-      {/* HERO */}
+    <div style={{ display: "grid", gap: 8 }}>
       <ActionCard
         style={{
-          padding: 14,
+          padding: 12,
           borderRadius: 22,
           background:
-            "linear-gradient(135deg, rgba(10,16,20,0.98) 0%, rgba(12,22,18,0.98) 55%, rgba(8,14,16,0.98) 100%)",
-          border: "1px solid rgba(255,255,255,0.06)",
-          boxShadow: "0 18px 40px rgba(0,0,0,0.22)",
+            "linear-gradient(180deg, rgba(255,255,255,0.60), rgba(247,241,255,0.88))",
+          border: "1px solid rgba(124,58,237,0.10)",
+          boxShadow: "0 10px 30px rgba(41,19,78,0.12)",
+          backdropFilter: "blur(16px)",
           overflow: "hidden",
           position: "relative",
         }}
@@ -32,25 +37,25 @@ export default function CompletedSheet({
         <div
           style={{
             position: "absolute",
-            top: -30,
-            right: -16,
-            width: 130,
-            height: 130,
+            top: -28,
+            right: -18,
+            width: 110,
+            height: 110,
             borderRadius: "50%",
-            background: "rgba(45,200,95,0.10)",
-            filter: "blur(10px)",
+            background: "rgba(168,85,247,0.10)",
+            filter: "blur(16px)",
           }}
         />
         <div
           style={{
             position: "absolute",
-            bottom: -40,
-            left: -20,
-            width: 120,
-            height: 120,
+            bottom: -30,
+            left: -18,
+            width: 96,
+            height: 96,
             borderRadius: "50%",
-            background: "rgba(0,198,255,0.08)",
-            filter: "blur(12px)",
+            background: "rgba(124,58,237,0.08)",
+            filter: "blur(16px)",
           }}
         />
 
@@ -59,48 +64,49 @@ export default function CompletedSheet({
             style={{
               display: "flex",
               justifyContent: "space-between",
-              gap: 12,
+              gap: 10,
               alignItems: "flex-start",
             }}
           >
             <div style={{ flex: 1 }}>
               <div
                 style={{
-                  fontSize: 22,
+                  fontSize: 15,
                   fontWeight: 1000,
                   letterSpacing: "-0.03em",
-                  color: "#fff",
+                  color: "#23153d",
+                  lineHeight: 1.1,
                 }}
               >
                 Trip completed
               </div>
               <div
                 style={{
-                  fontSize: 13,
-                  color: "#a7c4b0",
+                  fontSize: 12,
+                  color: "#615682",
                   marginTop: 5,
-                  lineHeight: 1.45,
+                  lineHeight: 1.4,
                 }}
               >
-                Your ride has ended successfully. Thanks for riding with NEXRIDE.
+                Your ride ended successfully. Thanks for riding with NEXRIDE.
               </div>
             </div>
 
             <div
               style={{
-                minWidth: 92,
+                minWidth: 84,
                 display: "inline-flex",
                 justifyContent: "center",
                 alignItems: "center",
-                padding: "8px 12px",
+                padding: "6px 10px",
                 borderRadius: 999,
-                background: "rgba(45,200,95,0.12)",
-                border: "1px solid rgba(45,200,95,0.22)",
-                color: "#eaffdc",
-                fontSize: 11,
+                background: "rgba(124,58,237,0.10)",
+                border: "1px solid rgba(124,58,237,0.12)",
+                color: "#6d28d9",
+                fontSize: 10,
                 fontWeight: 900,
                 textTransform: "uppercase",
-                letterSpacing: 0.5,
+                letterSpacing: 0.4,
               }}
             >
               Completed
@@ -109,27 +115,35 @@ export default function CompletedSheet({
 
           <div
             style={{
-              marginTop: 15,
+              marginTop: 10,
               display: "grid",
               gridTemplateColumns: "1fr 1fr",
-              gap: 10,
+              gap: 8,
             }}
           >
             <div
               style={{
-                borderRadius: 18,
-                padding: 12,
-                background: "rgba(255,255,255,0.035)",
-                border: "1px solid rgba(255,255,255,0.06)",
+                borderRadius: 16,
+                padding: 10,
+                background: "rgba(255,255,255,0.58)",
+                border: "1px solid rgba(124,58,237,0.08)",
               }}
             >
-              <div style={{ fontSize: 12, color: "#8ea2ba" }}>Fare paid</div>
               <div
                 style={{
-                  fontSize: 22,
+                  fontSize: 10,
+                  color: "#7c3aed",
+                  fontWeight: 800,
+                }}
+              >
+                Fare paid
+              </div>
+              <div
+                style={{
+                  fontSize: 18,
                   fontWeight: 1000,
-                  marginTop: 4,
-                  color: "#fff",
+                  marginTop: 3,
+                  color: "#23153d",
                 }}
               >
                 ${formatMoney(completedTrip.agreedPrice)}
@@ -138,19 +152,27 @@ export default function CompletedSheet({
 
             <div
               style={{
-                borderRadius: 18,
-                padding: 12,
-                background: "rgba(255,255,255,0.035)",
-                border: "1px solid rgba(255,255,255,0.06)",
+                borderRadius: 16,
+                padding: 10,
+                background: "rgba(255,255,255,0.58)",
+                border: "1px solid rgba(124,58,237,0.08)",
               }}
             >
-              <div style={{ fontSize: 12, color: "#8ea2ba" }}>Driver</div>
               <div
                 style={{
-                  fontSize: 18,
+                  fontSize: 10,
+                  color: "#7c3aed",
+                  fontWeight: 800,
+                }}
+              >
+                Driver
+              </div>
+              <div
+                style={{
+                  fontSize: 15,
                   fontWeight: 1000,
-                  marginTop: 4,
-                  color: "#fff",
+                  marginTop: 3,
+                  color: "#23153d",
                   lineHeight: 1.2,
                 }}
               >
@@ -161,30 +183,31 @@ export default function CompletedSheet({
         </div>
       </ActionCard>
 
-      {/* ROUTE */}
       <ActionCard
         style={{
-          padding: 14,
-          borderRadius: 22,
+          padding: 12,
+          borderRadius: 20,
           background:
-            "linear-gradient(180deg, rgba(12,14,22,0.98), rgba(8,10,18,0.98))",
-          border: "1px solid rgba(255,255,255,0.06)",
+            "linear-gradient(180deg, rgba(255,255,255,0.58), rgba(247,241,255,0.86))",
+          border: "1px solid rgba(124,58,237,0.10)",
+          boxShadow: "0 10px 30px rgba(41,19,78,0.12)",
+          backdropFilter: "blur(16px)",
         }}
       >
         <div
           style={{
-            display: "flex",
-            gap: 12,
+            display: "grid",
+            gridTemplateColumns: "14px 1fr",
+            gap: 10,
             alignItems: "stretch",
           }}
         >
           <div
             style={{
-              width: 18,
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
-              paddingTop: 4,
+              paddingTop: 2,
             }}
           >
             <div
@@ -192,18 +215,18 @@ export default function CompletedSheet({
                 width: 10,
                 height: 10,
                 borderRadius: 999,
-                background: "#00c26f",
-                boxShadow: "0 0 10px rgba(0,194,111,0.55)",
+                background: "#7c3aed",
+                boxShadow: "0 0 10px rgba(124,58,237,0.34)",
               }}
             />
             <div
               style={{
                 width: 2,
                 flex: 1,
-                minHeight: 34,
+                minHeight: 28,
                 background:
-                  "linear-gradient(180deg, rgba(255,255,255,0.25), rgba(255,255,255,0.06))",
-                margin: "7px 0",
+                  "linear-gradient(180deg, rgba(124,58,237,0.32), rgba(124,58,237,0.10))",
+                margin: "6px 0",
               }}
             />
             <div
@@ -211,32 +234,32 @@ export default function CompletedSheet({
                 width: 10,
                 height: 10,
                 borderRadius: 999,
-                background: "#ff8a00",
-                boxShadow: "0 0 10px rgba(255,138,0,0.55)",
+                background: "#a855f7",
+                boxShadow: "0 0 10px rgba(168,85,247,0.34)",
               }}
             />
           </div>
 
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ marginBottom: 14 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ marginBottom: 10 }}>
               <div
                 style={{
-                  fontSize: 11,
+                  fontSize: 10,
                   textTransform: "uppercase",
-                  letterSpacing: 0.5,
-                  color: "#87a0bb",
-                  fontWeight: 800,
-                  marginBottom: 6,
+                  letterSpacing: 0.4,
+                  color: "#7c3aed",
+                  fontWeight: 900,
+                  marginBottom: 4,
                 }}
               >
                 Pickup
               </div>
               <div
                 style={{
-                  fontSize: 16,
+                  fontSize: 13,
                   fontWeight: 900,
                   lineHeight: 1.3,
-                  color: "#fff",
+                  color: "#23153d",
                 }}
               >
                 {completedTrip.pickupName || "Pickup location"}
@@ -246,22 +269,22 @@ export default function CompletedSheet({
             <div>
               <div
                 style={{
-                  fontSize: 11,
+                  fontSize: 10,
                   textTransform: "uppercase",
-                  letterSpacing: 0.5,
-                  color: "#87a0bb",
-                  fontWeight: 800,
-                  marginBottom: 6,
+                  letterSpacing: 0.4,
+                  color: "#7c3aed",
+                  fontWeight: 900,
+                  marginBottom: 4,
                 }}
               >
-                Dropoff
+                Destination
               </div>
               <div
                 style={{
-                  fontSize: 16,
+                  fontSize: 13,
                   fontWeight: 900,
                   lineHeight: 1.3,
-                  color: "#fff",
+                  color: "#23153d",
                 }}
               >
                 {completedTrip.dropoffName || "Destination"}
@@ -269,40 +292,77 @@ export default function CompletedSheet({
             </div>
           </div>
         </div>
+
+        <div
+          style={{
+            marginTop: 10,
+            display: "flex",
+            gap: 8,
+            flexWrap: "wrap",
+          }}
+        >
+          <div
+            style={{
+              padding: "7px 10px",
+              borderRadius: 999,
+              fontSize: 11,
+              fontWeight: 800,
+              background: "rgba(124,58,237,0.08)",
+              border: "1px solid rgba(124,58,237,0.08)",
+              color: "#5b21b6",
+            }}
+          >
+            {cityLabel(completedTrip.city)}
+          </div>
+
+          <div
+            style={{
+              padding: "7px 10px",
+              borderRadius: 999,
+              fontSize: 11,
+              fontWeight: 800,
+              background: "rgba(124,58,237,0.08)",
+              border: "1px solid rgba(124,58,237,0.08)",
+              color: "#5b21b6",
+            }}
+          >
+            Paid ${formatMoney(completedTrip.agreedPrice)}
+          </div>
+        </div>
       </ActionCard>
 
-      {/* DRIVER SUMMARY */}
       <ActionCard
         style={{
-          padding: 14,
-          borderRadius: 22,
+          padding: 12,
+          borderRadius: 20,
           background:
-            "linear-gradient(180deg, rgba(12,14,22,0.98), rgba(8,10,18,0.98))",
-          border: "1px solid rgba(255,255,255,0.06)",
+            "linear-gradient(180deg, rgba(255,255,255,0.58), rgba(247,241,255,0.86))",
+          border: "1px solid rgba(124,58,237,0.10)",
+          boxShadow: "0 10px 30px rgba(41,19,78,0.12)",
+          backdropFilter: "blur(16px)",
         }}
       >
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "auto 1fr",
-            gap: 12,
+            gridTemplateColumns: "44px 1fr",
+            gap: 10,
             alignItems: "center",
           }}
         >
           <div
             style={{
-              width: 52,
-              height: 52,
-              borderRadius: 18,
-              background:
-                "linear-gradient(135deg, rgba(45,200,95,1) 0%, rgba(0,198,255,1) 100%)",
-              boxShadow: "0 14px 30px rgba(0,198,255,0.20)",
+              width: 44,
+              height: 44,
+              borderRadius: 14,
+              background: "linear-gradient(135deg,#8b5cf6,#6d28d9)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: 20,
+              fontSize: 18,
               fontWeight: 1000,
               color: "#fff",
+              boxShadow: "0 10px 20px rgba(124,58,237,0.18)",
             }}
           >
             {(completedTrip.driverName || "D").charAt(0).toUpperCase()}
@@ -311,9 +371,9 @@ export default function CompletedSheet({
           <div style={{ minWidth: 0 }}>
             <div
               style={{
-                fontSize: 17,
+                fontSize: 13,
                 fontWeight: 1000,
-                color: "#fff",
+                color: "#23153d",
               }}
             >
               {completedTrip.driverName || "Driver"}
@@ -321,9 +381,9 @@ export default function CompletedSheet({
 
             <div
               style={{
-                fontSize: 13,
-                color: "#9fb3c8",
-                marginTop: 4,
+                fontSize: 11,
+                color: "#74698f",
+                marginTop: 3,
               }}
             >
               {completedTrip.driverPhone || "Phone not available"}
@@ -332,24 +392,23 @@ export default function CompletedSheet({
         </div>
       </ActionCard>
 
-      {/* ACTION */}
       <button
         type="button"
         onClick={onRequestAgain}
         style={{
           width: "100%",
           border: "none",
-          borderRadius: 20,
-          padding: "15px 16px",
-          fontSize: 15,
+          borderRadius: 18,
+          padding: "14px 16px",
+          fontSize: 14,
           fontWeight: 1000,
-          color: "#001018",
-          background: "linear-gradient(90deg,#00c6ff,#0066ff)",
-          boxShadow: "0 14px 28px rgba(0,102,255,0.22)",
+          color: "#fff",
+          background: "linear-gradient(90deg,#7c3aed,#8b5cf6,#a855f7)",
+          boxShadow: "0 12px 28px rgba(124,58,237,0.18)",
         }}
       >
         Request another ride
       </button>
     </div>
   );
-}
+            }
