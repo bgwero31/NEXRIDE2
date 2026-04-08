@@ -2,10 +2,123 @@
 
 "use client";
 
+import { useEffect, useState } from "react";
 import ActionCard from "../ui/ActionCard";
 
 function formatMoney(value) {
   return Number(value || 0).toFixed(2);
+}
+
+function cityLabel(city) {
+  if (!city) return "City";
+  return city.charAt(0).toUpperCase() + city.slice(1);
+}
+
+function RadarPulse() {
+  const ring = (delay, size, opacity) => ({
+    position: "absolute",
+    width: size,
+    height: size,
+    borderRadius: "50%",
+    border: `1px solid rgba(139,92,246,${opacity})`,
+    top: "50%",
+    left: "50%",
+    transform: "translate(-50%, -50%)",
+    animation: `nxRadar 2.4s ease-out ${delay}s infinite`,
+  });
+
+  return (
+    <>
+      <style>{`
+        @keyframes nxRadar {
+          0% {
+            transform: translate(-50%, -50%) scale(0.45);
+            opacity: 0.95;
+          }
+          100% {
+            transform: translate(-50%, -50%) scale(1.25);
+            opacity: 0;
+          }
+        }
+        @keyframes nxSweep {
+          0% { transform: translate(-50%, -50%) rotate(0deg); }
+          100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        @keyframes nxDot {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.18); opacity: 0.7; }
+        }
+      `}</style>
+
+      <div
+        style={{
+          position: "relative",
+          width: 116,
+          height: 116,
+          margin: "0 auto",
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            borderRadius: "50%",
+            background:
+              "radial-gradient(circle at center, rgba(168,85,247,0.18), rgba(124,58,237,0.05) 45%, rgba(124,58,237,0) 72%)",
+          }}
+        />
+
+        <div style={ring(0, 44, 0.52)} />
+        <div style={ring(0.5, 72, 0.34)} />
+        <div style={ring(1, 100, 0.22)} />
+
+        <div
+          style={{
+            position: "absolute",
+            width: 88,
+            height: 88,
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            borderRadius: "50%",
+            border: "1px solid rgba(124,58,237,0.12)",
+            background:
+              "radial-gradient(circle at center, rgba(255,255,255,0.66), rgba(240,232,255,0.28))",
+            backdropFilter: "blur(6px)",
+          }}
+        />
+
+        <div
+          style={{
+            position: "absolute",
+            width: 56,
+            height: 2,
+            top: "50%",
+            left: "50%",
+            transformOrigin: "0% 50%",
+            background:
+              "linear-gradient(90deg, rgba(168,85,247,0), rgba(168,85,247,0.92))",
+            animation: "nxSweep 1.8s linear infinite",
+          }}
+        />
+
+        <div
+          style={{
+            position: "absolute",
+            width: 14,
+            height: 14,
+            borderRadius: "50%",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            background: "linear-gradient(135deg,#7c3aed,#a855f7)",
+            boxShadow: "0 0 18px rgba(124,58,237,0.45)",
+            animation: "nxDot 1.2s ease-in-out infinite",
+          }}
+        />
+      </div>
+    </>
+  );
 }
 
 export default function WaitingSheet({
@@ -14,19 +127,29 @@ export default function WaitingSheet({
   onOpenOffers,
   driversNearby = 0,
 }) {
+  const [searchSeconds, setSearchSeconds] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setSearchSeconds((s) => s + 1);
+    }, 1000);
+
+    return () => clearInterval(id);
+  }, []);
+
   if (!requestData) return null;
 
   return (
-    <div style={{ display: "grid", gap: 12 }}>
-      {/* HERO STATUS */}
+    <div style={{ display: "grid", gap: 8 }}>
       <ActionCard
         style={{
-          padding: 14,
+          padding: 12,
           borderRadius: 22,
           background:
-            "linear-gradient(135deg, rgba(10,12,22,0.98) 0%, rgba(14,18,32,0.98) 55%, rgba(10,12,22,0.98) 100%)",
-          border: "1px solid rgba(255,255,255,0.06)",
-          boxShadow: "0 18px 40px rgba(0,0,0,0.22)",
+            "linear-gradient(180deg, rgba(255,255,255,0.60), rgba(247,241,255,0.88))",
+          border: "1px solid rgba(124,58,237,0.10)",
+          boxShadow: "0 10px 30px rgba(41,19,78,0.12)",
+          backdropFilter: "blur(16px)",
           overflow: "hidden",
           position: "relative",
         }}
@@ -35,179 +158,197 @@ export default function WaitingSheet({
           style={{
             position: "absolute",
             top: -30,
-            right: -10,
+            right: -20,
             width: 120,
             height: 120,
             borderRadius: "50%",
-            background: "rgba(0,198,255,0.09)",
-            filter: "blur(10px)",
+            background: "rgba(168,85,247,0.10)",
+            filter: "blur(16px)",
           }}
         />
         <div
           style={{
             position: "absolute",
             bottom: -35,
-            left: -15,
-            width: 110,
-            height: 110,
+            left: -20,
+            width: 100,
+            height: 100,
             borderRadius: "50%",
-            background: "rgba(0,102,255,0.10)",
-            filter: "blur(12px)",
+            background: "rgba(124,58,237,0.08)",
+            filter: "blur(16px)",
           }}
         />
 
         <div style={{ position: "relative", zIndex: 2 }}>
           <div
             style={{
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 10,
-              alignItems: "flex-start",
+              display: "grid",
+              gridTemplateColumns: "116px 1fr",
+              gap: 12,
+              alignItems: "center",
             }}
           >
+            <RadarPulse />
+
             <div>
               <div
                 style={{
-                  fontSize: 22,
-                  fontWeight: 1000,
-                  letterSpacing: "-0.03em",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 8,
+                  alignItems: "center",
                 }}
               >
-                Finding your ride
+                <div
+                  style={{
+                    fontSize: 15,
+                    fontWeight: 1000,
+                    color: "#23153d",
+                    lineHeight: 1.1,
+                  }}
+                >
+                  Searching for drivers
+                </div>
+
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "6px 10px",
+                    borderRadius: 999,
+                    background: "rgba(124,58,237,0.10)",
+                    border: "1px solid rgba(124,58,237,0.12)",
+                    color: "#6d28d9",
+                    fontSize: 10,
+                    fontWeight: 900,
+                    letterSpacing: 0.4,
+                    textTransform: "uppercase",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Live
+                </div>
               </div>
+
               <div
                 style={{
-                  fontSize: 13,
-                  color: "#9fb3c8",
-                  marginTop: 5,
+                  fontSize: 12,
+                  color: "#615682",
+                  marginTop: 6,
                   lineHeight: 1.45,
                 }}
               >
-                Your request is live. Nearby drivers are reviewing your offer now.
+                Nearby drivers are checking your fare now.
               </div>
-            </div>
 
-            <div
-              style={{
-                minWidth: 88,
-                display: "inline-flex",
-                justifyContent: "center",
-                alignItems: "center",
-                padding: "8px 12px",
-                borderRadius: 999,
-                background: "rgba(0,198,255,0.10)",
-                border: "1px solid rgba(0,198,255,0.20)",
-                color: "#d9f6ff",
-                fontSize: 11,
-                fontWeight: 900,
-                textTransform: "uppercase",
-                letterSpacing: 0.5,
-              }}
-            >
-              Searching
-            </div>
-          </div>
-
-          {/* animated bars */}
-          <div style={{ marginTop: 16 }}>
-            <div
-              style={{
-                width: "100%",
-                height: 8,
-                borderRadius: 999,
-                background: "rgba(255,255,255,0.06)",
-                overflow: "hidden",
-              }}
-            >
               <div
                 style={{
-                  width: "42%",
-                  height: "100%",
-                  borderRadius: 999,
-                  background: "linear-gradient(90deg,#00c6ff,#0066ff)",
-                  boxShadow: "0 0 16px rgba(0,198,255,0.45)",
-                }}
-              />
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 10,
-              marginTop: 14,
-            }}
-          >
-            <div
-              style={{
-                borderRadius: 18,
-                padding: 12,
-                background: "rgba(255,255,255,0.035)",
-                border: "1px solid rgba(255,255,255,0.06)",
-              }}
-            >
-              <div style={{ fontSize: 12, color: "#8ea2ba" }}>Your fare</div>
-              <div
-                style={{
-                  fontSize: 22,
-                  fontWeight: 1000,
-                  marginTop: 4,
-                  color: "#fff",
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 8,
+                  marginTop: 10,
                 }}
               >
-                ${formatMoney(requestData.offerPrice)}
-              </div>
-            </div>
+                <div
+                  style={{
+                    borderRadius: 16,
+                    padding: 10,
+                    background: "rgba(255,255,255,0.58)",
+                    border: "1px solid rgba(124,58,237,0.08)",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 10,
+                      color: "#7c3aed",
+                      fontWeight: 800,
+                    }}
+                  >
+                    Your fare
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 18,
+                      fontWeight: 1000,
+                      color: "#23153d",
+                      marginTop: 3,
+                    }}
+                  >
+                    ${formatMoney(requestData.offerPrice)}
+                  </div>
+                </div>
 
-            <div
-              style={{
-                borderRadius: 18,
-                padding: 12,
-                background: "rgba(255,255,255,0.035)",
-                border: "1px solid rgba(255,255,255,0.06)",
-              }}
-            >
-              <div style={{ fontSize: 12, color: "#8ea2ba" }}>Nearby drivers</div>
+                <div
+                  style={{
+                    borderRadius: 16,
+                    padding: 10,
+                    background: "rgba(255,255,255,0.58)",
+                    border: "1px solid rgba(124,58,237,0.08)",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 10,
+                      color: "#7c3aed",
+                      fontWeight: 800,
+                    }}
+                  >
+                    Drivers nearby
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 18,
+                      fontWeight: 1000,
+                      color: "#23153d",
+                      marginTop: 3,
+                    }}
+                  >
+                    {driversNearby}
+                  </div>
+                </div>
+              </div>
+
               <div
                 style={{
-                  fontSize: 22,
-                  fontWeight: 1000,
-                  marginTop: 4,
-                  color: "#fff",
+                  marginTop: 8,
+                  fontSize: 11,
+                  color: "#7a6f97",
+                  fontWeight: 700,
                 }}
               >
-                {driversNearby}
+                Searching for {searchSeconds}s
               </div>
             </div>
           </div>
         </div>
       </ActionCard>
 
-      {/* ROUTE CARD */}
       <ActionCard
         style={{
-          padding: 14,
+          padding: 12,
           borderRadius: 22,
           background:
-            "linear-gradient(180deg, rgba(12,14,22,0.98), rgba(8,10,18,0.98))",
-          border: "1px solid rgba(255,255,255,0.06)",
+            "linear-gradient(180deg, rgba(255,255,255,0.58), rgba(247,241,255,0.86))",
+          border: "1px solid rgba(124,58,237,0.10)",
+          boxShadow: "0 10px 30px rgba(41,19,78,0.12)",
+          backdropFilter: "blur(16px)",
         }}
       >
         <div
           style={{
-            display: "flex",
-            gap: 12,
+            display: "grid",
+            gridTemplateColumns: "14px 1fr",
+            gap: 10,
             alignItems: "stretch",
           }}
         >
           <div
             style={{
-              width: 18,
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
-              paddingTop: 4,
+              paddingTop: 2,
             }}
           >
             <div
@@ -215,18 +356,18 @@ export default function WaitingSheet({
                 width: 10,
                 height: 10,
                 borderRadius: 999,
-                background: "#00c26f",
-                boxShadow: "0 0 10px rgba(0,194,111,0.55)",
+                background: "#7c3aed",
+                boxShadow: "0 0 10px rgba(124,58,237,0.34)",
               }}
             />
             <div
               style={{
                 width: 2,
                 flex: 1,
-                minHeight: 34,
+                minHeight: 28,
                 background:
-                  "linear-gradient(180deg, rgba(255,255,255,0.25), rgba(255,255,255,0.06))",
-                margin: "7px 0",
+                  "linear-gradient(180deg, rgba(124,58,237,0.32), rgba(124,58,237,0.10))",
+                margin: "6px 0",
               }}
             />
             <div
@@ -234,32 +375,32 @@ export default function WaitingSheet({
                 width: 10,
                 height: 10,
                 borderRadius: 999,
-                background: "#ff8a00",
-                boxShadow: "0 0 10px rgba(255,138,0,0.55)",
+                background: "#a855f7",
+                boxShadow: "0 0 10px rgba(168,85,247,0.34)",
               }}
             />
           </div>
 
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ marginBottom: 14 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ marginBottom: 10 }}>
               <div
                 style={{
-                  fontSize: 11,
+                  fontSize: 10,
                   textTransform: "uppercase",
-                  letterSpacing: 0.5,
-                  color: "#87a0bb",
-                  fontWeight: 800,
-                  marginBottom: 6,
+                  letterSpacing: 0.4,
+                  color: "#7c3aed",
+                  fontWeight: 900,
+                  marginBottom: 4,
                 }}
               >
                 Pickup
               </div>
               <div
                 style={{
-                  fontSize: 16,
+                  fontSize: 13,
                   fontWeight: 900,
                   lineHeight: 1.3,
-                  color: "#fff",
+                  color: "#23153d",
                 }}
               >
                 {requestData.pickupName || "Pickup location"}
@@ -269,22 +410,22 @@ export default function WaitingSheet({
             <div>
               <div
                 style={{
-                  fontSize: 11,
+                  fontSize: 10,
                   textTransform: "uppercase",
-                  letterSpacing: 0.5,
-                  color: "#87a0bb",
-                  fontWeight: 800,
-                  marginBottom: 6,
+                  letterSpacing: 0.4,
+                  color: "#7c3aed",
+                  fontWeight: 900,
+                  marginBottom: 4,
                 }}
               >
-                Dropoff
+                Destination
               </div>
               <div
                 style={{
-                  fontSize: 16,
+                  fontSize: 13,
                   fontWeight: 900,
                   lineHeight: 1.3,
-                  color: "#fff",
+                  color: "#23153d",
                 }}
               >
                 {requestData.dropoffName || "Destination"}
@@ -296,9 +437,9 @@ export default function WaitingSheet({
         {(requestData.people || requestData.notes) && (
           <div
             style={{
-              marginTop: 14,
+              marginTop: 10,
               display: "grid",
-              gap: 10,
+              gap: 8,
             }}
           >
             <div
@@ -310,13 +451,13 @@ export default function WaitingSheet({
             >
               <div
                 style={{
-                  padding: "8px 12px",
+                  padding: "7px 10px",
                   borderRadius: 999,
-                  fontSize: 12,
+                  fontSize: 11,
                   fontWeight: 800,
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(255,255,255,0.07)",
-                  color: "#d8e3f0",
+                  background: "rgba(124,58,237,0.08)",
+                  border: "1px solid rgba(124,58,237,0.08)",
+                  color: "#5b21b6",
                 }}
               >
                 {Number(requestData.people || 1)} passenger
@@ -325,29 +466,29 @@ export default function WaitingSheet({
 
               <div
                 style={{
-                  padding: "8px 12px",
+                  padding: "7px 10px",
                   borderRadius: 999,
-                  fontSize: 12,
+                  fontSize: 11,
                   fontWeight: 800,
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(255,255,255,0.07)",
-                  color: "#d8e3f0",
+                  background: "rgba(124,58,237,0.08)",
+                  border: "1px solid rgba(124,58,237,0.08)",
+                  color: "#5b21b6",
                 }}
               >
-                {requestData.city || "city"}
+                {cityLabel(requestData.city)}
               </div>
             </div>
 
             {requestData.notes ? (
               <div
                 style={{
-                  padding: 12,
-                  borderRadius: 16,
-                  background: "rgba(255,255,255,0.03)",
-                  border: "1px solid rgba(255,255,255,0.06)",
-                  color: "#b7c9d9",
-                  fontSize: 13,
-                  lineHeight: 1.55,
+                  padding: 10,
+                  borderRadius: 14,
+                  background: "rgba(255,255,255,0.54)",
+                  border: "1px solid rgba(124,58,237,0.08)",
+                  color: "#51466f",
+                  fontSize: 12,
+                  lineHeight: 1.45,
                 }}
               >
                 {requestData.notes}
@@ -357,22 +498,23 @@ export default function WaitingSheet({
         )}
       </ActionCard>
 
-      {/* HINT CARD */}
       <ActionCard
         style={{
-          padding: 14,
-          borderRadius: 22,
+          padding: 12,
+          borderRadius: 20,
           background:
-            "linear-gradient(180deg, rgba(12,14,22,0.96), rgba(8,10,18,0.96))",
-          border: "1px solid rgba(255,255,255,0.06)",
+            "linear-gradient(180deg, rgba(255,255,255,0.56), rgba(247,241,255,0.82))",
+          border: "1px solid rgba(124,58,237,0.10)",
+          boxShadow: "0 10px 30px rgba(41,19,78,0.12)",
+          backdropFilter: "blur(16px)",
         }}
       >
         <div
           style={{
-            fontSize: 16,
-            fontWeight: 900,
-            marginBottom: 6,
-            color: "#fff",
+            fontSize: 13,
+            fontWeight: 1000,
+            marginBottom: 5,
+            color: "#23153d",
           }}
         >
           Waiting for offers
@@ -380,13 +522,13 @@ export default function WaitingSheet({
 
         <div
           style={{
-            fontSize: 13,
-            color: "#9fb3c8",
-            lineHeight: 1.55,
+            fontSize: 12,
+            color: "#615682",
+            lineHeight: 1.45,
           }}
         >
-          We’ll show driver offers here as soon as they start responding. You
-          can keep this screen open while we search.
+          Keep this screen open while we search. Driver offers will appear here as
+          soon as they respond.
         </div>
 
         {onOpenOffers ? (
@@ -394,15 +536,15 @@ export default function WaitingSheet({
             type="button"
             onClick={onOpenOffers}
             style={{
-              marginTop: 14,
+              marginTop: 10,
               width: "100%",
-              border: "1px solid rgba(255,255,255,0.10)",
-              borderRadius: 18,
-              padding: "14px",
-              fontSize: 14,
+              border: "1px solid rgba(124,58,237,0.10)",
+              borderRadius: 16,
+              padding: "12px",
+              fontSize: 13,
               fontWeight: 900,
-              color: "#fff",
-              background: "rgba(255,255,255,0.04)",
+              color: "#5b21b6",
+              background: "rgba(124,58,237,0.08)",
             }}
           >
             Refresh offers
@@ -410,24 +552,23 @@ export default function WaitingSheet({
         ) : null}
       </ActionCard>
 
-      {/* CANCEL BUTTON */}
       <button
         type="button"
         onClick={onCancel}
         style={{
           width: "100%",
           border: "none",
-          borderRadius: 20,
-          padding: "15px 16px",
-          fontSize: 15,
+          borderRadius: 18,
+          padding: "14px 16px",
+          fontSize: 14,
           fontWeight: 1000,
           color: "#fff",
-          background: "linear-gradient(90deg,#ff5b5b,#ff7a45)",
-          boxShadow: "0 14px 28px rgba(255,91,91,0.22)",
+          background: "linear-gradient(90deg,#7c3aed,#8b5cf6,#a855f7)",
+          boxShadow: "0 12px 28px rgba(124,58,237,0.18)",
         }}
       >
         Cancel request
       </button>
     </div>
   );
-}
+            }
