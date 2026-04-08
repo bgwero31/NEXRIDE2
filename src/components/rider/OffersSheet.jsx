@@ -8,16 +8,21 @@ function formatMoney(value) {
   return Number(value || 0).toFixed(2);
 }
 
+function cityLabel(city) {
+  if (!city) return "Unknown";
+  return city.charAt(0).toUpperCase() + city.slice(1);
+}
+
 function statusPill(status) {
   const base = {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    padding: "6px 10px",
+    padding: "5px 9px",
     borderRadius: 999,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: 900,
-    letterSpacing: 0.4,
+    letterSpacing: 0.35,
     border: "1px solid transparent",
     textTransform: "uppercase",
     whiteSpace: "nowrap",
@@ -26,32 +31,27 @@ function statusPill(status) {
   if (status === "pending") {
     return {
       ...base,
-      color: "#e9d5ff",
-      background: "rgba(168,85,247,0.14)",
-      border: "1px solid rgba(168,85,247,0.24)",
+      color: "#6d28d9",
+      background: "rgba(124,58,237,0.10)",
+      border: "1px solid rgba(124,58,237,0.12)",
     };
   }
 
   if (status === "accepted") {
     return {
       ...base,
-      color: "#eaffdc",
-      background: "rgba(45,200,95,0.12)",
-      border: "1px solid rgba(45,200,95,0.22)",
+      color: "#0f7a4e",
+      background: "rgba(31,214,122,0.10)",
+      border: "1px solid rgba(31,214,122,0.16)",
     };
   }
 
   return {
     ...base,
-    color: "#f5f7fa",
-    background: "rgba(255,255,255,0.06)",
-    border: "1px solid rgba(255,255,255,0.10)",
+    color: "#5f557c",
+    background: "rgba(255,255,255,0.58)",
+    border: "1px solid rgba(124,58,237,0.08)",
   };
-}
-
-function cityLabel(city) {
-  if (!city) return "Unknown";
-  return city.charAt(0).toUpperCase() + city.slice(1);
 }
 
 export default function OffersSheet({
@@ -73,16 +73,16 @@ export default function OffersSheet({
   const bestOffer = sortedOffers[0] || null;
 
   return (
-    <div style={{ display: "grid", gap: 12 }}>
-      {/* HEADER */}
+    <div style={{ display: "grid", gap: 8 }}>
       <ActionCard
         style={{
-          padding: 14,
+          padding: 12,
           borderRadius: 22,
           background:
-            "linear-gradient(135deg, rgba(12,10,22,0.98) 0%, rgba(18,12,34,0.98) 58%, rgba(10,10,18,0.98) 100%)",
-          border: "1px solid rgba(255,255,255,0.06)",
-          boxShadow: "0 18px 40px rgba(0,0,0,0.22)",
+            "linear-gradient(180deg, rgba(255,255,255,0.60), rgba(247,241,255,0.88))",
+          border: "1px solid rgba(124,58,237,0.10)",
+          boxShadow: "0 10px 30px rgba(41,19,78,0.12)",
+          backdropFilter: "blur(16px)",
           overflow: "hidden",
           position: "relative",
         }}
@@ -90,25 +90,25 @@ export default function OffersSheet({
         <div
           style={{
             position: "absolute",
-            top: -30,
-            right: -16,
-            width: 130,
-            height: 130,
+            top: -28,
+            right: -18,
+            width: 110,
+            height: 110,
             borderRadius: "50%",
             background: "rgba(168,85,247,0.10)",
-            filter: "blur(10px)",
+            filter: "blur(16px)",
           }}
         />
         <div
           style={{
             position: "absolute",
-            bottom: -40,
-            left: -20,
-            width: 120,
-            height: 120,
+            bottom: -30,
+            left: -18,
+            width: 96,
+            height: 96,
             borderRadius: "50%",
-            background: "rgba(99,102,241,0.10)",
-            filter: "blur(12px)",
+            background: "rgba(124,58,237,0.08)",
+            filter: "blur(16px)",
           }}
         />
 
@@ -117,48 +117,49 @@ export default function OffersSheet({
             style={{
               display: "flex",
               justifyContent: "space-between",
-              gap: 12,
+              gap: 10,
               alignItems: "flex-start",
             }}
           >
             <div>
               <div
                 style={{
-                  fontSize: 22,
+                  fontSize: 15,
                   fontWeight: 1000,
                   letterSpacing: "-0.03em",
-                  color: "#fff",
+                  color: "#23153d",
+                  lineHeight: 1.1,
                 }}
               >
                 Driver offers
               </div>
               <div
                 style={{
-                  fontSize: 13,
-                  color: "#a7a7c4",
+                  fontSize: 12,
+                  color: "#615682",
                   marginTop: 5,
-                  lineHeight: 1.45,
+                  lineHeight: 1.4,
                 }}
               >
-                Choose the best driver offer for your trip.
+                Pick the best driver for your trip.
               </div>
             </div>
 
             <div
               style={{
-                minWidth: 88,
+                minWidth: 74,
                 display: "inline-flex",
                 justifyContent: "center",
                 alignItems: "center",
-                padding: "8px 12px",
+                padding: "6px 10px",
                 borderRadius: 999,
-                background: "rgba(168,85,247,0.12)",
-                border: "1px solid rgba(168,85,247,0.22)",
-                color: "#e9d5ff",
-                fontSize: 11,
+                background: "rgba(124,58,237,0.10)",
+                border: "1px solid rgba(124,58,237,0.12)",
+                color: "#6d28d9",
+                fontSize: 10,
                 fontWeight: 900,
                 textTransform: "uppercase",
-                letterSpacing: 0.5,
+                letterSpacing: 0.4,
               }}
             >
               {sortedOffers.length} offer{sortedOffers.length !== 1 ? "s" : ""}
@@ -167,27 +168,35 @@ export default function OffersSheet({
 
           <div
             style={{
-              marginTop: 15,
+              marginTop: 10,
               display: "grid",
               gridTemplateColumns: "1fr 1fr",
-              gap: 10,
+              gap: 8,
             }}
           >
             <div
               style={{
-                borderRadius: 18,
-                padding: 12,
-                background: "rgba(255,255,255,0.035)",
-                border: "1px solid rgba(255,255,255,0.06)",
+                borderRadius: 16,
+                padding: 10,
+                background: "rgba(255,255,255,0.58)",
+                border: "1px solid rgba(124,58,237,0.08)",
               }}
             >
-              <div style={{ fontSize: 12, color: "#8ea2ba" }}>Your fare</div>
               <div
                 style={{
-                  fontSize: 22,
+                  fontSize: 10,
+                  color: "#7c3aed",
+                  fontWeight: 800,
+                }}
+              >
+                Your fare
+              </div>
+              <div
+                style={{
+                  fontSize: 18,
                   fontWeight: 1000,
-                  marginTop: 4,
-                  color: "#fff",
+                  marginTop: 3,
+                  color: "#23153d",
                 }}
               >
                 ${formatMoney(requestData.offerPrice)}
@@ -196,19 +205,27 @@ export default function OffersSheet({
 
             <div
               style={{
-                borderRadius: 18,
-                padding: 12,
-                background: "rgba(255,255,255,0.035)",
-                border: "1px solid rgba(255,255,255,0.06)",
+                borderRadius: 16,
+                padding: 10,
+                background: "rgba(255,255,255,0.58)",
+                border: "1px solid rgba(124,58,237,0.08)",
               }}
             >
-              <div style={{ fontSize: 12, color: "#8ea2ba" }}>Best offer</div>
               <div
                 style={{
-                  fontSize: 22,
+                  fontSize: 10,
+                  color: "#7c3aed",
+                  fontWeight: 800,
+                }}
+              >
+                Best offer
+              </div>
+              <div
+                style={{
+                  fontSize: 18,
                   fontWeight: 1000,
-                  marginTop: 4,
-                  color: "#fff",
+                  marginTop: 3,
+                  color: "#23153d",
                 }}
               >
                 {bestOffer ? `$${formatMoney(bestOffer.proposedPrice)}` : "--"}
@@ -218,30 +235,31 @@ export default function OffersSheet({
         </div>
       </ActionCard>
 
-      {/* ROUTE SUMMARY */}
       <ActionCard
         style={{
-          padding: 14,
-          borderRadius: 22,
+          padding: 12,
+          borderRadius: 20,
           background:
-            "linear-gradient(180deg, rgba(12,14,22,0.98), rgba(8,10,18,0.98))",
-          border: "1px solid rgba(255,255,255,0.06)",
+            "linear-gradient(180deg, rgba(255,255,255,0.58), rgba(247,241,255,0.86))",
+          border: "1px solid rgba(124,58,237,0.10)",
+          boxShadow: "0 10px 30px rgba(41,19,78,0.12)",
+          backdropFilter: "blur(16px)",
         }}
       >
         <div
           style={{
-            display: "flex",
-            gap: 12,
+            display: "grid",
+            gridTemplateColumns: "14px 1fr",
+            gap: 10,
             alignItems: "stretch",
           }}
         >
           <div
             style={{
-              width: 18,
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
-              paddingTop: 4,
+              paddingTop: 2,
             }}
           >
             <div
@@ -249,18 +267,18 @@ export default function OffersSheet({
                 width: 10,
                 height: 10,
                 borderRadius: 999,
-                background: "#00c26f",
-                boxShadow: "0 0 10px rgba(0,194,111,0.55)",
+                background: "#7c3aed",
+                boxShadow: "0 0 10px rgba(124,58,237,0.34)",
               }}
             />
             <div
               style={{
                 width: 2,
                 flex: 1,
-                minHeight: 34,
+                minHeight: 28,
                 background:
-                  "linear-gradient(180deg, rgba(255,255,255,0.25), rgba(255,255,255,0.06))",
-                margin: "7px 0",
+                  "linear-gradient(180deg, rgba(124,58,237,0.32), rgba(124,58,237,0.10))",
+                margin: "6px 0",
               }}
             />
             <div
@@ -268,32 +286,32 @@ export default function OffersSheet({
                 width: 10,
                 height: 10,
                 borderRadius: 999,
-                background: "#ff8a00",
-                boxShadow: "0 0 10px rgba(255,138,0,0.55)",
+                background: "#a855f7",
+                boxShadow: "0 0 10px rgba(168,85,247,0.34)",
               }}
             />
           </div>
 
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ marginBottom: 14 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ marginBottom: 10 }}>
               <div
                 style={{
-                  fontSize: 11,
+                  fontSize: 10,
                   textTransform: "uppercase",
-                  letterSpacing: 0.5,
-                  color: "#87a0bb",
-                  fontWeight: 800,
-                  marginBottom: 6,
+                  letterSpacing: 0.4,
+                  color: "#7c3aed",
+                  fontWeight: 900,
+                  marginBottom: 4,
                 }}
               >
                 Pickup
               </div>
               <div
                 style={{
-                  fontSize: 16,
+                  fontSize: 13,
                   fontWeight: 900,
                   lineHeight: 1.3,
-                  color: "#fff",
+                  color: "#23153d",
                 }}
               >
                 {requestData.pickupName || "Pickup location"}
@@ -303,22 +321,22 @@ export default function OffersSheet({
             <div>
               <div
                 style={{
-                  fontSize: 11,
+                  fontSize: 10,
                   textTransform: "uppercase",
-                  letterSpacing: 0.5,
-                  color: "#87a0bb",
-                  fontWeight: 800,
-                  marginBottom: 6,
+                  letterSpacing: 0.4,
+                  color: "#7c3aed",
+                  fontWeight: 900,
+                  marginBottom: 4,
                 }}
               >
-                Dropoff
+                Destination
               </div>
               <div
                 style={{
-                  fontSize: 16,
+                  fontSize: 13,
                   fontWeight: 900,
                   lineHeight: 1.3,
-                  color: "#fff",
+                  color: "#23153d",
                 }}
               >
                 {requestData.dropoffName || "Destination"}
@@ -329,7 +347,7 @@ export default function OffersSheet({
 
         <div
           style={{
-            marginTop: 14,
+            marginTop: 10,
             display: "flex",
             gap: 8,
             flexWrap: "wrap",
@@ -337,13 +355,13 @@ export default function OffersSheet({
         >
           <div
             style={{
-              padding: "8px 12px",
+              padding: "7px 10px",
               borderRadius: 999,
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: 800,
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(255,255,255,0.07)",
-              color: "#d8e3f0",
+              background: "rgba(124,58,237,0.08)",
+              border: "1px solid rgba(124,58,237,0.08)",
+              color: "#5b21b6",
             }}
           >
             {Number(requestData.people || 1)} passenger
@@ -352,13 +370,13 @@ export default function OffersSheet({
 
           <div
             style={{
-              padding: "8px 12px",
+              padding: "7px 10px",
               borderRadius: 999,
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: 800,
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(255,255,255,0.07)",
-              color: "#d8e3f0",
+              background: "rgba(124,58,237,0.08)",
+              border: "1px solid rgba(124,58,237,0.08)",
+              color: "#5b21b6",
             }}
           >
             {cityLabel(requestData.city)}
@@ -366,8 +384,7 @@ export default function OffersSheet({
         </div>
       </ActionCard>
 
-      {/* OFFERS */}
-      <div style={{ display: "grid", gap: 10 }}>
+      <div style={{ display: "grid", gap: 8 }}>
         {sortedOffers.map((offer, index) => {
           const isBest = bestOffer?.id === offer.id;
           const isAccepting = acceptingOfferId === offer.id;
@@ -376,41 +393,65 @@ export default function OffersSheet({
             <ActionCard
               key={offer.id}
               style={{
-                padding: 14,
-                borderRadius: 22,
+                padding: 12,
+                borderRadius: 20,
                 background: isBest
-                  ? "linear-gradient(180deg, rgba(20,14,34,0.98), rgba(10,10,18,0.98))"
-                  : "linear-gradient(180deg, rgba(12,14,22,0.98), rgba(8,10,18,0.98))",
+                  ? "linear-gradient(180deg, rgba(248,243,255,0.92), rgba(241,232,255,0.96))"
+                  : "linear-gradient(180deg, rgba(255,255,255,0.58), rgba(247,241,255,0.84))",
                 border: isBest
-                  ? "1px solid rgba(168,85,247,0.20)"
-                  : "1px solid rgba(255,255,255,0.06)",
+                  ? "1px solid rgba(124,58,237,0.16)"
+                  : "1px solid rgba(124,58,237,0.10)",
                 boxShadow: isBest
-                  ? "0 16px 30px rgba(124,58,237,0.14)"
-                  : "0 10px 24px rgba(0,0,0,0.12)",
+                  ? "0 12px 26px rgba(124,58,237,0.12)"
+                  : "0 10px 24px rgba(41,19,78,0.10)",
+                backdropFilter: "blur(16px)",
               }}
             >
               <div
                 style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  alignItems: "flex-start",
+                  display: "grid",
+                  gridTemplateColumns: "44px 1fr auto",
+                  gap: 10,
+                  alignItems: "start",
                 }}
               >
-                <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 14,
+                    background: isBest
+                      ? "linear-gradient(135deg,#8b5cf6,#6d28d9)"
+                      : "linear-gradient(135deg,#c4b5fd,#8b5cf6)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 18,
+                    fontWeight: 1000,
+                    color: "#fff",
+                    boxShadow: isBest
+                      ? "0 10px 20px rgba(124,58,237,0.18)"
+                      : "none",
+                  }}
+                >
+                  {(offer.driverName || "D").charAt(0).toUpperCase()}
+                </div>
+
+                <div style={{ minWidth: 0 }}>
                   <div
                     style={{
                       display: "flex",
                       alignItems: "center",
-                      gap: 8,
+                      gap: 6,
                       flexWrap: "wrap",
                     }}
                   >
                     <div
                       style={{
-                        fontSize: 17,
+                        fontSize: 13,
                         fontWeight: 1000,
-                        color: "#fff",
+                        color: "#23153d",
+                        lineHeight: 1.15,
                       }}
                     >
                       {offer.driverName || "Driver"}
@@ -419,27 +460,27 @@ export default function OffersSheet({
                     {isBest ? (
                       <div
                         style={{
-                          padding: "5px 9px",
+                          padding: "4px 8px",
                           borderRadius: 999,
-                          fontSize: 10,
+                          fontSize: 9,
                           fontWeight: 900,
                           textTransform: "uppercase",
-                          letterSpacing: 0.45,
-                          color: "#e9d5ff",
-                          background: "rgba(168,85,247,0.12)",
-                          border: "1px solid rgba(168,85,247,0.22)",
+                          letterSpacing: 0.35,
+                          color: "#6d28d9",
+                          background: "rgba(124,58,237,0.10)",
+                          border: "1px solid rgba(124,58,237,0.12)",
                         }}
                       >
-                        Best offer
+                        Best
                       </div>
                     ) : null}
                   </div>
 
                   <div
                     style={{
-                      fontSize: 13,
-                      color: "#9fb3c8",
-                      marginTop: 6,
+                      fontSize: 11,
+                      color: "#74698f",
+                      marginTop: 3,
                     }}
                   >
                     Driver {index + 1}
@@ -448,14 +489,14 @@ export default function OffersSheet({
                   {offer.message ? (
                     <div
                       style={{
-                        marginTop: 10,
-                        padding: 12,
-                        borderRadius: 16,
-                        background: "rgba(255,255,255,0.03)",
-                        border: "1px solid rgba(255,255,255,0.06)",
-                        color: "#c5d3df",
-                        fontSize: 13,
-                        lineHeight: 1.55,
+                        marginTop: 8,
+                        padding: 10,
+                        borderRadius: 14,
+                        background: "rgba(255,255,255,0.60)",
+                        border: "1px solid rgba(124,58,237,0.08)",
+                        color: "#51466f",
+                        fontSize: 12,
+                        lineHeight: 1.45,
                       }}
                     >
                       {offer.message}
@@ -463,17 +504,17 @@ export default function OffersSheet({
                   ) : null}
                 </div>
 
-                <div style={{ textAlign: "right", minWidth: 100 }}>
+                <div style={{ textAlign: "right", minWidth: 82 }}>
                   <div style={statusPill(offer.status || "pending")}>
                     {offer.status || "pending"}
                   </div>
 
                   <div
                     style={{
-                      fontSize: 24,
+                      fontSize: 19,
                       fontWeight: 1000,
-                      marginTop: 12,
-                      color: "#fff",
+                      marginTop: 8,
+                      color: "#23153d",
                       letterSpacing: "-0.03em",
                     }}
                   >
@@ -486,19 +527,19 @@ export default function OffersSheet({
                 style={{
                   display: "grid",
                   gridTemplateColumns: "1fr auto",
-                  gap: 10,
-                  marginTop: 14,
+                  gap: 8,
+                  marginTop: 10,
                   alignItems: "center",
                 }}
               >
                 <div
                   style={{
-                    fontSize: 12,
-                    color: "#8fa5bc",
-                    lineHeight: 1.5,
+                    fontSize: 11,
+                    color: "#655b81",
+                    lineHeight: 1.45,
                   }}
                 >
-                  Accept this driver to create your live trip and receive your OTP.
+                  Accept to start the live trip and receive your OTP.
                 </div>
 
                 <button
@@ -506,19 +547,15 @@ export default function OffersSheet({
                   onClick={() => onAcceptOffer?.(offer)}
                   disabled={!!acceptingOfferId || offer.status === "closed"}
                   style={{
-                    minWidth: 126,
+                    minWidth: 102,
                     border: "none",
-                    borderRadius: 18,
-                    padding: "13px 16px",
-                    fontSize: 14,
+                    borderRadius: 16,
+                    padding: "11px 14px",
+                    fontSize: 13,
                     fontWeight: 1000,
                     color: "#fff",
-                    background: isBest
-                      ? "linear-gradient(90deg,#a855f7,#7c3aed,#4f46e5)"
-                      : "linear-gradient(90deg,#00c6ff,#0066ff)",
-                    boxShadow: isBest
-                      ? "0 12px 26px rgba(124,58,237,0.24)"
-                      : "0 12px 26px rgba(0,102,255,0.20)",
+                    background: "linear-gradient(90deg,#7c3aed,#8b5cf6,#a855f7)",
+                    boxShadow: "0 10px 22px rgba(124,58,237,0.18)",
                   }}
                 >
                   {isAccepting ? "Accepting..." : "Accept"}
@@ -529,23 +566,23 @@ export default function OffersSheet({
         })}
       </div>
 
-      {/* CANCEL */}
       <button
         type="button"
         onClick={onCancelRequest}
         style={{
           width: "100%",
-          border: "1px solid rgba(255,255,255,0.10)",
-          borderRadius: 20,
-          padding: "15px 16px",
-          fontSize: 15,
+          border: "1px solid rgba(124,58,237,0.10)",
+          borderRadius: 18,
+          padding: "14px 16px",
+          fontSize: 13,
           fontWeight: 1000,
-          color: "#fff",
-          background: "rgba(255,255,255,0.04)",
+          color: "#5b21b6",
+          background: "rgba(255,255,255,0.58)",
+          boxShadow: "0 10px 24px rgba(41,19,78,0.10)",
         }}
       >
         Cancel request
       </button>
     </div>
   );
-}
+            }
