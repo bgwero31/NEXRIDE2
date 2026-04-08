@@ -5,7 +5,6 @@
 import { useMemo, useState } from "react";
 import { push, ref, set } from "firebase/database";
 import { db } from "../../lib/firebase";
-import ActionCard from "../ui/ActionCard";
 
 const cityOptions = [
   "harare",
@@ -84,24 +83,20 @@ export default function RequestSheet({
           localStorage.setItem("nexride-last-place", city);
         } catch {}
 
-        setError("");
-        setSuccess("Pickup GPS captured.");
+        setSuccess("Pickup location detected.");
         setLocating(false);
       },
       (err) => {
         console.error(err);
-        setSuccess("");
-
         if (err.code === 1) {
           setError("Location permission denied.");
         } else if (err.code === 2) {
-          setError("Location unavailable. Move to an open area and try again.");
+          setError("Location unavailable.");
         } else if (err.code === 3) {
-          setError("Location request timed out. Try again.");
+          setError("Location request timed out.");
         } else {
           setError("Failed to get your location.");
         }
-
         setLocating(false);
       },
       {
@@ -130,17 +125,12 @@ export default function RequestSheet({
     const cleanNotes = notes.trim();
 
     if (!cleanPickup || !cleanDropoff || !cleanCity) {
-      setError("Enter city, pickup and dropoff.");
+      setError("Enter pickup and dropoff.");
       return;
     }
 
     if (!cleanOffer || cleanOffer <= 0) {
       setError("Enter a valid offer price.");
-      return;
-    }
-
-    if (cleanPeople <= 0) {
-      setError("Enter valid number of people.");
       return;
     }
 
@@ -194,16 +184,43 @@ export default function RequestSheet({
   };
 
   return (
-    <div style={{ display: "grid", gap: 12 }}>
-      <div>
-        <div style={{ fontSize: 21, fontWeight: 1000 }}>Request a ride</div>
-        <div style={{ fontSize: 13, color: "#9fb3c8", marginTop: 4 }}>
-          Set your route, offer your price, and wait for drivers to respond.
+    <div style={{ display: "grid", gap: 10 }}>
+      <div style={{ padding: "0 2px" }}>
+        <div
+          style={{
+            fontSize: 28,
+            fontWeight: 1000,
+            letterSpacing: "-0.04em",
+            color: "#fff",
+            lineHeight: 1,
+          }}
+        >
+          Where to?
+        </div>
+        <div
+          style={{
+            fontSize: 13,
+            color: "#96a3b8",
+            marginTop: 6,
+            lineHeight: 1.45,
+          }}
+        >
+          Book your next ride with a cleaner NEXRIDE flow.
         </div>
       </div>
 
-      <form onSubmit={handleRequestRide} style={{ display: "grid", gap: 12 }}>
-        <ActionCard style={{ padding: 12, borderRadius: 18 }}>
+      <form onSubmit={handleRequestRide} style={{ display: "grid", gap: 10 }}>
+        <div
+          style={{
+            borderRadius: 24,
+            padding: 12,
+            background:
+              "linear-gradient(180deg, rgba(10,12,20,0.82), rgba(8,10,18,0.92))",
+            border: "1px solid rgba(255,255,255,0.07)",
+            backdropFilter: "blur(16px)",
+            boxShadow: "0 18px 40px rgba(0,0,0,0.22)",
+          }}
+        >
           <div style={{ display: "grid", gap: 10 }}>
             <select
               value={city}
@@ -223,13 +240,6 @@ export default function RequestSheet({
               ))}
             </select>
 
-            <input
-              className="nx-input"
-              placeholder="Pickup location"
-              value={pickupName}
-              onChange={(e) => setPickupName(e.target.value)}
-            />
-
             <div
               style={{
                 display: "grid",
@@ -239,9 +249,9 @@ export default function RequestSheet({
             >
               <input
                 className="nx-input"
-                placeholder="Pickup latitude"
-                value={pickupLat}
-                onChange={(e) => setPickupLat(e.target.value)}
+                placeholder="Pickup location"
+                value={pickupName}
+                onChange={(e) => setPickupName(e.target.value)}
               />
 
               <button
@@ -249,25 +259,18 @@ export default function RequestSheet({
                 onClick={useMyCurrentLocation}
                 disabled={locating}
                 style={{
-                  border: "1px solid rgba(255,255,255,0.12)",
+                  border: "1px solid rgba(255,255,255,0.10)",
                   background: "rgba(255,255,255,0.04)",
                   color: "#fff",
-                  borderRadius: 16,
+                  borderRadius: 18,
                   padding: "0 16px",
-                  fontWeight: 900,
-                  minWidth: 84,
+                  fontWeight: 1000,
+                  minWidth: 78,
                 }}
               >
                 {locating ? "..." : "GPS"}
               </button>
             </div>
-
-            <input
-              className="nx-input"
-              placeholder="Pickup longitude"
-              value={pickupLng}
-              onChange={(e) => setPickupLng(e.target.value)}
-            />
 
             <input
               className="nx-input"
@@ -279,71 +282,48 @@ export default function RequestSheet({
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "1fr 1fr",
+                gridTemplateColumns: "1fr 110px",
                 gap: 10,
               }}
             >
               <input
                 className="nx-input"
-                placeholder="Dropoff latitude"
-                value={dropoffLat}
-                onChange={(e) => setDropoffLat(e.target.value)}
+                type="number"
+                min="1"
+                step="0.01"
+                placeholder="Your offer ($)"
+                value={offerPrice}
+                onChange={(e) => setOfferPrice(e.target.value)}
               />
+
               <input
                 className="nx-input"
-                placeholder="Dropoff longitude"
-                value={dropoffLng}
-                onChange={(e) => setDropoffLng(e.target.value)}
+                type="number"
+                min="1"
+                placeholder="People"
+                value={people}
+                onChange={(e) => setPeople(e.target.value)}
               />
             </div>
-          </div>
-        </ActionCard>
 
-        <ActionCard style={{ padding: 12, borderRadius: 18 }}>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 10,
-            }}
-          >
-            <input
+            <textarea
               className="nx-input"
-              type="number"
-              min="1"
-              step="0.01"
-              placeholder="Your offer ($)"
-              value={offerPrice}
-              onChange={(e) => setOfferPrice(e.target.value)}
-            />
-            <input
-              className="nx-input"
-              type="number"
-              min="1"
-              placeholder="People"
-              value={people}
-              onChange={(e) => setPeople(e.target.value)}
+              placeholder="Extra trip details (optional)"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              style={{
+                minHeight: 74,
+                resize: "none",
+              }}
             />
           </div>
-
-          <textarea
-            className="nx-input"
-            placeholder="Extra trip details"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            style={{
-              minHeight: 90,
-              resize: "none",
-              marginTop: 10,
-            }}
-          />
-        </ActionCard>
+        </div>
 
         {error ? (
           <div
             style={{
               padding: 12,
-              borderRadius: 14,
+              borderRadius: 16,
               background: "rgba(255, 91, 91, 0.08)",
               border: "1px solid rgba(255, 91, 91, 0.18)",
               color: "#ffd5d5",
@@ -359,7 +339,7 @@ export default function RequestSheet({
           <div
             style={{
               padding: 12,
-              borderRadius: 14,
+              borderRadius: 16,
               background: "rgba(31, 214, 122, 0.08)",
               border: "1px solid rgba(31, 214, 122, 0.18)",
               color: "#d5ffe7",
@@ -377,18 +357,18 @@ export default function RequestSheet({
           style={{
             width: "100%",
             border: "none",
-            borderRadius: 18,
+            borderRadius: 22,
             padding: "16px",
-            fontSize: 15,
+            fontSize: 16,
             fontWeight: 1000,
-            color: "#001018",
-            background: "linear-gradient(90deg,#00c6ff,#0066ff)",
-            boxShadow: "0 14px 30px rgba(0,102,255,0.24)",
+            color: "#fff",
+            background: "linear-gradient(90deg,#8b5cf6,#6d28d9,#4f46e5)",
+            boxShadow: "0 16px 32px rgba(109,40,217,0.24)",
           }}
         >
-          {submitting ? "Requesting ride..." : "Request ride"}
+          {submitting ? "Requesting..." : "Request ride"}
         </button>
       </form>
     </div>
   );
-        }
+}
