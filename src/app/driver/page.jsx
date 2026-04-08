@@ -20,7 +20,9 @@ import FloatingTopBar from "../../components/ui/FloatingTopBar";
 import BottomSheet from "../../components/ui/BottomSheet";
 import MapPlaceholder from "../../components/ui/MapPlaceholder";
 import ActionCard from "../../components/ui/ActionCard";
-import DriverTripControls from "../../components/driver/DriverTripControls";
+import DriverTripControls, {
+  pushDriverLivePosition,
+} from "../../components/driver/DriverTripControls";
 
 function cityLabel(city) {
   if (!city) return "Unknown";
@@ -32,38 +34,39 @@ function requestStatusStyle(status) {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    padding: "6px 10px",
+    padding: "5px 9px",
     borderRadius: 999,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: 900,
-    letterSpacing: 0.4,
+    letterSpacing: 0.35,
     textTransform: "uppercase",
     border: "1px solid transparent",
+    whiteSpace: "nowrap",
   };
 
   if (status === "open") {
     return {
       ...base,
-      color: "#eaffdc",
-      background: "rgba(45,200,95,0.12)",
-      border: "1px solid rgba(45,200,95,0.22)",
+      color: "#6d28d9",
+      background: "rgba(124,58,237,0.10)",
+      border: "1px solid rgba(124,58,237,0.12)",
     };
   }
 
   if (status === "matched" || status === "accepted") {
     return {
       ...base,
-      color: "#d9f6ff",
-      background: "rgba(0,198,255,0.12)",
-      border: "1px solid rgba(0,198,255,0.25)",
+      color: "#0f7a4e",
+      background: "rgba(31,214,122,0.10)",
+      border: "1px solid rgba(31,214,122,0.16)",
     };
   }
 
   return {
     ...base,
-    color: "#f5f7fa",
-    background: "rgba(255,255,255,0.06)",
-    border: "1px solid rgba(255,255,255,0.10)",
+    color: "#5f557c",
+    background: "rgba(255,255,255,0.58)",
+    border: "1px solid rgba(124,58,237,0.08)",
   };
 }
 
@@ -104,6 +107,7 @@ export default function DriverPage() {
 
   const requestsUnsubRef = useRef(null);
   const activeTripUnsubRef = useRef(null);
+  const locationWatchRef = useRef(null);
 
   const visibleRequests = useMemo(() => {
     return requests
@@ -139,12 +143,19 @@ export default function DriverPage() {
           return;
         }
 
-        if (profileData.role !== "driver") {
+        const userSnap = await get(ref(db, `users/${currentUser.uid}`));
+        const userData = userSnap.val();
+        const actualRole = profileData.role || userData?.role || "rider";
+
+        if (actualRole !== "driver") {
           router.push("/rider");
           return;
         }
 
-        setProfile(profileData);
+        setProfile({
+          ...profileData,
+          role: actualRole,
+        });
 
         const savedCity =
           profileData.city ||
@@ -248,6 +259,64 @@ export default function DriverPage() {
     };
   }, [user, city]);
 
+  useEffect(() => {
+    if (!user || !city || !online) return;
+    if (!navigator.geolocation) return;
+
+    const driverOnlineRef = ref(db, `driversOnline/${city}/${user.uid}`);
+
+    const handlePosition = async (pos) => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      const heading =
+        typeof pos.coords.heading === "number" ? pos.coords.heading : null;
+
+      try {
+        await update(driverOnlineRef, {
+          lat,
+          lng,
+          heading,
+          online: true,
+          lastSeen: Date.now(),
+        });
+
+        if (activeTrip?.tripId) {
+          await pushDriverLivePosition(activeTrip.tripId, lat, lng, heading);
+        }
+      } catch (err) {
+        console.error("driver live location update failed", err);
+      }
+    };
+
+    const handleError = (err) => {
+      console.error("driver geolocation error", err);
+    };
+
+    navigator.geolocation.getCurrentPosition(handlePosition, handleError, {
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 0,
+    });
+
+    locationWatchRef.current = navigator.geolocation.watchPosition(
+      handlePosition,
+      handleError,
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 3000,
+      }
+    );
+
+    return () => {
+      try {
+        if (locationWatchRef.current) {
+          navigator.geolocation.clearWatch(locationWatchRef.current);
+        }
+      } catch {}
+    };
+  }, [user, city, online, activeTrip?.tripId]);
+
   const toggleOnline = async () => {
     if (!user || !profile || !city) return;
 
@@ -350,6 +419,31 @@ export default function DriverPage() {
       };
 
       await set(tripRef, payload);
+
+      try {
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            async (pos) => {
+              const lat = pos.coords.latitude;
+              const lng = pos.coords.longitude;
+              const heading =
+                typeof pos.coords.heading === "number"
+                  ? pos.coords.heading
+                  : null;
+
+              await pushDriverLivePosition(tripId, lat, lng, heading);
+            },
+            (err) => console.error("initial trip location push failed", err),
+            {
+              enableHighAccuracy: true,
+              timeout: 10000,
+              maximumAge: 0,
+            }
+          );
+        }
+      } catch (err) {
+        console.error("initial driver location set failed", err);
+      }
 
       await update(requestPath, {
         status: "matched",
@@ -473,11 +567,23 @@ export default function DriverPage() {
             padding: 20,
           }}
         >
-          <ActionCard style={{ width: "100%", textAlign: "center" }}>
-            <div style={{ fontSize: 24, fontWeight: 1000 }}>
+          <ActionCard
+            style={{
+              width: "100%",
+              textAlign: "center",
+              padding: 16,
+              borderRadius: 22,
+              background:
+                "linear-gradient(180deg, rgba(255,255,255,0.60), rgba(247,241,255,0.88))",
+              border: "1px solid rgba(124,58,237,0.10)",
+              boxShadow: "0 10px 30px rgba(41,19,78,0.12)",
+              backdropFilter: "blur(16px)",
+            }}
+          >
+            <div style={{ fontSize: 20, fontWeight: 1000, color: "#23153d" }}>
               Loading driver app...
             </div>
-            <div style={{ fontSize: 13, color: "#9fb3c8", marginTop: 8 }}>
+            <div style={{ fontSize: 12, color: "#615682", marginTop: 6 }}>
               Preparing your dashboard
             </div>
           </ActionCard>
@@ -516,12 +622,13 @@ export default function DriverPage() {
           <button
             onClick={handleLogout}
             style={{
-              border: "1px solid rgba(255,255,255,0.12)",
-              background: "rgba(255,255,255,0.04)",
-              color: "#fff",
+              border: "1px solid rgba(124,58,237,0.10)",
+              background: "rgba(255,255,255,0.58)",
+              color: "#5b21b6",
               borderRadius: 14,
-              padding: "10px 14px",
-              fontWeight: 800,
+              padding: "10px 12px",
+              fontWeight: 900,
+              fontSize: 12,
             }}
           >
             Logout
@@ -529,17 +636,17 @@ export default function DriverPage() {
         }
       />
 
-      <BottomSheet height="50vh">
-        <div style={{ display: "grid", gap: 12 }}>
+      <BottomSheet height="16vh">
+        <div style={{ display: "grid", gap: 8 }}>
           {error ? (
             <div
               style={{
-                padding: 12,
-                borderRadius: 14,
+                padding: 10,
+                borderRadius: 12,
                 background: "rgba(255, 91, 91, 0.08)",
                 border: "1px solid rgba(255, 91, 91, 0.18)",
-                color: "#ffd5d5",
-                fontSize: 13,
+                color: "#a61b3c",
+                fontSize: 12,
                 fontWeight: 700,
               }}
             >
@@ -550,12 +657,12 @@ export default function DriverPage() {
           {success ? (
             <div
               style={{
-                padding: 12,
-                borderRadius: 14,
-                background: "rgba(31, 214, 122, 0.08)",
-                border: "1px solid rgba(31, 214, 122, 0.18)",
-                color: "#d5ffe7",
-                fontSize: 13,
+                padding: 10,
+                borderRadius: 12,
+                background: "rgba(31,214,122,0.10)",
+                border: "1px solid rgba(31,214,122,0.18)",
+                color: "#0f7a4e",
+                fontSize: 12,
                 fontWeight: 700,
               }}
             >
@@ -564,40 +671,69 @@ export default function DriverPage() {
           ) : null}
 
           {(mode === "offline" || mode === "queue") && (
-            <ActionCard>
+            <ActionCard
+              style={{
+                padding: 12,
+                borderRadius: 22,
+                background:
+                  "linear-gradient(180deg, rgba(255,255,255,0.60), rgba(247,241,255,0.88))",
+                border: "1px solid rgba(124,58,237,0.10)",
+                boxShadow: "0 10px 30px rgba(41,19,78,0.12)",
+                backdropFilter: "blur(16px)",
+              }}
+            >
               <div
                 style={{
                   display: "flex",
                   justifyContent: "space-between",
-                  gap: 12,
+                  gap: 10,
                   alignItems: "center",
                 }}
               >
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 22, fontWeight: 1000 }}>
+                  <div
+                    style={{
+                      fontSize: 15,
+                      fontWeight: 1000,
+                      color: "#23153d",
+                      lineHeight: 1.1,
+                    }}
+                  >
                     {profile?.carName || "Your car"}
                   </div>
-                  <div style={{ fontSize: 13, color: "#9fb3c8", marginTop: 4 }}>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: "#74698f",
+                      marginTop: 3,
+                    }}
+                  >
                     {profile?.plateNumber || "No plate"} • {cityLabel(city)}
                   </div>
-                  <div style={{ fontSize: 12, color: "#8ea2ba", marginTop: 8 }}>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: "#615682",
+                      marginTop: 6,
+                    }}
+                  >
                     {statusText}
                   </div>
                 </div>
 
                 <div
                   style={{
-                    padding: "8px 12px",
+                    padding: "6px 10px",
                     borderRadius: 999,
-                    fontSize: 12,
+                    fontSize: 10,
                     fontWeight: 900,
-                    color: online ? "#dfffe9" : "#f3f6fa",
+                    color: online ? "#0f7a4e" : "#5f557c",
                     background: online
-                      ? "rgba(31,214,122,0.12)"
-                      : "rgba(255,255,255,0.06)",
+                      ? "rgba(31,214,122,0.10)"
+                      : "rgba(255,255,255,0.58)",
                     border: online
-                      ? "1px solid rgba(31,214,122,0.25)"
-                      : "1px solid rgba(255,255,255,0.08)",
+                      ? "1px solid rgba(31,214,122,0.16)"
+                      : "1px solid rgba(124,58,237,0.08)",
                     whiteSpace: "nowrap",
                   }}
                 >
@@ -605,7 +741,7 @@ export default function DriverPage() {
                 </div>
               </div>
 
-              <div style={{ marginTop: 14 }}>
+              <div style={{ marginTop: 10 }}>
                 <button
                   onClick={toggleOnline}
                   disabled={savingOnline}
@@ -613,16 +749,12 @@ export default function DriverPage() {
                     width: "100%",
                     border: "none",
                     borderRadius: 18,
-                    padding: "15px 16px",
-                    fontSize: 15,
+                    padding: "14px",
+                    fontSize: 14,
                     fontWeight: 1000,
-                    color: online ? "#fff" : "#001018",
-                    background: online
-                      ? "rgba(255,255,255,0.06)"
-                      : "linear-gradient(90deg,#00c6ff,#0066ff)",
-                    boxShadow: online
-                      ? "none"
-                      : "0 14px 30px rgba(0,102,255,0.24)",
+                    color: "#fff",
+                    background: "linear-gradient(90deg,#7c3aed,#8b5cf6,#a855f7)",
+                    boxShadow: "0 12px 28px rgba(124,58,237,0.18)",
                   }}
                 >
                   {savingOnline
@@ -636,11 +768,34 @@ export default function DriverPage() {
           )}
 
           {mode === "offline" && (
-            <ActionCard>
-              <div style={{ fontWeight: 900, marginBottom: 6 }}>
+            <ActionCard
+              style={{
+                padding: 12,
+                borderRadius: 20,
+                background:
+                  "linear-gradient(180deg, rgba(255,255,255,0.58), rgba(247,241,255,0.86))",
+                border: "1px solid rgba(124,58,237,0.10)",
+                boxShadow: "0 10px 30px rgba(41,19,78,0.12)",
+                backdropFilter: "blur(16px)",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 13,
+                  fontWeight: 1000,
+                  color: "#23153d",
+                  marginBottom: 5,
+                }}
+              >
                 You are offline
               </div>
-              <div style={{ fontSize: 13, color: "#9fb3c8" }}>
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "#615682",
+                  lineHeight: 1.45,
+                }}
+              >
                 Go online first to start receiving rider requests in your city.
               </div>
             </ActionCard>
@@ -648,52 +803,134 @@ export default function DriverPage() {
 
           {mode === "queue" && (
             <>
-              <div>
-                <div style={{ fontSize: 18, fontWeight: 900 }}>Nearby requests</div>
-                <div style={{ fontSize: 12, color: "#9fb3c8", marginTop: 4 }}>
+              <div style={{ padding: "0 2px" }}>
+                <div
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 1000,
+                    color: "#23153d",
+                  }}
+                >
+                  Nearby requests
+                </div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: "#615682",
+                    marginTop: 3,
+                  }}
+                >
                   Open ride requests in {cityLabel(city)}
                 </div>
               </div>
 
               {visibleRequests.length === 0 ? (
-                <ActionCard>
-                  <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                <ActionCard
+                  style={{
+                    padding: 12,
+                    borderRadius: 20,
+                    background:
+                      "linear-gradient(180deg, rgba(255,255,255,0.58), rgba(247,241,255,0.86))",
+                    border: "1px solid rgba(124,58,237,0.10)",
+                    boxShadow: "0 10px 30px rgba(41,19,78,0.12)",
+                    backdropFilter: "blur(16px)",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 1000,
+                      color: "#23153d",
+                      marginBottom: 5,
+                    }}
+                  >
                     No open requests
                   </div>
-                  <div style={{ fontSize: 13, color: "#9fb3c8" }}>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: "#615682",
+                      lineHeight: 1.45,
+                    }}
+                  >
                     Waiting for riders to request trips in your city.
                   </div>
                 </ActionCard>
               ) : (
                 visibleRequests.map((item) => (
-                  <ActionCard key={item.id}>
+                  <ActionCard
+                    key={item.id}
+                    style={{
+                      padding: 12,
+                      borderRadius: 20,
+                      background:
+                        "linear-gradient(180deg, rgba(255,255,255,0.58), rgba(247,241,255,0.86))",
+                      border: "1px solid rgba(124,58,237,0.10)",
+                      boxShadow: "0 10px 30px rgba(41,19,78,0.12)",
+                      backdropFilter: "blur(16px)",
+                    }}
+                  >
                     <div
                       style={{
                         display: "flex",
                         justifyContent: "space-between",
-                        gap: 12,
+                        gap: 10,
                         alignItems: "flex-start",
                       }}
                     >
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 16, fontWeight: 900 }}>
+                        <div
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 1000,
+                            color: "#23153d",
+                            lineHeight: 1.3,
+                          }}
+                        >
                           {item.pickupName} → {item.dropoffName}
                         </div>
-                        <div style={{ fontSize: 13, color: "#9fb3c8", marginTop: 6 }}>
+
+                        <div
+                          style={{
+                            fontSize: 11,
+                            color: "#74698f",
+                            marginTop: 5,
+                          }}
+                        >
                           Rider: {item.riderName || "Rider"}
                         </div>
-                        <div style={{ fontSize: 13, color: "#9fb3c8", marginTop: 4 }}>
+
+                        <div
+                          style={{
+                            fontSize: 11,
+                            color: "#615682",
+                            marginTop: 4,
+                            lineHeight: 1.4,
+                          }}
+                        >
                           Offer: ${Number(item.offerPrice || 0).toFixed(2)} • People:{" "}
                           {item.people || 1}
                         </div>
+
                         {item.notes ? (
-                          <div style={{ fontSize: 13, color: "#b7c9d9", marginTop: 6 }}>
+                          <div
+                            style={{
+                              marginTop: 8,
+                              padding: 10,
+                              borderRadius: 14,
+                              background: "rgba(255,255,255,0.58)",
+                              border: "1px solid rgba(124,58,237,0.08)",
+                              color: "#51466f",
+                              fontSize: 12,
+                              lineHeight: 1.45,
+                            }}
+                          >
                             {item.notes}
                           </div>
                         ) : null}
                       </div>
 
-                                          <div style={requestStatusStyle(item.status || "open")}>
+                      <div style={requestStatusStyle(item.status || "open")}>
                         {item.status || "open"}
                       </div>
                     </div>
@@ -702,8 +939,8 @@ export default function DriverPage() {
                       style={{
                         display: "grid",
                         gridTemplateColumns: "1fr 1fr",
-                        gap: 10,
-                        marginTop: 14,
+                        gap: 8,
+                        marginTop: 10,
                       }}
                     >
                       <button
@@ -713,12 +950,13 @@ export default function DriverPage() {
                           width: "100%",
                           border: "none",
                           borderRadius: 16,
-                          padding: "13px 14px",
-                          fontSize: 14,
+                          padding: "12px 14px",
+                          fontSize: 13,
                           fontWeight: 1000,
-                          color: "#001018",
-                          background: "linear-gradient(90deg,#00c6ff,#0066ff)",
-                          boxShadow: "0 10px 24px rgba(0,102,255,0.22)",
+                          color: "#fff",
+                          background:
+                            "linear-gradient(90deg,#7c3aed,#8b5cf6,#a855f7)",
+                          boxShadow: "0 10px 22px rgba(124,58,237,0.18)",
                         }}
                       >
                         {workingRequestId === item.id ? "Accepting..." : "Accept"}
@@ -729,13 +967,13 @@ export default function DriverPage() {
                         disabled={!!activeTrip}
                         style={{
                           width: "100%",
-                          border: "1px solid rgba(255,255,255,0.12)",
+                          border: "1px solid rgba(124,58,237,0.10)",
                           borderRadius: 16,
-                          padding: "13px 14px",
-                          fontSize: 14,
-                          fontWeight: 900,
-                          color: "#fff",
-                          background: "rgba(255,255,255,0.04)",
+                          padding: "12px 14px",
+                          fontSize: 13,
+                          fontWeight: 1000,
+                          color: "#5b21b6",
+                          background: "rgba(255,255,255,0.58)",
                         }}
                       >
                         Negotiate
@@ -756,65 +994,95 @@ export default function DriverPage() {
           )}
 
           {mode === "completed" && completedTrip && (
-            <ActionCard>
+            <ActionCard
+              style={{
+                padding: 12,
+                borderRadius: 22,
+                background:
+                  "linear-gradient(180deg, rgba(255,255,255,0.60), rgba(247,241,255,0.88))",
+                border: "1px solid rgba(124,58,237,0.10)",
+                boxShadow: "0 10px 30px rgba(41,19,78,0.12)",
+                backdropFilter: "blur(16px)",
+              }}
+            >
               <div
                 style={{
                   display: "flex",
                   justifyContent: "space-between",
-                  gap: 12,
+                  gap: 10,
                   alignItems: "flex-start",
-                  marginBottom: 12,
+                  marginBottom: 10,
                 }}
               >
                 <div>
-                  <div style={{ fontSize: 22, fontWeight: 1000 }}>
+                  <div
+                    style={{
+                      fontSize: 15,
+                      fontWeight: 1000,
+                      color: "#23153d",
+                      lineHeight: 1.1,
+                    }}
+                  >
                     Trip completed
                   </div>
-                  <div style={{ fontSize: 13, color: "#9fb3c8", marginTop: 4 }}>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: "#615682",
+                      marginTop: 4,
+                    }}
+                  >
                     Your last trip has been completed successfully.
                   </div>
                 </div>
 
                 <div
                   style={{
-                    padding: "8px 12px",
+                    padding: "6px 10px",
                     borderRadius: 999,
-                    fontSize: 12,
+                    fontSize: 10,
                     fontWeight: 900,
-                    color: "#dfffe9",
-                    background: "rgba(31,214,122,0.12)",
-                    border: "1px solid rgba(31,214,122,0.25)",
+                    color: "#0f7a4e",
+                    background: "rgba(31,214,122,0.10)",
+                    border: "1px solid rgba(31,214,122,0.16)",
                   }}
                 >
                   COMPLETED
                 </div>
               </div>
 
-              <div style={{ display: "grid", gap: 8 }}>
-                <div style={{ fontSize: 16, fontWeight: 900 }}>
+              <div style={{ display: "grid", gap: 6 }}>
+                <div
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 1000,
+                    color: "#23153d",
+                  }}
+                >
                   {completedTrip.pickupName} → {completedTrip.dropoffName}
                 </div>
-                <div style={{ fontSize: 13, color: "#9fb3c8" }}>
+                <div style={{ fontSize: 11, color: "#74698f" }}>
                   Rider: {completedTrip.riderName || "Rider"}
                 </div>
-                <div style={{ fontSize: 13, color: "#9fb3c8" }}>
+                <div style={{ fontSize: 11, color: "#615682" }}>
                   Fare: ${Number(completedTrip.agreedPrice || 0).toFixed(2)}
                 </div>
               </div>
 
-              <div style={{ marginTop: 14 }}>
+              <div style={{ marginTop: 10 }}>
                 <button
                   onClick={resetCompletedState}
                   style={{
                     width: "100%",
                     border: "none",
-                    borderRadius: 16,
+                    borderRadius: 18,
                     padding: "14px",
-                    fontSize: 14,
+                    fontSize: 13,
                     fontWeight: 1000,
-                    color: "#001018",
-                    background: "linear-gradient(90deg,#00c6ff,#0066ff)",
-                    boxShadow: "0 10px 24px rgba(0,102,255,0.22)",
+                    color: "#fff",
+                    background:
+                      "linear-gradient(90deg,#7c3aed,#8b5cf6,#a855f7)",
+                    boxShadow: "0 12px 28px rgba(124,58,237,0.18)",
                   }}
                 >
                   Back to queue
@@ -830,7 +1098,7 @@ export default function DriverPage() {
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(0,0,0,0.65)",
+            background: "rgba(44, 20, 88, 0.18)",
             backdropFilter: "blur(6px)",
             display: "flex",
             alignItems: "center",
@@ -843,22 +1111,37 @@ export default function DriverPage() {
             style={{
               width: "100%",
               maxWidth: 420,
-              background:
-                "linear-gradient(180deg, rgba(13,17,23,0.98), rgba(7,10,15,0.99))",
-              border: "1px solid rgba(255,255,255,0.08)",
               borderRadius: 24,
-              padding: 18,
-              boxShadow: "0 24px 60px rgba(0,0,0,0.52)",
+              padding: 16,
+              background:
+                "linear-gradient(180deg, rgba(255,255,255,0.78), rgba(247,241,255,0.92))",
+              border: "1px solid rgba(124,58,237,0.10)",
+              boxShadow: "0 20px 60px rgba(41,19,78,0.16)",
+              backdropFilter: "blur(16px)",
             }}
           >
-            <div style={{ fontWeight: 1000, fontSize: 20, marginBottom: 8 }}>
+            <div
+              style={{
+                fontWeight: 1000,
+                fontSize: 16,
+                color: "#23153d",
+                marginBottom: 6,
+              }}
+            >
               Negotiate offer
             </div>
-            <div style={{ fontSize: 13, color: "#9fb3c8", marginBottom: 14 }}>
+            <div
+              style={{
+                fontSize: 12,
+                color: "#615682",
+                marginBottom: 12,
+                lineHeight: 1.45,
+              }}
+            >
               Send a custom price to {negotiatingFor.riderName || "this rider"}.
             </div>
 
-            <div style={{ display: "grid", gap: 12 }}>
+            <div style={{ display: "grid", gap: 10 }}>
               <input
                 className="nx-input"
                 type="number"
@@ -875,7 +1158,7 @@ export default function DriverPage() {
                 onChange={(e) => setProposedMessage(e.target.value)}
                 placeholder="I can be there in 4 minutes"
                 style={{
-                  minHeight: 90,
+                  minHeight: 84,
                   resize: "none",
                 }}
               />
@@ -884,7 +1167,7 @@ export default function DriverPage() {
                 style={{
                   display: "grid",
                   gridTemplateColumns: "1fr 1fr",
-                  gap: 10,
+                  gap: 8,
                 }}
               >
                 <button
@@ -896,13 +1179,13 @@ export default function DriverPage() {
                   }}
                   style={{
                     width: "100%",
-                    border: "1px solid rgba(255,255,255,0.12)",
+                    border: "1px solid rgba(124,58,237,0.10)",
                     borderRadius: 16,
-                    padding: "13px 14px",
-                    fontSize: 14,
-                    fontWeight: 900,
-                    color: "#fff",
-                    background: "rgba(255,255,255,0.04)",
+                    padding: "12px 14px",
+                    fontSize: 13,
+                    fontWeight: 1000,
+                    color: "#5b21b6",
+                    background: "rgba(255,255,255,0.58)",
                   }}
                 >
                   Cancel
@@ -916,12 +1199,13 @@ export default function DriverPage() {
                     width: "100%",
                     border: "none",
                     borderRadius: 16,
-                    padding: "13px 14px",
-                    fontSize: 14,
+                    padding: "12px 14px",
+                    fontSize: 13,
                     fontWeight: 1000,
-                    color: "#001018",
-                    background: "linear-gradient(90deg,#00c6ff,#0066ff)",
-                    boxShadow: "0 10px 24px rgba(0,102,255,0.22)",
+                    color: "#fff",
+                    background:
+                      "linear-gradient(90deg,#7c3aed,#8b5cf6,#a855f7)",
+                    boxShadow: "0 10px 22px rgba(124,58,237,0.18)",
                   }}
                 >
                   {sendingNegotiation ? "Sending..." : "Send offer"}
@@ -933,4 +1217,4 @@ export default function DriverPage() {
       ) : null}
     </MobileShell>
   );
-   }
+}
