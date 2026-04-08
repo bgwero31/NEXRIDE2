@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { push, ref, set } from "firebase/database";
 import { db } from "../../lib/firebase";
 
@@ -17,42 +17,16 @@ const cityOptions = [
   "kadoma",
 ];
 
-const quickPlacesByCity = {
-  zvishavane: ["Mandava Stadium", "Zvishavane Police Station", "Makwasha bus stop", "A9"],
-  harare: ["Robert Gabriel Mugabe International Airport", "Warren Park", "CBD", "Borrowdale"],
-  bulawayo: ["Nkulumane", "City Centre", "Bradfield", "Airport"],
-};
-
 function cityLabel(city) {
   if (!city) return "Unknown";
   return city.charAt(0).toUpperCase() + city.slice(1);
 }
 
-const shellCard = {
-  borderRadius: 30,
-  padding: 14,
-  background:
-    "linear-gradient(180deg, rgba(12,15,26,0.82) 0%, rgba(10,12,22,0.92) 100%)",
-  border: "1px solid rgba(255,255,255,0.08)",
-  boxShadow: "0 18px 50px rgba(0,0,0,0.28)",
-  backdropFilter: "blur(18px)",
-};
-
-const chipBtn = {
-  border: "1px solid rgba(255,255,255,0.08)",
-  background: "rgba(255,255,255,0.05)",
-  color: "#fff",
-  borderRadius: 18,
-  padding: "12px 14px",
-  fontWeight: 800,
-  fontSize: 14,
-};
-
-const routeBox = {
-  borderRadius: 22,
-  background: "rgba(255,255,255,0.04)",
-  border: "1px solid rgba(255,255,255,0.06)",
-  overflow: "hidden",
+const fieldWrap = {
+  borderRadius: 16,
+  background: "rgba(255,255,255,0.72)",
+  border: "1px solid rgba(124,58,237,0.10)",
+  padding: "12px 13px",
 };
 
 const inputStyle = {
@@ -60,19 +34,17 @@ const inputStyle = {
   border: "none",
   outline: "none",
   background: "transparent",
-  color: "#fff",
-  fontSize: 16,
-  padding: "0",
+  color: "#1f1635",
+  fontSize: 14,
+  fontWeight: 600,
 };
 
-const iconDot = (bg) => ({
-  width: 12,
-  height: 12,
-  borderRadius: 999,
-  background: bg,
-  boxShadow: `0 0 12px ${bg}`,
-  flexShrink: 0,
-});
+const labelStyle = {
+  fontSize: 11,
+  color: "#7c3aed",
+  fontWeight: 800,
+  marginBottom: 4,
+};
 
 export default function RequestSheet({
   user,
@@ -90,20 +62,97 @@ export default function RequestSheet({
   const [offerPrice, setOfferPrice] = useState(3);
   const [people, setPeople] = useState(1);
   const [notes, setNotes] = useState("");
-  const [showMore, setShowMore] = useState(false);
 
+  const [pickupSuggestions, setPickupSuggestions] = useState([]);
+  const [dropoffSuggestions, setDropoffSuggestions] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const quickPlaces = useMemo(() => {
-    return quickPlacesByCity[city] || ["Town", "Bus rank", "Hospital", "CBD"];
-  }, [city]);
+  const autoServiceRef = useRef(null);
+  const placesServiceRef = useRef(null);
+  const sessionTokenRef = useRef(null);
 
   const canSubmit = useMemo(() => {
     return pickupName.trim() && dropoffName.trim() && Number(offerPrice) > 0;
   }, [pickupName, dropoffName, offerPrice]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!window.google?.maps?.places) return;
+
+    autoServiceRef.current =
+      autoServiceRef.current ||
+      new window.google.maps.places.AutocompleteService();
+
+    placesServiceRef.current =
+      placesServiceRef.current ||
+      new window.google.maps.places.PlacesService(document.createElement("div"));
+
+    sessionTokenRef.current =
+      sessionTokenRef.current ||
+      new window.google.maps.places.AutocompleteSessionToken();
+  }, []);
+
+  const fetchSuggestions = (text, type) => {
+    if (!text?.trim()) {
+      if (type === "pickup") setPickupSuggestions([]);
+      else setDropoffSuggestions([]);
+      return;
+    }
+
+    if (!window.google?.maps?.places || !autoServiceRef.current) return;
+
+    autoServiceRef.current.getPlacePredictions(
+      {
+        input: text,
+        sessionToken: sessionTokenRef.current || undefined,
+        componentRestrictions: { country: "zw" },
+      },
+      (predictions) => {
+        const next = predictions || [];
+        if (type === "pickup") setPickupSuggestions(next.slice(0, 5));
+        else setDropoffSuggestions(next.slice(0, 5));
+      }
+    );
+  };
+
+  const applyPlace = (prediction, type) => {
+    if (!prediction?.place_id || !placesServiceRef.current) return;
+
+    placesServiceRef.current.getDetails(
+      {
+        placeId: prediction.place_id,
+        fields: ["name", "formatted_address", "geometry"],
+        sessionToken: sessionTokenRef.current || undefined,
+      },
+      (place, status) => {
+        if (
+          status !== window.google.maps.places.PlacesServiceStatus.OK ||
+          !place
+        ) {
+          return;
+        }
+
+        const name = place.formatted_address || place.name || prediction.description || "";
+        const lat = place.geometry?.location?.lat?.();
+        const lng = place.geometry?.location?.lng?.();
+
+        if (type === "pickup") {
+          setPickupName(name);
+          setPickupLat(lat != null ? String(lat) : "");
+          setPickupLng(lng != null ? String(lng) : "");
+          setPickupSuggestions([]);
+        } else {
+          setDropoffName(name);
+          setDropoffLat(lat != null ? String(lat) : "");
+          setDropoffLng(lng != null ? String(lng) : "");
+          setDropoffSuggestions([]);
+        }
+      }
+    );
+  };
 
   const useMyCurrentLocation = () => {
     setError("");
@@ -123,10 +172,7 @@ export default function RequestSheet({
 
         setPickupLat(String(lat));
         setPickupLng(String(lng));
-
-        if (!pickupName.trim() || pickupName === cityLabel(city)) {
-          setPickupName("Current location");
-        }
+        setPickupName("Current location");
 
         try {
           localStorage.setItem("nexride-last-lat", String(lat));
@@ -230,336 +276,275 @@ export default function RequestSheet({
     }
   };
 
-  return (
-    <div style={{ display: "grid", gap: 10 }}>
-      <form onSubmit={handleRequestRide} style={{ display: "grid", gap: 10 }}>
-        <div style={shellCard}>
-          <div
+  const suggestionBox = (items, type) =>
+    items.length ? (
+      <div
+        style={{
+          marginTop: 6,
+          borderRadius: 14,
+          background: "rgba(255,255,255,0.92)",
+          border: "1px solid rgba(124,58,237,0.10)",
+          overflow: "hidden",
+        }}
+      >
+        {items.map((item) => (
+          <button
+            key={item.place_id}
+            type="button"
+            onClick={() => applyPlace(item, type)}
             style={{
-              display: "flex",
-              gap: 8,
-              marginBottom: 12,
+              width: "100%",
+              border: "none",
+              background: "transparent",
+              textAlign: "left",
+              padding: "11px 12px",
+              color: "#24153d",
+              fontSize: 13,
+              borderBottom: "1px solid rgba(124,58,237,0.06)",
             }}
           >
-            <button
-              type="button"
-              style={{
-                ...chipBtn,
-                background: "rgba(25,181,255,0.18)",
-                border: "1px solid rgba(25,181,255,0.20)",
-                minWidth: 86,
-              }}
-            >
-              Ride
-            </button>
+            {item.description}
+          </button>
+        ))}
+      </div>
+    ) : null;
 
-            <button
-              type="button"
-              style={{
-                ...chipBtn,
-                opacity: 0.85,
-                minWidth: 110,
-              }}
-            >
-              City to city
-            </button>
+  return (
+    <div style={{ display: "grid", gap: 8 }}>
+      <form onSubmit={handleRequestRide} style={{ display: "grid", gap: 8 }}>
+        <div
+          style={{
+            borderRadius: 24,
+            padding: 12,
+            background:
+              "linear-gradient(180deg, rgba(255,255,255,0.55), rgba(246,240,255,0.82))",
+            border: "1px solid rgba(124,58,237,0.10)",
+            boxShadow: "0 10px 30px rgba(41, 19, 78, 0.12)",
+            backdropFilter: "blur(16px)",
+          }}
+        >
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: 1000,
+              color: "#2b1650",
+              marginBottom: 8,
+            }}
+          >
+            Where to & for how much?
           </div>
 
-          <div style={routeBox}>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "auto 1fr auto",
-                gap: 12,
-                alignItems: "center",
-                padding: "14px 14px 12px",
-                borderBottom: "1px solid rgba(255,255,255,0.06)",
-              }}
-            >
-              <div style={iconDot("#b6ff15")} />
-              <div>
-                <div style={{ fontSize: 12, color: "#9fb3c8", marginBottom: 4 }}>
-                  Pickup point
-                </div>
-                <input
-                  style={inputStyle}
-                  value={pickupName}
-                  onChange={(e) => setPickupName(e.target.value)}
-                  placeholder="Your current location"
-                />
-              </div>
-
-              <button
-                type="button"
-                onClick={useMyCurrentLocation}
-                disabled={locating}
-                style={{
-                  border: "none",
-                  background: "rgba(255,255,255,0.06)",
-                  color: "#fff",
-                  borderRadius: 14,
-                  padding: "10px 14px",
-                  fontWeight: 900,
-                  fontSize: 13,
+          <div style={{ display: "grid", gap: 8 }}>
+            <div style={fieldWrap}>
+              <div style={labelStyle}>City</div>
+              <select
+                value={city}
+                onChange={(e) => {
+                  const nextCity = e.target.value;
+                  setCity(nextCity);
+                  try {
+                    localStorage.setItem("nexride-last-place", nextCity);
+                  } catch {}
                 }}
+                style={inputStyle}
               >
-                {locating ? "..." : "GPS"}
-              </button>
+                {cityOptions.map((item) => (
+                  <option key={item} value={item}>
+                    {cityLabel(item)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <div style={fieldWrap}>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "auto 1fr auto",
+                    gap: 10,
+                    alignItems: "center",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: 999,
+                      background: "#8b5cf6",
+                      boxShadow: "0 0 10px rgba(139,92,246,0.5)",
+                    }}
+                  />
+                  <div>
+                    <div style={labelStyle}>Pickup</div>
+                    <input
+                      style={inputStyle}
+                      value={pickupName}
+                      onChange={(e) => {
+                        setPickupName(e.target.value);
+                        fetchSuggestions(e.target.value, "pickup");
+                      }}
+                      placeholder="Your current location"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={useMyCurrentLocation}
+                    disabled={locating}
+                    style={{
+                      border: "none",
+                      background: "rgba(124,58,237,0.10)",
+                      color: "#5b21b6",
+                      borderRadius: 12,
+                      padding: "10px 12px",
+                      fontWeight: 900,
+                      fontSize: 12,
+                    }}
+                  >
+                    {locating ? "..." : "GPS"}
+                  </button>
+                </div>
+              </div>
+              {suggestionBox(pickupSuggestions, "pickup")}
+            </div>
+
+            <div>
+              <div style={fieldWrap}>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "auto 1fr",
+                    gap: 10,
+                    alignItems: "center",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: 999,
+                      background: "#c084fc",
+                      boxShadow: "0 0 10px rgba(192,132,252,0.5)",
+                    }}
+                  />
+                  <div>
+                    <div style={labelStyle}>Destination</div>
+                    <input
+                      style={inputStyle}
+                      value={dropoffName}
+                      onChange={(e) => {
+                        setDropoffName(e.target.value);
+                        fetchSuggestions(e.target.value, "dropoff");
+                      }}
+                      placeholder="Type destination"
+                    />
+                  </div>
+                </div>
+              </div>
+              {suggestionBox(dropoffSuggestions, "dropoff")}
             </div>
 
             <div
               style={{
                 display: "grid",
                 gridTemplateColumns: "auto 1fr auto",
-                gap: 12,
+                gap: 10,
                 alignItems: "center",
-                padding: "12px 14px 14px",
+                borderRadius: 18,
+                padding: 10,
+                background: "rgba(255,255,255,0.64)",
+                border: "1px solid rgba(124,58,237,0.08)",
               }}
             >
-              <div style={iconDot("#ff8080")} />
-              <div>
-                <div style={{ fontSize: 12, color: "#9fb3c8", marginBottom: 4 }}>
-                  Destination
+              <button
+                type="button"
+                onClick={() => changeFare(-1)}
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 999,
+                  border: "none",
+                  background: "rgba(124,58,237,0.10)",
+                  color: "#5b21b6",
+                  fontSize: 24,
+                }}
+              >
+                −
+              </button>
+
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 11, color: "#7c3aed", fontWeight: 800 }}>
+                  Your fare
                 </div>
-                <input
-                  style={inputStyle}
-                  value={dropoffName}
-                  onChange={(e) => setDropoffName(e.target.value)}
-                  placeholder="Where to?"
-                />
+                <div
+                  style={{
+                    fontSize: 24,
+                    fontWeight: 1000,
+                    color: "#1f1635",
+                    lineHeight: 1.1,
+                  }}
+                >
+                  ${Number(offerPrice || 0).toFixed(0)}
+                </div>
               </div>
 
-              <div
+              <button
+                type="button"
+                onClick={() => changeFare(1)}
                 style={{
-                  fontSize: 28,
-                  lineHeight: 1,
-                  color: "#fff",
-                  opacity: 0.92,
+                  width: 40,
+                  height: 40,
+                  borderRadius: 999,
+                  border: "none",
+                  background: "rgba(124,58,237,0.10)",
+                  color: "#5b21b6",
+                  fontSize: 24,
                 }}
               >
                 +
-              </div>
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr auto 1fr",
-              gap: 12,
-              alignItems: "center",
-              marginTop: 14,
-              padding: 12,
-              borderRadius: 22,
-              background: "rgba(255,255,255,0.03)",
-              border: "1px solid rgba(255,255,255,0.06)",
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => changeFare(-1)}
-              style={{
-                width: 56,
-                height: 56,
-                borderRadius: 999,
-                border: "none",
-                background: "rgba(255,255,255,0.12)",
-                color: "#fff",
-                fontSize: 32,
-                lineHeight: 1,
-                justifySelf: "start",
-              }}
-            >
-              −
-            </button>
-
-            <div style={{ textAlign: "center" }}>
-              <div
-                style={{
-                  fontSize: 14,
-                  color: "#aebfd3",
-                  marginBottom: 4,
-                }}
-              >
-                Tap to offer your fare
-              </div>
-              <div
-                style={{
-                  fontSize: 30,
-                  fontWeight: 1000,
-                  color: "#fff",
-                  letterSpacing: "-0.04em",
-                }}
-              >
-                ${Number(offerPrice || 0).toFixed(0)}
-              </div>
+              </button>
             </div>
 
-            <button
-              type="button"
-              onClick={() => changeFare(1)}
-              style={{
-                width: 56,
-                height: 56,
-                borderRadius: 999,
-                border: "none",
-                background: "rgba(255,255,255,0.12)",
-                color: "#fff",
-                fontSize: 32,
-                lineHeight: 1,
-                justifySelf: "end",
-              }}
-            >
-              +
-            </button>
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr auto",
-              gap: 10,
-              marginTop: 12,
-            }}
-          >
-            <select
-              value={city}
-              onChange={(e) => {
-                const nextCity = e.target.value;
-                setCity(nextCity);
-                if (!pickupName || pickupName === cityLabel(city)) {
-                  setPickupName(cityLabel(nextCity));
-                }
-                try {
-                  localStorage.setItem("nexride-last-place", nextCity);
-                } catch {}
-              }}
-              style={{
-                border: "1px solid rgba(255,255,255,0.08)",
-                borderRadius: 18,
-                background: "rgba(255,255,255,0.04)",
-                color: "#fff",
-                padding: "13px 14px",
-                fontSize: 15,
-                outline: "none",
-              }}
-            >
-              {cityOptions.map((item) => (
-                <option key={item} value={item}>
-                  {cityLabel(item)}
-                </option>
-              ))}
-            </select>
-
-            <button
-              type="button"
-              onClick={() => setShowMore((v) => !v)}
-              style={{
-                border: "1px solid rgba(255,255,255,0.08)",
-                borderRadius: 18,
-                background: "rgba(255,255,255,0.04)",
-                color: "#fff",
-                padding: "0 16px",
-                fontSize: 13,
-                fontWeight: 900,
-              }}
-            >
-              {showMore ? "Less" : "More"}
-            </button>
-          </div>
-
-          {showMore ? (
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "92px 1fr",
-                gap: 10,
-                marginTop: 12,
+                gridTemplateColumns: "82px 1fr",
+                gap: 8,
               }}
             >
-              <input
-                value={people}
-                onChange={(e) => setPeople(e.target.value)}
-                type="number"
-                min="1"
-                placeholder="Pax"
-                style={{
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  borderRadius: 18,
-                  background: "rgba(255,255,255,0.04)",
-                  color: "#fff",
-                  padding: "13px 14px",
-                  fontSize: 15,
-                  outline: "none",
-                }}
-              />
-
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Notes (optional)"
-                style={{
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  borderRadius: 18,
-                  background: "rgba(255,255,255,0.04)",
-                  color: "#fff",
-                  padding: "13px 14px",
-                  fontSize: 15,
-                  outline: "none",
-                  minHeight: 68,
-                  resize: "none",
-                }}
-              />
-            </div>
-          ) : null}
-
-          <div
-            style={{
-              marginTop: 14,
-              display: "grid",
-              gap: 8,
-            }}
-          >
-            {quickPlaces.map((place) => (
-              <button
-                key={place}
-                type="button"
-                onClick={() => setDropoffName(place)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 12,
-                  width: "100%",
-                  padding: "10px 2px",
-                  border: "none",
-                  background: "transparent",
-                  color: "#fff",
-                  textAlign: "left",
-                }}
-              >
-                <div
-                  style={{
-                    width: 18,
-                    height: 18,
-                    borderRadius: 999,
-                    border: "2px solid rgba(255,255,255,0.7)",
-                    opacity: 0.85,
-                  }}
+              <div style={fieldWrap}>
+                <div style={labelStyle}>Pax</div>
+                <input
+                  value={people}
+                  onChange={(e) => setPeople(e.target.value)}
+                  type="number"
+                  min="1"
+                  style={inputStyle}
                 />
-                <div style={{ fontSize: 15, color: "#eaf2fb" }}>{place}</div>
-              </button>
-            ))}
+              </div>
+
+              <div style={fieldWrap}>
+                <div style={labelStyle}>Notes</div>
+                <input
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Optional notes"
+                  style={inputStyle}
+                />
+              </div>
+            </div>
           </div>
         </div>
 
         {error ? (
           <div
             style={{
-              padding: 10,
-              borderRadius: 14,
+              padding: 9,
+              borderRadius: 12,
               background: "rgba(255, 91, 91, 0.08)",
               border: "1px solid rgba(255, 91, 91, 0.18)",
-              color: "#ffd5d5",
+              color: "#a61b3c",
               fontSize: 12,
               fontWeight: 700,
             }}
@@ -571,11 +556,11 @@ export default function RequestSheet({
         {success ? (
           <div
             style={{
-              padding: 10,
-              borderRadius: 14,
-              background: "rgba(31, 214, 122, 0.08)",
+              padding: 9,
+              borderRadius: 12,
+              background: "rgba(31, 214, 122, 0.10)",
               border: "1px solid rgba(31, 214, 122, 0.18)",
-              color: "#d5ffe7",
+              color: "#0f7a4e",
               fontSize: 12,
               fontWeight: 700,
             }}
@@ -590,13 +575,13 @@ export default function RequestSheet({
           style={{
             width: "100%",
             border: "none",
-            borderRadius: 22,
-            padding: "17px",
-            fontSize: 16,
+            borderRadius: 18,
+            padding: "14px",
+            fontSize: 15,
             fontWeight: 1000,
-            color: "#0a111b",
-            background: "linear-gradient(90deg,#c7ff15,#a8f400)",
-            boxShadow: "0 16px 30px rgba(168,244,0,0.22)",
+            color: "#fff",
+            background: "linear-gradient(90deg,#7c3aed,#8b5cf6,#a855f7)",
+            boxShadow: "0 12px 28px rgba(124,58,237,0.20)",
           }}
         >
           {submitting ? "Finding..." : "Find offers"}
@@ -604,4 +589,4 @@ export default function RequestSheet({
       </form>
     </div>
   );
-      }
+    }
