@@ -12,57 +12,67 @@ function statusPill(status) {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    padding: "6px 10px",
+    padding: "5px 9px",
     borderRadius: 999,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: 900,
-    letterSpacing: 0.4,
+    letterSpacing: 0.35,
     textTransform: "uppercase",
     border: "1px solid transparent",
+    whiteSpace: "nowrap",
   };
 
   if (status === "accepted") {
     return {
       ...base,
-      color: "#d9f6ff",
-      background: "rgba(0,198,255,0.12)",
-      border: "1px solid rgba(0,198,255,0.25)",
+      color: "#6d28d9",
+      background: "rgba(124,58,237,0.10)",
+      border: "1px solid rgba(124,58,237,0.12)",
     };
   }
 
   if (status === "arrived") {
     return {
       ...base,
-      color: "#fff7d6",
-      background: "rgba(255,176,32,0.12)",
-      border: "1px solid rgba(255,176,32,0.22)",
+      color: "#a16207",
+      background: "rgba(245,158,11,0.10)",
+      border: "1px solid rgba(245,158,11,0.16)",
     };
   }
 
   if (status === "picked" || status === "enroute") {
     return {
       ...base,
-      color: "#eaffdc",
-      background: "rgba(45,200,95,0.12)",
-      border: "1px solid rgba(45,200,95,0.22)",
+      color: "#0f7a4e",
+      background: "rgba(31,214,122,0.10)",
+      border: "1px solid rgba(31,214,122,0.16)",
     };
   }
 
   if (status === "completed") {
     return {
       ...base,
-      color: "#e8f0ff",
-      background: "rgba(110,140,255,0.12)",
-      border: "1px solid rgba(110,140,255,0.22)",
+      color: "#4338ca",
+      background: "rgba(99,102,241,0.10)",
+      border: "1px solid rgba(99,102,241,0.16)",
     };
   }
 
   return {
     ...base,
-    color: "#f5f7fa",
-    background: "rgba(255,255,255,0.06)",
-    border: "1px solid rgba(255,255,255,0.10)",
+    color: "#5f557c",
+    background: "rgba(255,255,255,0.58)",
+    border: "1px solid rgba(124,58,237,0.08)",
   };
+}
+
+function statusText(status) {
+  if (status === "accepted") return "Head to pickup and verify rider OTP when they board.";
+  if (status === "arrived") return "You have arrived at pickup. Wait for rider and verify OTP.";
+  if (status === "picked") return "Trip has started. You can now continue the route.";
+  if (status === "enroute") return "You are on the route to the destination.";
+  if (status === "completed") return "Trip completed successfully.";
+  return "Manage this trip from pickup to completion.";
 }
 
 export default function DriverTripControls({
@@ -209,9 +219,34 @@ export default function DriverTripControls({
 
   if (!trip) {
     return (
-      <ActionCard>
-        <div style={{ fontWeight: 900, marginBottom: 6 }}>No active trip</div>
-        <div style={{ fontSize: 13, color: "#9fb3c8" }}>
+      <ActionCard
+        style={{
+          padding: 12,
+          borderRadius: 20,
+          background:
+            "linear-gradient(180deg, rgba(255,255,255,0.58), rgba(247,241,255,0.86))",
+          border: "1px solid rgba(124,58,237,0.10)",
+          boxShadow: "0 10px 30px rgba(41,19,78,0.12)",
+          backdropFilter: "blur(16px)",
+        }}
+      >
+        <div
+          style={{
+            fontWeight: 1000,
+            fontSize: 13,
+            color: "#23153d",
+            marginBottom: 5,
+          }}
+        >
+          No active trip
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: "#615682",
+            lineHeight: 1.45,
+          }}
+        >
           Accept a ride request to start managing a trip.
         </div>
       </ActionCard>
@@ -219,20 +254,46 @@ export default function DriverTripControls({
   }
 
   return (
-    <ActionCard>
+    <ActionCard
+      style={{
+        padding: 12,
+        borderRadius: 22,
+        background:
+          "linear-gradient(180deg, rgba(255,255,255,0.60), rgba(247,241,255,0.88))",
+        border: "1px solid rgba(124,58,237,0.10)",
+        boxShadow: "0 10px 30px rgba(41,19,78,0.12)",
+        backdropFilter: "blur(16px)",
+      }}
+    >
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
-          gap: 12,
+          gap: 10,
           alignItems: "flex-start",
-          marginBottom: 12,
+          marginBottom: 10,
         }}
       >
         <div>
-          <div style={{ fontSize: 18, fontWeight: 1000 }}>Trip controls</div>
-          <div style={{ fontSize: 13, color: "#9fb3c8", marginTop: 4 }}>
-            Manage pickup, trip start, and completion.
+          <div
+            style={{
+              fontSize: 15,
+              fontWeight: 1000,
+              color: "#23153d",
+              lineHeight: 1.1,
+            }}
+          >
+            Trip controls
+          </div>
+          <div
+            style={{
+              fontSize: 12,
+              color: "#615682",
+              marginTop: 4,
+              lineHeight: 1.45,
+            }}
+          >
+            {statusText(trip.status || "accepted")}
           </div>
         </div>
 
@@ -241,31 +302,57 @@ export default function DriverTripControls({
         </div>
       </div>
 
-      <div style={{ display: "grid", gap: 10 }}>
-        <div style={{ fontSize: 16, fontWeight: 900 }}>
+      <div
+        style={{
+          display: "grid",
+          gap: 8,
+          padding: 10,
+          borderRadius: 18,
+          background: "rgba(255,255,255,0.58)",
+          border: "1px solid rgba(124,58,237,0.08)",
+        }}
+      >
+        <div
+          style={{
+            fontSize: 13,
+            fontWeight: 1000,
+            color: "#23153d",
+            lineHeight: 1.3,
+          }}
+        >
           {trip.pickupName} → {trip.dropoffName}
         </div>
 
-        <div style={{ fontSize: 13, color: "#9fb3c8" }}>
+        <div
+          style={{
+            fontSize: 11,
+            color: "#74698f",
+          }}
+        >
           Rider: {trip.riderName || "Rider"}
         </div>
 
-        <div style={{ fontSize: 13, color: "#9fb3c8" }}>
+        <div
+          style={{
+            fontSize: 11,
+            color: "#615682",
+          }}
+        >
           Fare: ${Number(trip.agreedPrice || 0).toFixed(2)}
         </div>
       </div>
 
       {(error || success) && (
-        <div style={{ marginTop: 12 }}>
+        <div style={{ marginTop: 10 }}>
           {error ? (
             <div
               style={{
-                padding: 12,
-                borderRadius: 14,
+                padding: 10,
+                borderRadius: 12,
                 background: "rgba(255, 91, 91, 0.08)",
                 border: "1px solid rgba(255, 91, 91, 0.18)",
-                color: "#ffd5d5",
-                fontSize: 13,
+                color: "#a61b3c",
+                fontSize: 12,
                 fontWeight: 700,
               }}
             >
@@ -276,12 +363,12 @@ export default function DriverTripControls({
           {success ? (
             <div
               style={{
-                padding: 12,
-                borderRadius: 14,
-                background: "rgba(31, 214, 122, 0.08)",
-                border: "1px solid rgba(31, 214, 122, 0.18)",
-                color: "#d5ffe7",
-                fontSize: 13,
+                padding: 10,
+                borderRadius: 12,
+                background: "rgba(31,214,122,0.10)",
+                border: "1px solid rgba(31,214,122,0.18)",
+                color: "#0f7a4e",
+                fontSize: 12,
                 fontWeight: 700,
               }}
             >
@@ -292,7 +379,7 @@ export default function DriverTripControls({
       )}
 
       {canVerifyOtp && (
-        <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
+        <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
           <input
             className="nx-input"
             type="text"
@@ -308,12 +395,12 @@ export default function DriverTripControls({
               width: "100%",
               border: "none",
               borderRadius: 16,
-              padding: "14px",
-              fontSize: 14,
+              padding: "13px 14px",
+              fontSize: 13,
               fontWeight: 1000,
-              color: "#001018",
-              background: "linear-gradient(90deg,#00c6ff,#0066ff)",
-              boxShadow: "0 10px 24px rgba(0,102,255,0.22)",
+              color: "#fff",
+              background: "linear-gradient(90deg,#7c3aed,#8b5cf6,#a855f7)",
+              boxShadow: "0 10px 22px rgba(124,58,237,0.18)",
             }}
           >
             {loadingAction === "verify-otp" ? "Verifying..." : "Verify OTP"}
@@ -325,8 +412,8 @@ export default function DriverTripControls({
         style={{
           display: "grid",
           gridTemplateColumns: "1fr 1fr",
-          gap: 10,
-          marginTop: 14,
+          gap: 8,
+          marginTop: 10,
         }}
       >
         <button
@@ -334,13 +421,13 @@ export default function DriverTripControls({
           disabled={loadingAction === "arrived" || trip.status === "completed"}
           style={{
             width: "100%",
-            border: "1px solid rgba(255,255,255,0.12)",
+            border: "1px solid rgba(124,58,237,0.10)",
             borderRadius: 16,
-            padding: "13px 14px",
-            fontSize: 14,
-            fontWeight: 900,
-            color: "#fff",
-            background: "rgba(255,255,255,0.04)",
+            padding: "12px 14px",
+            fontSize: 13,
+            fontWeight: 1000,
+            color: "#5b21b6",
+            background: "rgba(255,255,255,0.58)",
           }}
         >
           {loadingAction === "arrived" ? "Saving..." : "Mark arrived"}
@@ -351,20 +438,20 @@ export default function DriverTripControls({
           disabled={loadingAction === "enroute" || trip.status === "completed"}
           style={{
             width: "100%",
-            border: "1px solid rgba(255,255,255,0.12)",
+            border: "1px solid rgba(124,58,237,0.10)",
             borderRadius: 16,
-            padding: "13px 14px",
-            fontSize: 14,
-            fontWeight: 900,
-            color: "#fff",
-            background: "rgba(255,255,255,0.04)",
+            padding: "12px 14px",
+            fontSize: 13,
+            fontWeight: 1000,
+            color: "#5b21b6",
+            background: "rgba(255,255,255,0.58)",
           }}
         >
           {loadingAction === "enroute" ? "Saving..." : "Start route"}
         </button>
       </div>
 
-      <div style={{ marginTop: 10 }}>
+      <div style={{ marginTop: 8 }}>
         <button
           onClick={completeTrip}
           disabled={loadingAction === "complete"}
@@ -372,12 +459,12 @@ export default function DriverTripControls({
             width: "100%",
             border: "none",
             borderRadius: 16,
-            padding: "14px",
-            fontSize: 14,
+            padding: "13px 14px",
+            fontSize: 13,
             fontWeight: 1000,
             color: "#fff",
-            background: "linear-gradient(90deg,#ff5b5b,#ff7a45)",
-            boxShadow: "0 10px 24px rgba(255,91,91,0.20)",
+            background: "linear-gradient(90deg,#7c3aed,#8b5cf6,#a855f7)",
+            boxShadow: "0 10px 22px rgba(124,58,237,0.18)",
           }}
         >
           {loadingAction === "complete" ? "Completing..." : "Complete trip"}
@@ -400,4 +487,4 @@ export async function pushDriverLivePosition(tripId, lat, lng, heading = null) {
   } catch (err) {
     console.error("pushDriverLivePosition error", err);
   }
-}
+      }
