@@ -29,19 +29,51 @@ function loadGoogleMaps(apiKey) {
   });
 }
 
+function makeDotMarker(mapsApi, color = "#8b5cf6", scale = 7) {
+  return {
+    path: mapsApi.SymbolPath.CIRCLE,
+    scale,
+    fillColor: color,
+    fillOpacity: 1,
+    strokeColor: "#ffffff",
+    strokeWeight: 2,
+  };
+}
+
+function makeDriverArrow(mapsApi, heading = 0, color = "#8b5cf6") {
+  return {
+    path: mapsApi.SymbolPath.FORWARD_CLOSED_ARROW,
+    scale: 6,
+    fillColor: color,
+    fillOpacity: 1,
+    strokeColor: "#ffffff",
+    strokeWeight: 1.5,
+    rotation: Number(heading || 0),
+  };
+}
+
 export default function RiderMap({
   mode = "request",
+  city = "",
   requestData = null,
   tripData = null,
   onPickupResolved,
+  onDriversCountChange,
 }) {
   const mapNodeRef = useRef(null);
   const mapRef = useRef(null);
+
   const riderMarkerRef = useRef(null);
-  const driverMarkerRef = useRef(null);
+  const acceptedDriverMarkerRef = useRef(null);
+  const onlineDriverMarkersRef = useRef({});
+
   const directionsRendererRef = useRef(null);
   const geocoderRef = useRef(null);
   const watchIdRef = useRef(null);
+
+  const lastResolvedRef = useRef({ lat: null, lng: null, at: 0 });
+  const lastKnownRiderPosRef = useRef(null);
+  const onlineDriversRef = useRef({});
 
   const [mapReady, setMapReady] = useState(false);
   const [mapsApi, setMapsApi] = useState(null);
@@ -49,7 +81,6 @@ export default function RiderMap({
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
-  // load Google Maps
   useEffect(() => {
     let cancelled = false;
 
@@ -73,7 +104,6 @@ export default function RiderMap({
     };
   }, [apiKey]);
 
-  // init map
   useEffect(() => {
     if (!mapsApi || mapRef.current || !mapNodeRef.current) return;
 
@@ -86,18 +116,20 @@ export default function RiderMap({
       fullscreenControl: false,
       streetViewControl: false,
       styles: [
-        { elementType: "geometry", stylers: [{ color: "#0b1020" }] },
-        { elementType: "labels.text.stroke", stylers: [{ color: "#0b1020" }] },
-        { elementType: "labels.text.fill", stylers: [{ color: "#9ca3af" }] },
-        { featureType: "road", elementType: "geometry", stylers: [{ color: "#1f2937" }] },
-        { featureType: "water", elementType: "geometry", stylers: [{ color: "#0f172a" }] },
-        { featureType: "poi", stylers: [{ visibility: "off" }] },
+        { elementType: "geometry", stylers: [{ color: "#f4efe7" }] },
+        { elementType: "labels.text.fill", stylers: [{ color: "#5b5670" }] },
+        { elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
+        { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+        { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#d7d5dd" }] },
+        { featureType: "poi", elementType: "geometry", stylers: [{ color: "#ece7f3" }] },
+        { featureType: "water", elementType: "geometry", stylers: [{ color: "#d9efff" }] },
         { featureType: "transit", stylers: [{ visibility: "off" }] },
       ],
     });
 
     mapRef.current = map;
     geocoderRef.current = new mapsApi.Geocoder();
+
     directionsRendererRef.current = new mapsApi.DirectionsRenderer({
       suppressMarkers: true,
       polylineOptions: {
@@ -121,10 +153,22 @@ export default function RiderMap({
     const updatePickupAddress = (lat, lng) => {
       if (!geocoderRef.current) return;
 
+      const last = lastResolvedRef.current;
+      const now = Date.now();
+      const movedEnough =
+        last.lat == null ||
+        Math.abs(last.lat - lat) > 0.0008 ||
+        Math.abs(last.lng - lng) > 0.0008;
+      const enoughTimePassed = now - (last.at || 0) > 15000;
+
+      if (!movedEnough && !enoughTimePassed) return;
+
       geocoderRef.current.geocode(
         { location: { lat, lng } },
         (results, status) => {
           if (status !== "OK" || !results?.length) return;
+
+          lastResolvedRef.current = { lat, lng, at: Date.now() };
 
           const best = results[0];
           const text = best.formatted_address || "Current location";
@@ -158,19 +202,15 @@ export default function RiderMap({
       const lng = pos.coords.longitude;
       const me = { lat, lng };
 
+      lastKnownRiderPosRef.current = me;
+
       if (!riderMarkerRef.current) {
         riderMarkerRef.current = new mapsApi.Marker({
           position: me,
           map,
           title: "Your location",
-          icon: {
-            path: mapsApi.SymbolPath.CIRCLE,
-            scale: 8,
-            fillColor: "#06b6d4",
-            fillOpacity: 1,
-            strokeColor: "#ffffff",
-            strokeWeight: 2,
-          },
+          icon: makeDotMarker(mapsApi, "#06b6d4", 8),
+          zIndex: 999,
         });
       } else {
         riderMarkerRef.current.setPosition(me);
@@ -211,11 +251,75 @@ export default function RiderMap({
     };
   }, [mapReady, mapsApi, mode, onPickupResolved]);
 
-  // show request route preview in request/waiting/offers mode
+  // listen to online drivers in the city
+  useEffect(() => {
+    if (!city) return;
+    const { onValue: fbOnValue, ref: fbRef } = require("firebase/database");
+
+    const onlineRef = fbRef(db, `driversOnline/${city}`);
+
+    const unsub = fbOnValue(onlineRef, (snap) => {
+      const data = snap.val() || {};
+      const filtered = {};
+
+      Object.entries(data).forEach(([id, value]) => {
+        if (value?.online === true) {
+          filtered[id] = value;
+        }
+      });
+
+      onlineDriversRef.current = filtered;
+      onDriversCountChange?.(Object.keys(filtered).length);
+    });
+
+    return () => unsub();
+  }, [city, onDriversCountChange]);
+
+  // draw all online drivers
+  useEffect(() => {
+    if (!mapReady || !mapsApi || !mapRef.current) return;
+
+    const map = mapRef.current;
+    const drivers = onlineDriversRef.current || {};
+    const currentMarkers = onlineDriverMarkersRef.current;
+    const acceptedDriverId = tripData?.driverId || "";
+
+    Object.keys(currentMarkers).forEach((driverId) => {
+      if (!drivers[driverId] || driverId === acceptedDriverId) {
+        currentMarkers[driverId].setMap(null);
+        delete currentMarkers[driverId];
+      }
+    });
+
+    Object.entries(drivers).forEach(([driverId, driver]) => {
+      if (driverId === acceptedDriverId) return;
+
+      const lat = Number(driver?.lat);
+      const lng = Number(driver?.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+      const pos = { lat, lng };
+
+      if (!currentMarkers[driverId]) {
+        currentMarkers[driverId] = new mapsApi.Marker({
+          position: pos,
+          map,
+          title: driver?.name || "Online driver",
+          icon: makeDotMarker(mapsApi, "#8b5cf6", 5),
+          zIndex: 20,
+        });
+      } else {
+        currentMarkers[driverId].setPosition(pos);
+      }
+    });
+  }, [mapReady, mapsApi, tripData, city, mode, onDriversCountChange]);
+
+  // request route preview
   useEffect(() => {
     if (!mapReady || !mapsApi || !mapRef.current || !requestData) return;
     if (!requestData.pickupLat || !requestData.pickupLng) return;
     if (!requestData.dropoffLat || !requestData.dropoffLng) return;
+    if (mode === "trip") return;
 
     const directionsService = new mapsApi.DirectionsService();
 
@@ -237,15 +341,19 @@ export default function RiderMap({
         }
       }
     );
-  }, [mapReady, mapsApi, requestData]);
+  }, [mapReady, mapsApi, requestData, mode]);
 
-  // live trip mode: show driver marker + route from driver to pickup/dropoff
+  // live trip mode: accepted driver + route
   useEffect(() => {
-    if (!mapReady || !mapsApi || !mapRef.current || !tripData) return;
+    if (!mapReady || !mapsApi || !mapRef.current) return;
+    if (!tripData) return;
 
     const map = mapRef.current;
+    const directionsService = new mapsApi.DirectionsService();
+
     const driverLat = tripData?.driverLive?.lat;
     const driverLng = tripData?.driverLive?.lng;
+    const riderPos = lastKnownRiderPosRef.current;
 
     if (driverLat != null && driverLng != null) {
       const driverPos = {
@@ -253,66 +361,64 @@ export default function RiderMap({
         lng: Number(driverLng),
       };
 
-      if (!driverMarkerRef.current) {
-        driverMarkerRef.current = new mapsApi.Marker({
+      if (!acceptedDriverMarkerRef.current) {
+        acceptedDriverMarkerRef.current = new mapsApi.Marker({
           position: driverPos,
           map,
-          title: "Driver",
-          icon: {
-            path: mapsApi.SymbolPath.FORWARD_CLOSED_ARROW,
-            scale: 6,
-            fillColor: "#8b5cf6",
-            fillOpacity: 1,
-            strokeColor: "#ffffff",
-            strokeWeight: 1.5,
-            rotation: Number(tripData?.driverLive?.heading || 0),
-          },
+          title: tripData?.driverName || "Driver",
+          icon: makeDriverArrow(
+            mapsApi,
+            Number(tripData?.driverLive?.heading || 0),
+            "#8b5cf6"
+          ),
+          zIndex: 200,
         });
       } else {
-        driverMarkerRef.current.setPosition(driverPos);
-        driverMarkerRef.current.setIcon({
-          path: mapsApi.SymbolPath.FORWARD_CLOSED_ARROW,
-          scale: 6,
-          fillColor: "#8b5cf6",
-          fillOpacity: 1,
-          strokeColor: "#ffffff",
-          strokeWeight: 1.5,
-          rotation: Number(tripData?.driverLive?.heading || 0),
-        });
-      }
-
-      map.panTo(driverPos);
-    }
-
-    const directionsService = new mapsApi.DirectionsService();
-
-    if (
-      tripData.status === "accepted" ||
-      tripData.status === "arrived"
-    ) {
-      if (
-        driverLat != null &&
-        driverLng != null &&
-        tripData.pickupLat != null &&
-        tripData.pickupLng != null
-      ) {
-        directionsService.route(
-          {
-            origin: { lat: Number(driverLat), lng: Number(driverLng) },
-            destination: {
-              lat: Number(tripData.pickupLat),
-              lng: Number(tripData.pickupLng),
-            },
-            travelMode: mapsApi.TravelMode.DRIVING,
-          },
-          (result, status) => {
-            if (status === "OK" && directionsRendererRef.current) {
-              directionsRendererRef.current.setDirections(result);
-            }
-          }
+        acceptedDriverMarkerRef.current.setPosition(driverPos);
+        acceptedDriverMarkerRef.current.setIcon(
+          makeDriverArrow(
+            mapsApi,
+            Number(tripData?.driverLive?.heading || 0),
+            "#8b5cf6"
+          )
         );
       }
-    } else if (
+
+      if (riderPos) {
+        const bounds = new mapsApi.LatLngBounds();
+        bounds.extend(riderPos);
+        bounds.extend(driverPos);
+        map.fitBounds(bounds, 80);
+      } else {
+        map.panTo(driverPos);
+      }
+    } else if (acceptedDriverMarkerRef.current) {
+      acceptedDriverMarkerRef.current.setMap(null);
+      acceptedDriverMarkerRef.current = null;
+    }
+
+    if (
+      (tripData.status === "accepted" || tripData.status === "arrived") &&
+      driverLat != null &&
+      driverLng != null &&
+      riderPos
+    ) {
+      directionsService.route(
+        {
+          origin: { lat: Number(driverLat), lng: Number(driverLng) },
+          destination: riderPos,
+          travelMode: mapsApi.TravelMode.DRIVING,
+        },
+        (result, status) => {
+          if (status === "OK" && directionsRendererRef.current) {
+            directionsRendererRef.current.setDirections(result);
+          }
+        }
+      );
+      return;
+    }
+
+    if (
       (tripData.status === "picked" || tripData.status === "enroute") &&
       tripData.pickupLat != null &&
       tripData.pickupLng != null &&
@@ -345,7 +451,7 @@ export default function RiderMap({
       style={{
         position: "absolute",
         inset: 0,
-        background: "#050816",
+        background: "#f4efe7",
       }}
     >
       <div
@@ -353,7 +459,6 @@ export default function RiderMap({
         style={{
           width: "100%",
           height: "100%",
-          filter: "saturate(1.05) contrast(1.02)",
         }}
       />
 
@@ -369,7 +474,7 @@ export default function RiderMap({
             borderRadius: 14,
             background: "rgba(255, 91, 91, 0.08)",
             border: "1px solid rgba(255, 91, 91, 0.18)",
-            color: "#ffd5d5",
+            color: "#a61b3c",
             fontSize: 13,
             fontWeight: 700,
           }}
@@ -379,4 +484,4 @@ export default function RiderMap({
       ) : null}
     </div>
   );
-}
+        }
