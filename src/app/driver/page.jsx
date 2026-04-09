@@ -739,8 +739,445 @@ export default function DriverPage() {
                       marginTop: 6,
                     }}
                   >
-                    {statusText}
+                          {statusText}
                   </div>
                 </div>
 
-                <d
+                <div
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 999,
+                    fontSize: 10,
+                    fontWeight: 900,
+                    color: online ? "#0f7a4e" : "#5f557c",
+                    background: online
+                      ? "rgba(31,214,122,0.10)"
+                      : "rgba(255,255,255,0.58)",
+                    border: online
+                      ? "1px solid rgba(31,214,122,0.16)"
+                      : "1px solid rgba(124,58,237,0.08)",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {online ? "ONLINE" : "OFFLINE"}
+                </div>
+              </div>
+
+              <div style={{ marginTop: 10 }}>
+                <button
+                  onClick={toggleOnline}
+                  disabled={savingOnline}
+                  style={{
+                    width: "100%",
+                    border: "none",
+                    borderRadius: 18,
+                    padding: "13px 14px",
+                    fontSize: 13,
+                    fontWeight: 1000,
+                    color: online ? "#5b21b6" : "#fff",
+                    background: online
+                      ? "rgba(255,255,255,0.72)"
+                      : "linear-gradient(90deg,#8b5cf6,#7c3aed,#6366f1)",
+                    boxShadow: online
+                      ? "none"
+                      : "0 14px 30px rgba(124,58,237,0.24)",
+                  }}
+                >
+                  {savingOnline
+                    ? "Saving..."
+                    : online
+                    ? "Go offline"
+                    : "Go online"}
+                </button>
+              </div>
+            </ActionCard>
+          )}
+
+          {mode === "offline" && (
+            <ActionCard
+              style={{
+                padding: 12,
+                borderRadius: 20,
+                background:
+                  "linear-gradient(180deg, rgba(255,255,255,0.54), rgba(246,240,255,0.84))",
+                border: "1px solid rgba(124,58,237,0.08)",
+              }}
+            >
+              <div
+                style={{
+                  fontWeight: 1000,
+                  marginBottom: 6,
+                  fontSize: 14,
+                  color: "#23153d",
+                }}
+              >
+                You are offline
+              </div>
+              <div style={{ fontSize: 12, color: "#615682", lineHeight: 1.5 }}>
+                Go online first to start receiving rider requests in your city.
+              </div>
+            </ActionCard>
+          )}
+
+          {mode === "queue" && (
+            <>
+              <div style={{ padding: "0 2px" }}>
+                <div
+                  style={{
+                    fontSize: 16,
+                    fontWeight: 1000,
+                    color: "#23153d",
+                  }}
+                >
+                  Nearby requests
+                </div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: "#74698f",
+                    marginTop: 3,
+                  }}
+                >
+                  Open ride requests in {cityLabel(city)}
+                </div>
+              </div>
+
+              {visibleRequests.length === 0 ? (
+                <ActionCard
+                  style={{
+                    padding: 12,
+                    borderRadius: 20,
+                    background:
+                      "linear-gradient(180deg, rgba(255,255,255,0.54), rgba(246,240,255,0.84))",
+                    border: "1px solid rgba(124,58,237,0.08)",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontWeight: 1000,
+                      marginBottom: 6,
+                      fontSize: 14,
+                      color: "#23153d",
+                    }}
+                  >
+                    No open requests
+                  </div>
+                  <div style={{ fontSize: 12, color: "#615682", lineHeight: 1.5 }}>
+                    Waiting for riders to request trips in your city.
+                  </div>
+                </ActionCard>
+              ) : (
+                visibleRequests.map((item) => (
+                  <ActionCard
+                    key={item.id}
+                    style={{
+                      padding: 12,
+                      borderRadius: 22,
+                      background:
+                        "linear-gradient(180deg, rgba(255,255,255,0.64), rgba(247,241,255,0.90))",
+                      border: "1px solid rgba(124,58,237,0.10)",
+                      boxShadow: "0 10px 30px rgba(41,19,78,0.10)",
+                      backdropFilter: "blur(16px)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 10,
+                        alignItems: "flex-start",
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div
+                          style={{
+                            fontSize: 15,
+                            fontWeight: 1000,
+                            color: "#23153d",
+                            lineHeight: 1.25,
+                          }}
+                        >
+                          {item.pickupName} → {item.dropoffName}
+                        </div>
+
+                        <div
+                          style={{
+                            fontSize: 12,
+                            color: "#615682",
+                            marginTop: 6,
+                          }}
+                        >
+                          Rider: {item.riderName || "Rider"}
+                        </div>
+
+                        <div
+                          style={{
+                            fontSize: 12,
+                            color: "#615682",
+                            marginTop: 4,
+                          }}
+                        >
+                          Offer: ${Number(item.offerPrice || 0).toFixed(2)} •
+                          {" "}People: {item.people || 1}
+                        </div>
+
+                        {item.notes ? (
+                          <div
+                            style={{
+                              fontSize: 12,
+                              color: "#6b5f86",
+                              marginTop: 6,
+                              lineHeight: 1.5,
+                            }}
+                          >
+                            {item.notes}
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div style={requestStatusStyle(item.status || "open")}>
+                        {item.status || "open"}
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: negotiatingFor?.id === item.id ? "1fr" : "1fr 1fr",
+                        gap: 8,
+                        marginTop: 12,
+                      }}
+                    >
+                      <button
+                        onClick={() => acceptRequest(item)}
+                        disabled={workingRequestId === item.id}
+                        style={{
+                          border: "none",
+                          borderRadius: 16,
+                          padding: "13px 14px",
+                          fontSize: 13,
+                          fontWeight: 1000,
+                          color: "#fff",
+                          background: "linear-gradient(90deg,#06b6d4,#2563eb)",
+                          boxShadow: "0 10px 24px rgba(37,99,235,0.18)",
+                        }}
+                      >
+                        {workingRequestId === item.id ? "Accepting..." : "Accept"}
+                      </button>
+
+                      {negotiatingFor?.id !== item.id ? (
+                        <button
+                          onClick={() => openNegotiate(item)}
+                          style={{
+                            border: "1px solid rgba(124,58,237,0.10)",
+                            borderRadius: 16,
+                            padding: "13px 14px",
+                            fontSize: 13,
+                            fontWeight: 1000,
+                            color: "#5b21b6",
+                            background: "rgba(255,255,255,0.68)",
+                          }}
+                        >
+                          Negotiate
+                        </button>
+                      ) : null}
+                    </div>
+
+                    {negotiatingFor?.id === item.id ? (
+                      <div
+                        style={{
+                          marginTop: 10,
+                          display: "grid",
+                          gap: 8,
+                        }}
+                      >
+                        <input
+                          className="nx-input"
+                          type="number"
+                          placeholder="Your proposed price"
+                          value={proposedPrice}
+                          onChange={(e) => setProposedPrice(e.target.value)}
+                        />
+
+                        <textarea
+                          className="nx-input"
+                          placeholder="Optional message"
+                          value={proposedMessage}
+                          onChange={(e) => setProposedMessage(e.target.value)}
+                          rows={3}
+                          style={{ resize: "none" }}
+                        />
+
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "1fr 1fr",
+                            gap: 8,
+                          }}
+                        >
+                          <button
+                            onClick={sendNegotiation}
+                            disabled={sendingNegotiation}
+                            style={{
+                              border: "none",
+                              borderRadius: 16,
+                              padding: "12px 14px",
+                              fontSize: 13,
+                              fontWeight: 1000,
+                              color: "#fff",
+                              background:
+                                "linear-gradient(90deg,#8b5cf6,#7c3aed,#6366f1)",
+                              boxShadow: "0 10px 24px rgba(124,58,237,0.20)",
+                            }}
+                          >
+                            {sendingNegotiation ? "Sending..." : "Send"}
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setNegotiatingFor(null);
+                              setProposedPrice("");
+                              setProposedMessage("");
+                            }}
+                            style={{
+                              border: "1px solid rgba(124,58,237,0.10)",
+                              borderRadius: 16,
+                              padding: "12px 14px",
+                              fontSize: 13,
+                              fontWeight: 1000,
+                              color: "#5b21b6",
+                              background: "rgba(255,255,255,0.68)",
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </ActionCard>
+                ))
+              )}
+            </>
+          )}
+
+          {mode === "trip" && (
+            <DriverTripControls
+              trip={activeTrip}
+              onTripUpdated={handleTripUpdated}
+              onTripCompleted={handleTripCompleted}
+            />
+          )}
+
+          {mode === "completed" && (
+            <ActionCard
+              style={{
+                padding: 14,
+                borderRadius: 22,
+                background:
+                  "linear-gradient(180deg, rgba(255,255,255,0.64), rgba(247,241,255,0.90))",
+                border: "1px solid rgba(124,58,237,0.10)",
+                boxShadow: "0 10px 30px rgba(41,19,78,0.10)",
+                backdropFilter: "blur(16px)",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 10,
+                  alignItems: "flex-start",
+                }}
+              >
+                <div>
+                  <div
+                    style={{
+                      fontSize: 18,
+                      fontWeight: 1000,
+                      color: "#23153d",
+                    }}
+                  >
+                    Trip completed
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: "#615682",
+                      marginTop: 4,
+                    }}
+                  >
+                    Your last trip has been completed successfully.
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 999,
+                    fontSize: 10,
+                    fontWeight: 900,
+                    color: "#0f7a4e",
+                    background: "rgba(31,214,122,0.10)",
+                    border: "1px solid rgba(31,214,122,0.16)",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  COMPLETED
+                </div>
+              </div>
+
+              <div
+                style={{
+                  marginTop: 12,
+                  fontSize: 14,
+                  fontWeight: 1000,
+                  color: "#23153d",
+                  lineHeight: 1.3,
+                }}
+              >
+                {completedTrip?.pickupName} → {completedTrip?.dropoffName}
+              </div>
+
+              <div
+                style={{
+                  marginTop: 6,
+                  fontSize: 12,
+                  color: "#615682",
+                }}
+              >
+                Rider: {completedTrip?.riderName || "Rider"}
+              </div>
+
+              <div
+                style={{
+                  marginTop: 4,
+                  fontSize: 12,
+                  color: "#615682",
+                }}
+              >
+                Fare: ${Number(completedTrip?.agreedPrice || 0).toFixed(2)}
+              </div>
+
+              <button
+                onClick={resetCompletedState}
+                style={{
+                  marginTop: 12,
+                  width: "100%",
+                  border: "none",
+                  borderRadius: 18,
+                  padding: "13px 14px",
+                  fontSize: 13,
+                  fontWeight: 1000,
+                  color: "#fff",
+                  background: "linear-gradient(90deg,#06b6d4,#2563eb)",
+                  boxShadow: "0 10px 24px rgba(37,99,235,0.18)",
+                }}
+              >
+                Back to queue
+              </button>
+            </ActionCard>
+          )}
+        </div>
+      </BottomSheet>
+    </MobileShell>
+  );
+     }
