@@ -11,6 +11,74 @@ function safeTime(ts) {
   }
 }
 
+function statusPill(status) {
+  const base = {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "5px 9px",
+    borderRadius: 999,
+    fontSize: 10,
+    fontWeight: 900,
+    letterSpacing: 0.35,
+    textTransform: "uppercase",
+    border: "1px solid transparent",
+    whiteSpace: "nowrap",
+  };
+
+  if (status === "accepted") {
+    return {
+      ...base,
+      color: "#6d28d9",
+      background: "rgba(124,58,237,0.10)",
+      border: "1px solid rgba(124,58,237,0.12)",
+    };
+  }
+
+  if (status === "arrived") {
+    return {
+      ...base,
+      color: "#a16207",
+      background: "rgba(245,158,11,0.10)",
+      border: "1px solid rgba(245,158,11,0.16)",
+    };
+  }
+
+  if (status === "picked" || status === "enroute") {
+    return {
+      ...base,
+      color: "#0f7a4e",
+      background: "rgba(31,214,122,0.10)",
+      border: "1px solid rgba(31,214,122,0.16)",
+    };
+  }
+
+  if (status === "completed") {
+    return {
+      ...base,
+      color: "#4338ca",
+      background: "rgba(99,102,241,0.10)",
+      border: "1px solid rgba(99,102,241,0.16)",
+    };
+  }
+
+  return {
+    ...base,
+    color: "#5f557c",
+    background: "rgba(255,255,255,0.58)",
+    border: "1px solid rgba(124,58,237,0.08)",
+  };
+}
+
+function statusText(status) {
+  if (status === "accepted") return "Driver accepted and is heading to pickup.";
+  if (status === "arrived") return "Driver has arrived at pickup.";
+  if (status === "picked") return "OTP verified. Trip has started.";
+  if (status === "enroute") return "You are on the way to your destination.";
+  if (status === "completed") return "Trip completed successfully.";
+  return "Waiting for live trip updates.";
+}
+
 export default function TripSheet({
   tripData,
   onCancelTrip,
@@ -27,9 +95,9 @@ export default function TripSheet({
       <div
         style={{
           borderRadius: 22,
-          padding: 10,
+          padding: 12,
           background:
-            "linear-gradient(180deg, rgba(255,255,255,0.58), rgba(247,241,255,0.86))",
+            "linear-gradient(180deg, rgba(255,255,255,0.60), rgba(247,241,255,0.88))",
           border: "1px solid rgba(124,58,237,0.10)",
           boxShadow: "0 10px 30px rgba(41,19,78,0.12)",
           backdropFilter: "blur(16px)",
@@ -37,71 +105,99 @@ export default function TripSheet({
       >
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "50px 1fr auto",
+            display: "flex",
+            justifyContent: "space-between",
             gap: 10,
-            alignItems: "center",
+            alignItems: "flex-start",
           }}
         >
-          <div
-            style={{
-              width: 50,
-              height: 50,
-              borderRadius: 16,
-              background: "linear-gradient(135deg,#8b5cf6,#6d28d9)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 24,
-              fontWeight: 1000,
-              color: "#fff",
-            }}
-          >
-            {(tripData.driverName || "D").charAt(0).toUpperCase()}
-          </div>
-
           <div>
             <div
               style={{
-                fontSize: 13,
+                fontSize: 15,
                 fontWeight: 1000,
-                color: "#1f1635",
+                color: "#23153d",
+                lineHeight: 1.1,
               }}
             >
-              {tripData.driverName || "Driver"}
+              Active trip
             </div>
             <div
               style={{
                 fontSize: 12,
-                color: "#4c3d73",
-                marginTop: 2,
+                color: "#615682",
+                marginTop: 4,
+                lineHeight: 1.45,
               }}
             >
-              {tripData.driverPhone || "Phone not available"}
+              {statusText(tripData.status)}
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onContactDriver}
+          <div style={statusPill(tripData.status || "accepted")}>
+            {tripData.status || "accepted"}
+          </div>
+        </div>
+
+        <div
+          style={{
+            marginTop: 10,
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 8,
+          }}
+        >
+          <div
             style={{
-              border: "1px solid rgba(124,58,237,0.12)",
-              background: "rgba(124,58,237,0.08)",
-              color: "#5b21b6",
-              borderRadius: 14,
-              padding: "10px 14px",
-              fontWeight: 900,
-              fontSize: 13,
+              borderRadius: 16,
+              padding: 10,
+              background: "rgba(255,255,255,0.58)",
+              border: "1px solid rgba(124,58,237,0.08)",
             }}
           >
-            Call
-          </button>
+            <div style={{ fontSize: 10, color: "#7c3aed", fontWeight: 800 }}>
+              Fare
+            </div>
+            <div
+              style={{
+                fontSize: 18,
+                fontWeight: 1000,
+                marginTop: 3,
+                color: "#23153d",
+              }}
+            >
+              ${Number(tripData.agreedPrice || 0).toFixed(2)}
+            </div>
+          </div>
+
+          <div
+            style={{
+              borderRadius: 16,
+              padding: 10,
+              background: "rgba(255,255,255,0.58)",
+              border: "1px solid rgba(124,58,237,0.08)",
+            }}
+          >
+            <div style={{ fontSize: 10, color: "#7c3aed", fontWeight: 800 }}>
+              Updated
+            </div>
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 1000,
+                marginTop: 5,
+                color: "#23153d",
+              }}
+            >
+              {safeTime(tripData.updatedAt || live.updatedAt)}
+            </div>
+          </div>
         </div>
       </div>
 
       <div
         style={{
-          borderRadius: 22,
+          borderRadius: 20,
           padding: 12,
           background:
             "linear-gradient(180deg, rgba(255,255,255,0.58), rgba(247,241,255,0.86))",
@@ -114,7 +210,53 @@ export default function TripSheet({
           style={{
             fontSize: 13,
             fontWeight: 1000,
-            color: "#1f1635",
+            color: "#23153d",
+            marginBottom: 6,
+          }}
+        >
+          {tripData.pickupName} → {tripData.dropoffName}
+        </div>
+
+        <div style={{ fontSize: 11, color: "#74698f" }}>
+          Driver: {tripData.driverName || "Driver"}
+        </div>
+
+        <div style={{ marginTop: 10 }}>
+          <button
+            type="button"
+            onClick={onContactDriver}
+            style={{
+              width: "100%",
+              border: "1px solid rgba(124,58,237,0.10)",
+              borderRadius: 16,
+              padding: "12px 14px",
+              fontSize: 13,
+              fontWeight: 1000,
+              color: "#5b21b6",
+              background: "rgba(255,255,255,0.58)",
+            }}
+          >
+            Call driver
+          </button>
+        </div>
+      </div>
+
+      <div
+        style={{
+          borderRadius: 20,
+          padding: 12,
+          background:
+            "linear-gradient(180deg, rgba(255,255,255,0.58), rgba(247,241,255,0.86))",
+          border: "1px solid rgba(124,58,237,0.10)",
+          boxShadow: "0 10px 30px rgba(41,19,78,0.12)",
+          backdropFilter: "blur(16px)",
+        }}
+      >
+        <div
+          style={{
+            fontSize: 13,
+            fontWeight: 1000,
+            color: "#23153d",
             marginBottom: 8,
           }}
         >
@@ -139,84 +281,6 @@ export default function TripSheet({
         >
           {tripData.otp || "------"}
         </div>
-
-        <div
-          style={{
-            fontSize: 12,
-            color: "#5f5581",
-            marginTop: 8,
-          }}
-        >
-          Show this code to the driver when pickup starts.
-        </div>
-      </div>
-
-      <div
-        style={{
-          borderRadius: 22,
-          padding: 12,
-          background:
-            "linear-gradient(180deg, rgba(255,255,255,0.58), rgba(247,241,255,0.86))",
-          border: "1px solid rgba(124,58,237,0.10)",
-          boxShadow: "0 10px 30px rgba(41,19,78,0.12)",
-          backdropFilter: "blur(16px)",
-        }}
-      >
-        <div
-          style={{
-            fontSize: 13,
-            fontWeight: 1000,
-            color: "#1f1635",
-            marginBottom: 8,
-          }}
-        >
-          Live trip data
-        </div>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 8,
-          }}
-        >
-          {[
-            ["Latitude", live.lat ?? "Waiting..."],
-            ["Longitude", live.lng ?? "Waiting..."],
-            ["Heading", live.heading ?? "Waiting..."],
-            ["Updated", safeTime(live.updatedAt)],
-          ].map(([label, value]) => (
-            <div
-              key={label}
-              style={{
-                padding: 10,
-                borderRadius: 16,
-                background: "rgba(255,255,255,0.50)",
-                border: "1px solid rgba(124,58,237,0.08)",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 11,
-                  color: "#7c3aed",
-                  fontWeight: 800,
-                }}
-              >
-                {label}
-              </div>
-              <div
-                style={{
-                  fontSize: 13,
-                  color: "#1f1635",
-                  fontWeight: 900,
-                  marginTop: 4,
-                }}
-              >
-                {String(value)}
-              </div>
-            </div>
-          ))}
-        </div>
       </div>
 
       {showCancel ? (
@@ -240,4 +304,4 @@ export default function TripSheet({
       ) : null}
     </div>
   );
-            }
+              }
