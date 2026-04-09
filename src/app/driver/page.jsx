@@ -87,6 +87,11 @@ export default function DriverPage() {
   const [profile, setProfile] = useState(null);
 
   const [city, setCity] = useState("");
+  const cityKey = useMemo(
+    () => String(city || "").trim().toLowerCase(),
+    [city]
+  );
+
   const [online, setOnline] = useState(false);
 
   const [requests, setRequests] = useState([]);
@@ -107,6 +112,7 @@ export default function DriverPage() {
 
   const requestsUnsubRef = useRef(null);
   const activeTripUnsubRef = useRef(null);
+  const onlineStateUnsubRef = useRef(null);
   const locationWatchRef = useRef(null);
 
   const visibleRequests = useMemo(() => {
@@ -182,13 +188,13 @@ export default function DriverPage() {
   }, [router]);
 
   useEffect(() => {
-    if (!user || !city) return;
+    if (!user || !cityKey) return;
 
     try {
       requestsUnsubRef.current?.();
     } catch {}
 
-    const requestsRef = ref(db, `rideRequests/${city}`);
+    const requestsRef = ref(db, `rideRequests/${cityKey}`);
     requestsUnsubRef.current = onValue(requestsRef, (snap) => {
       const data = snap.val() || {};
       const arr = Object.entries(data).map(([id, value]) => ({
@@ -203,7 +209,7 @@ export default function DriverPage() {
         requestsUnsubRef.current?.();
       } catch {}
     };
-  }, [city, user]);
+  }, [cityKey, user]);
 
   useEffect(() => {
     if (!user) return;
@@ -223,6 +229,7 @@ export default function DriverPage() {
       const mine = arr.find((trip) => trip.driverId === user.uid) || null;
 
       setActiveTrip(mine);
+
       if (mine) {
         setCompletedTrip(null);
         try {
@@ -238,10 +245,31 @@ export default function DriverPage() {
     };
   }, [user]);
 
+  // keep online state synced from firebase
   useEffect(() => {
-    if (!user || !city) return;
+    if (!user || !cityKey) return;
 
-    const driverNode = ref(db, `driversOnline/${city}/${user.uid}`);
+    try {
+      onlineStateUnsubRef.current?.();
+    } catch {}
+
+    const onlineRef = ref(db, `driversOnline/${cityKey}/${user.uid}`);
+    onlineStateUnsubRef.current = onValue(onlineRef, (snap) => {
+      const data = snap.val();
+      setOnline(!!data?.online);
+    });
+
+    return () => {
+      try {
+        onlineStateUnsubRef.current?.();
+      } catch {}
+    };
+  }, [user, cityKey]);
+
+  useEffect(() => {
+    if (!user || !cityKey) return;
+
+    const driverNode = ref(db, `driversOnline/${cityKey}/${user.uid}`);
 
     const handleUnload = () => {
       try {
@@ -257,13 +285,14 @@ export default function DriverPage() {
     return () => {
       window.removeEventListener("beforeunload", handleUnload);
     };
-  }, [user, city]);
+  }, [user, cityKey]);
 
+  // backup live gps watcher
   useEffect(() => {
-    if (!user || !city || !online) return;
+    if (!user || !cityKey || !online) return;
     if (!navigator.geolocation) return;
 
-    const driverOnlineRef = ref(db, `driversOnline/${city}/${user.uid}`);
+    const driverOnlineRef = ref(db, `driversOnline/${cityKey}/${user.uid}`);
 
     const handlePosition = async (pos) => {
       const lat = pos.coords.latitude;
@@ -315,10 +344,10 @@ export default function DriverPage() {
         }
       } catch {}
     };
-  }, [user, city, online, activeTrip?.tripId]);
+  }, [user, cityKey, online, activeTrip?.tripId]);
 
   const toggleOnline = async () => {
-    if (!user || !profile || !city) return;
+    if (!user || !profile || !cityKey) return;
 
     setError("");
     setSuccess("");
@@ -326,7 +355,7 @@ export default function DriverPage() {
     try {
       setSavingOnline(true);
 
-      const node = ref(db, `driversOnline/${city}/${user.uid}`);
+      const node = ref(db, `driversOnline/${cityKey}/${user.uid}`);
 
       if (!online) {
         await set(node, {
@@ -336,7 +365,7 @@ export default function DriverPage() {
           vehicleType: profile.vehicleType || "car",
           carName: profile.carName || "",
           plateNumber: profile.plateNumber || "",
-          city,
+          city: cityKey,
           lat: null,
           lng: null,
           heading: null,
@@ -366,14 +395,14 @@ export default function DriverPage() {
   };
 
   const acceptRequest = async (requestItem) => {
-    if (!user || !profile || !city || !requestItem?.id) return;
+    if (!user || !profile || !cityKey || !requestItem?.id) return;
 
     setError("");
     setSuccess("");
     setWorkingRequestId(requestItem.id);
 
     try {
-      const requestPath = ref(db, `rideRequests/${city}/${requestItem.id}`);
+      const requestPath = ref(db, `rideRequests/${cityKey}/${requestItem.id}`);
       const snap = await get(requestPath);
       const freshRequest = snap.val();
 
@@ -391,7 +420,7 @@ export default function DriverPage() {
       const payload = {
         tripId,
         requestId: requestItem.id,
-        city,
+        city: cityKey,
         riderId: freshRequest.riderId,
         riderName: freshRequest.riderName || "Rider",
         riderPhone: freshRequest.riderPhone || "",
@@ -432,6 +461,13 @@ export default function DriverPage() {
                   : null;
 
               await pushDriverLivePosition(tripId, lat, lng, heading);
+              await update(ref(db, `driversOnline/${cityKey}/${user.uid}`), {
+                lat,
+                lng,
+                heading,
+                online: true,
+                lastSeen: Date.now(),
+              });
             },
             (err) => console.error("initial trip location push failed", err),
             {
@@ -539,8 +575,8 @@ export default function DriverPage() {
 
   const handleLogout = async () => {
     try {
-      if (user && city) {
-        const node = ref(db, `driversOnline/${city}/${user.uid}`);
+      if (user && cityKey) {
+        const node = ref(db, `driversOnline/${cityKey}/${user.uid}`);
         await update(node, {
           online: false,
           lastSeen: Date.now(),
@@ -594,12 +630,12 @@ export default function DriverPage() {
 
   return (
     <MobileShell>
-<DriverMap
-  mode={mode}
-  city={city}
-  activeTrip={activeTrip}
-  requests={visibleRequests}
-/>
+      <DriverMap
+        mode={mode}
+        city={cityKey}
+        activeTrip={activeTrip}
+        requests={visibleRequests}
+      />
 
       <FloatingTopBar
         title="NEXRIDE DRIVER"
@@ -622,7 +658,7 @@ export default function DriverPage() {
         }
       />
 
-      <BottomSheet height="14vh">
+      <BottomSheet height="12vh" padding={10}>
         <div style={{ display: "grid", gap: 8 }}>
           {error ? (
             <div
@@ -707,500 +743,4 @@ export default function DriverPage() {
                   </div>
                 </div>
 
-                <div
-                  style={{
-                    padding: "6px 10px",
-                    borderRadius: 999,
-                    fontSize: 10,
-                    fontWeight: 900,
-                    color: online ? "#0f7a4e" : "#5f557c",
-                    background: online
-                      ? "rgba(31,214,122,0.10)"
-                      : "rgba(255,255,255,0.58)",
-                    border: online
-                      ? "1px solid rgba(31,214,122,0.16)"
-                      : "1px solid rgba(124,58,237,0.08)",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {online ? "ONLINE" : "OFFLINE"}
-                </div>
-              </div>
-
-              <div style={{ marginTop: 10 }}>
-                <button
-                  onClick={toggleOnline}
-                  disabled={savingOnline}
-                  style={{
-                    width: "100%",
-                    border: "none",
-                    borderRadius: 18,
-                    padding: "14px",
-                    fontSize: 14,
-                    fontWeight: 1000,
-                    color: "#fff",
-                    background: "linear-gradient(90deg,#7c3aed,#8b5cf6,#a855f7)",
-                    boxShadow: "0 12px 28px rgba(124,58,237,0.18)",
-                  }}
-                >
-                  {savingOnline
-                    ? "Saving..."
-                    : online
-                    ? "Go offline"
-                    : "Go online"}
-                </button>
-              </div>
-            </ActionCard>
-          )}
-
-          {mode === "offline" && (
-            <ActionCard
-              style={{
-                padding: 12,
-                borderRadius: 20,
-                background:
-                  "linear-gradient(180deg, rgba(255,255,255,0.58), rgba(247,241,255,0.86))",
-                border: "1px solid rgba(124,58,237,0.10)",
-                boxShadow: "0 10px 30px rgba(41,19,78,0.12)",
-                backdropFilter: "blur(16px)",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 13,
-                  fontWeight: 1000,
-                  color: "#23153d",
-                  marginBottom: 5,
-                }}
-              >
-                You are offline
-              </div>
-              <div
-                style={{
-                  fontSize: 12,
-                  color: "#615682",
-                  lineHeight: 1.45,
-                }}
-              >
-                Go online first to start receiving rider requests in your city.
-              </div>
-            </ActionCard>
-          )}
-
-          {mode === "queue" && (
-            <>
-              <div style={{ padding: "0 2px" }}>
-                <div
-                  style={{
-                    fontSize: 14,
-                    fontWeight: 1000,
-                    color: "#23153d",
-                  }}
-                >
-                  Nearby requests
-                </div>
-                <div
-                  style={{
-                    fontSize: 11,
-                    color: "#615682",
-                    marginTop: 3,
-                  }}
-                >
-                  Open ride requests in {cityLabel(city)}
-                </div>
-              </div>
-
-              {visibleRequests.length === 0 ? (
-                <ActionCard
-                  style={{
-                    padding: 12,
-                    borderRadius: 20,
-                    background:
-                      "linear-gradient(180deg, rgba(255,255,255,0.58), rgba(247,241,255,0.86))",
-                    border: "1px solid rgba(124,58,237,0.10)",
-                    boxShadow: "0 10px 30px rgba(41,19,78,0.12)",
-                    backdropFilter: "blur(16px)",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 1000,
-                      color: "#23153d",
-                      marginBottom: 5,
-                    }}
-                  >
-                    No open requests
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: "#615682",
-                      lineHeight: 1.45,
-                    }}
-                  >
-                    Waiting for riders to request trips in your city.
-                  </div>
-                </ActionCard>
-              ) : (
-                visibleRequests.map((item) => (
-                  <ActionCard
-                    key={item.id}
-                    style={{
-                      padding: 12,
-                      borderRadius: 20,
-                      background:
-                        "linear-gradient(180deg, rgba(255,255,255,0.58), rgba(247,241,255,0.86))",
-                      border: "1px solid rgba(124,58,237,0.10)",
-                      boxShadow: "0 10px 30px rgba(41,19,78,0.12)",
-                      backdropFilter: "blur(16px)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: 10,
-                        alignItems: "flex-start",
-                      }}
-                    >
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div
-                          style={{
-                            fontSize: 13,
-                            fontWeight: 1000,
-                            color: "#23153d",
-                            lineHeight: 1.3,
-                          }}
-                        >
-                          {item.pickupName} → {item.dropoffName}
-                        </div>
-
-                        <div
-                          style={{
-                            fontSize: 11,
-                            color: "#74698f",
-                            marginTop: 5,
-                          }}
-                        >
-                          Rider: {item.riderName || "Rider"}
-                        </div>
-
-                        <div
-                          style={{
-                            fontSize: 11,
-                            color: "#615682",
-                            marginTop: 4,
-                            lineHeight: 1.4,
-                          }}
-                        >
-                          Offer: ${Number(item.offerPrice || 0).toFixed(2)} • People:{" "}
-                          {item.people || 1}
-                        </div>
-
-                        {item.notes ? (
-                          <div
-                            style={{
-                              marginTop: 8,
-                              padding: 10,
-                              borderRadius: 14,
-                              background: "rgba(255,255,255,0.58)",
-                              border: "1px solid rgba(124,58,237,0.08)",
-                              color: "#51466f",
-                              fontSize: 12,
-                              lineHeight: 1.45,
-                            }}
-                          >
-                            {item.notes}
-                          </div>
-                        ) : null}
-                      </div>
-
-                      <div style={requestStatusStyle(item.status || "open")}>
-                        {item.status || "open"}
-                      </div>
-                    </div>
-
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr 1fr",
-                        gap: 8,
-                        marginTop: 10,
-                      }}
-                    >
-                      <button
-                        onClick={() => acceptRequest(item)}
-                        disabled={!!workingRequestId || !!activeTrip}
-                        style={{
-                          width: "100%",
-                          border: "none",
-                          borderRadius: 16,
-                          padding: "12px 14px",
-                          fontSize: 13,
-                          fontWeight: 1000,
-                          color: "#fff",
-                          background:
-                            "linear-gradient(90deg,#7c3aed,#8b5cf6,#a855f7)",
-                          boxShadow: "0 10px 22px rgba(124,58,237,0.18)",
-                        }}
-                      >
-                        {workingRequestId === item.id ? "Accepting..." : "Accept"}
-                      </button>
-
-                      <button
-                        onClick={() => openNegotiate(item)}
-                        disabled={!!activeTrip}
-                        style={{
-                          width: "100%",
-                          border: "1px solid rgba(124,58,237,0.10)",
-                          borderRadius: 16,
-                          padding: "12px 14px",
-                          fontSize: 13,
-                          fontWeight: 1000,
-                          color: "#5b21b6",
-                          background: "rgba(255,255,255,0.58)",
-                        }}
-                      >
-                        Negotiate
-                      </button>
-                    </div>
-                  </ActionCard>
-                ))
-              )}
-            </>
-          )}
-
-          {mode === "trip" && (
-            <DriverTripControls
-              trip={activeTrip}
-              onTripUpdated={handleTripUpdated}
-              onTripCompleted={handleTripCompleted}
-            />
-          )}
-
-          {mode === "completed" && completedTrip && (
-            <ActionCard
-              style={{
-                padding: 12,
-                borderRadius: 22,
-                background:
-                  "linear-gradient(180deg, rgba(255,255,255,0.60), rgba(247,241,255,0.88))",
-                border: "1px solid rgba(124,58,237,0.10)",
-                boxShadow: "0 10px 30px rgba(41,19,78,0.12)",
-                backdropFilter: "blur(16px)",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 10,
-                  alignItems: "flex-start",
-                  marginBottom: 10,
-                }}
-              >
-                <div>
-                  <div
-                    style={{
-                      fontSize: 15,
-                      fontWeight: 1000,
-                      color: "#23153d",
-                      lineHeight: 1.1,
-                    }}
-                  >
-                    Trip completed
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: "#615682",
-                      marginTop: 4,
-                    }}
-                  >
-                    Your last trip has been completed successfully.
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    padding: "6px 10px",
-                    borderRadius: 999,
-                    fontSize: 10,
-                    fontWeight: 900,
-                    color: "#0f7a4e",
-                    background: "rgba(31,214,122,0.10)",
-                    border: "1px solid rgba(31,214,122,0.16)",
-                  }}
-                >
-                  COMPLETED
-                </div>
-              </div>
-
-              <div style={{ display: "grid", gap: 6 }}>
-                <div
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 1000,
-                    color: "#23153d",
-                  }}
-                >
-                  {completedTrip.pickupName} → {completedTrip.dropoffName}
-                </div>
-                <div style={{ fontSize: 11, color: "#74698f" }}>
-                  Rider: {completedTrip.riderName || "Rider"}
-                </div>
-                <div style={{ fontSize: 11, color: "#615682" }}>
-                  Fare: ${Number(completedTrip.agreedPrice || 0).toFixed(2)}
-                </div>
-              </div>
-
-              <div style={{ marginTop: 10 }}>
-                <button
-                  onClick={resetCompletedState}
-                  style={{
-                    width: "100%",
-                    border: "none",
-                    borderRadius: 18,
-                    padding: "14px",
-                    fontSize: 13,
-                    fontWeight: 1000,
-                    color: "#fff",
-                    background:
-                      "linear-gradient(90deg,#7c3aed,#8b5cf6,#a855f7)",
-                    boxShadow: "0 12px 28px rgba(124,58,237,0.18)",
-                  }}
-                >
-                  Back to queue
-                </button>
-              </div>
-            </ActionCard>
-          )}
-        </div>
-      </BottomSheet>
-
-      {negotiatingFor ? (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(44, 20, 88, 0.18)",
-            backdropFilter: "blur(6px)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 16,
-            zIndex: 1000,
-          }}
-        >
-          <div
-            style={{
-              width: "100%",
-              maxWidth: 420,
-              borderRadius: 24,
-              padding: 16,
-              background:
-                "linear-gradient(180deg, rgba(255,255,255,0.78), rgba(247,241,255,0.92))",
-              border: "1px solid rgba(124,58,237,0.10)",
-              boxShadow: "0 20px 60px rgba(41,19,78,0.16)",
-              backdropFilter: "blur(16px)",
-            }}
-          >
-            <div
-              style={{
-                fontWeight: 1000,
-                fontSize: 16,
-                color: "#23153d",
-                marginBottom: 6,
-              }}
-            >
-              Negotiate offer
-            </div>
-            <div
-              style={{
-                fontSize: 12,
-                color: "#615682",
-                marginBottom: 12,
-                lineHeight: 1.45,
-              }}
-            >
-              Send a custom price to {negotiatingFor.riderName || "this rider"}.
-            </div>
-
-            <div style={{ display: "grid", gap: 10 }}>
-              <input
-                className="nx-input"
-                type="number"
-                min="1"
-                step="0.01"
-                value={proposedPrice}
-                onChange={(e) => setProposedPrice(e.target.value)}
-                placeholder="Proposed price ($)"
-              />
-
-              <textarea
-                className="nx-input"
-                value={proposedMessage}
-                onChange={(e) => setProposedMessage(e.target.value)}
-                placeholder="I can be there in 4 minutes"
-                style={{
-                  minHeight: 84,
-                  resize: "none",
-                }}
-              />
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: 8,
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => {
-                    setNegotiatingFor(null);
-                    setProposedPrice("");
-                    setProposedMessage("");
-                  }}
-                  style={{
-                    width: "100%",
-                    border: "1px solid rgba(124,58,237,0.10)",
-                    borderRadius: 16,
-                    padding: "12px 14px",
-                    fontSize: 13,
-                    fontWeight: 1000,
-                    color: "#5b21b6",
-                    background: "rgba(255,255,255,0.58)",
-                  }}
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="button"
-                  onClick={sendNegotiation}
-                  disabled={sendingNegotiation}
-                  style={{
-                    width: "100%",
-                    border: "none",
-                    borderRadius: 16,
-                    padding: "12px 14px",
-                    fontSize: 13,
-                    fontWeight: 1000,
-                    color: "#fff",
-                    background:
-                      "linear-gradient(90deg,#7c3aed,#8b5cf6,#a855f7)",
-                    boxShadow: "0 10px 22px rgba(124,58,237,0.18)",
-                  }}
-                >
-                  {sendingNegotiation ? "Sending..." : "Send offer"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </MobileShell>
-  );
-}
+                <d
