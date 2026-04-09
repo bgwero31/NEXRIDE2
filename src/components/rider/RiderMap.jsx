@@ -4,7 +4,23 @@
 
 import { useEffect, useRef, useState } from "react";
 
-const DEFAULT_CENTER = { lat: -20.3403, lng: 30.0428 }; // Zvishavane fallback
+const CITY_CENTERS = {
+  harare: { lat: -17.8252, lng: 31.0335 },
+  bulawayo: { lat: -20.1325, lng: 28.6265 },
+  gweru: { lat: -19.4553, lng: 29.8174 },
+  zvishavane: { lat: -20.3403, lng: 30.0428 },
+  masvingo: { lat: -20.0744, lng: 30.8327 },
+  mutare: { lat: -18.9707, lng: 32.6709 },
+  kwekwe: { lat: -18.9281, lng: 29.8149 },
+  chinhoyi: { lat: -17.3667, lng: 30.2000 },
+  kadoma: { lat: -18.3333, lng: 29.9167 },
+};
+
+function getDefaultCenter(city) {
+  if (!city) return CITY_CENTERS.harare;
+  const key = String(city).trim().toLowerCase();
+  return CITY_CENTERS[key] || CITY_CENTERS.harare;
+}
 
 function loadGoogleMaps(apiKey) {
   return new Promise((resolve, reject) => {
@@ -108,7 +124,7 @@ export default function RiderMap({
     if (!mapsApi || mapRef.current || !mapNodeRef.current) return;
 
     const map = new mapsApi.Map(mapNodeRef.current, {
-      center: DEFAULT_CENTER,
+      center: getDefaultCenter(city),
       zoom: 15,
       disableDefaultUI: true,
       zoomControl: true,
@@ -141,7 +157,7 @@ export default function RiderMap({
     directionsRendererRef.current.setMap(map);
 
     setMapReady(true);
-  }, [mapsApi]);
+  }, [mapsApi, city]);
 
   // watch rider location
   useEffect(() => {
