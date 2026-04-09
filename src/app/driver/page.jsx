@@ -18,7 +18,7 @@ import { auth, db } from "../../lib/firebase";
 import MobileShell from "../../components/ui/MobileShell";
 import FloatingTopBar from "../../components/ui/FloatingTopBar";
 import BottomSheet from "../../components/ui/BottomSheet";
-import MapPlaceholder from "../../components/ui/MapPlaceholder";
+import DriverMap from "../../components/driver/DriverMap";
 import ActionCard from "../../components/ui/ActionCard";
 import DriverTripControls, {
   pushDriverLivePosition,
@@ -594,26 +594,12 @@ export default function DriverPage() {
 
   return (
     <MobileShell>
-      <MapPlaceholder
-        label={
-          mode === "trip"
-            ? "Live driver trip"
-            : mode === "completed"
-            ? "Trip completed"
-            : online
-            ? "Nearby requests"
-            : "Driver map"
-        }
-        sublabel={
-          mode === "trip"
-            ? "Pickup route, trip status, and live movement will appear here"
-            : mode === "completed"
-            ? "Your last completed trip summary"
-            : online
-            ? "Open ride requests in your city"
-            : "Go online to start receiving requests"
-        }
-      />
+<DriverMap
+  mode={mode}
+  city={city}
+  activeTrip={activeTrip}
+  requests={visibleRequests}
+/>
 
       <FloatingTopBar
         title="NEXRIDE DRIVER"
@@ -636,7 +622,7 @@ export default function DriverPage() {
         }
       />
 
-      <BottomSheet height="16vh">
+      <BottomSheet height="14vh">
         <div style={{ display: "grid", gap: 8 }}>
           {error ? (
             <div
