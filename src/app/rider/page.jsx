@@ -409,6 +409,7 @@ export default function RiderPage() {
     <MobileShell>
 <RiderMap
   mode={mode}
+  city={city}
   requestData={requestData}
   tripData={tripData}
 />
@@ -433,7 +434,7 @@ export default function RiderPage() {
         }
       />
 
-      <BottomSheet height="28vh">
+      <BottomSheet height="18vh">
         {mode === "request" && (
           <RequestSheet
             user={user}
