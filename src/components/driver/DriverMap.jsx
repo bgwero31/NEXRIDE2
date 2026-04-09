@@ -91,13 +91,14 @@ export default function DriverMap({
 }) {
   const mapNodeRef = useRef(null);
   const mapRef = useRef(null);
+
   const driverMarkerRef = useRef(null);
+  const riderMarkerRef = useRef(null);
   const pickupMarkerRef = useRef(null);
   const dropoffMarkerRef = useRef(null);
   const requestMarkersRef = useRef({});
   const directionsRendererRef = useRef(null);
   const watchIdRef = useRef(null);
-  const lastDriverPosRef = useRef(null);
   const lastSpeakKeyRef = useRef("");
   const followRef = useRef(true);
 
@@ -109,6 +110,7 @@ export default function DriverMap({
     duration: "",
     instruction: "",
   });
+  const [driverPos, setDriverPos] = useState(null);
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   const cityKey = String(city || "").trim().toLowerCase();
@@ -178,6 +180,7 @@ export default function DriverMap({
     setMapReady(true);
   }, [mapsApi, cityKey]);
 
+  // driver gps + push to firebase
   useEffect(() => {
     if (!mapReady || !mapsApi || !mapRef.current) return;
     if (!navigator.geolocation) return;
@@ -217,24 +220,24 @@ export default function DriverMap({
       const heading =
         typeof pos.coords.heading === "number" ? pos.coords.heading : 0;
 
-      const driverPos = { lat, lng };
-      lastDriverPosRef.current = driverPos;
+      const nextDriverPos = { lat, lng };
+      setDriverPos(nextDriverPos);
 
       if (!driverMarkerRef.current) {
         driverMarkerRef.current = new mapsApi.Marker({
-          position: driverPos,
+          position: nextDriverPos,
           map,
           title: "You",
           icon: makeDriverArrow(mapsApi, heading),
           zIndex: 999,
         });
       } else {
-        driverMarkerRef.current.setPosition(driverPos);
+        driverMarkerRef.current.setPosition(nextDriverPos);
         driverMarkerRef.current.setIcon(makeDriverArrow(mapsApi, heading));
       }
 
       if (!activeTrip && followRef.current) {
-        map.panTo(driverPos);
+        map.panTo(nextDriverPos);
       }
 
       await pushDriverPosition(lat, lng, heading);
@@ -265,6 +268,7 @@ export default function DriverMap({
     };
   }, [mapReady, mapsApi, cityKey, activeTrip]);
 
+  // queue request markers
   useEffect(() => {
     if (!mapReady || !mapsApi || !mapRef.current) return;
 
@@ -303,6 +307,7 @@ export default function DriverMap({
     });
   }, [mapReady, mapsApi, requests, mode]);
 
+  // active trip markers + polyline
   useEffect(() => {
     if (!mapReady || !mapsApi || !mapRef.current) return;
 
@@ -318,6 +323,11 @@ export default function DriverMap({
       if (dropoffMarkerRef.current) {
         dropoffMarkerRef.current.setMap(null);
         dropoffMarkerRef.current = null;
+      }
+
+      if (riderMarkerRef.current) {
+        riderMarkerRef.current.setMap(null);
+        riderMarkerRef.current = null;
       }
 
       if (directionsRendererRef.current) {
@@ -352,6 +362,18 @@ export default function DriverMap({
       } else {
         pickupMarkerRef.current.setPosition(pickupPos);
       }
+
+      if (!riderMarkerRef.current) {
+        riderMarkerRef.current = new mapsApi.Marker({
+          position: pickupPos,
+          map,
+          title: activeTrip?.riderName || "Rider",
+          icon: makeDot(mapsApi, "#06b6d4", 8),
+          zIndex: 220,
+        });
+      } else {
+        riderMarkerRef.current.setPosition(pickupPos);
+      }
     }
 
     if (Number.isFinite(dropoffLat) && Number.isFinite(dropoffLng)) {
@@ -370,8 +392,8 @@ export default function DriverMap({
       }
     }
 
-    const driverPos = lastDriverPosRef.current;
-    if (!driverPos) return;
+    const currentDriverPos = driverPos;
+    if (!currentDriverPos) return;
 
     const goingToPickup =
       activeTrip.status === "accepted" || activeTrip.status === "arrived";
@@ -386,7 +408,7 @@ export default function DriverMap({
 
     directionsService.route(
       {
-        origin: driverPos,
+        origin: currentDriverPos,
         destination,
         travelMode: mapsApi.TravelMode.DRIVING,
       },
@@ -417,13 +439,13 @@ export default function DriverMap({
 
         if (followRef.current) {
           const bounds = new mapsApi.LatLngBounds();
-          bounds.extend(driverPos);
+          bounds.extend(currentDriverPos);
           bounds.extend(destination);
           map.fitBounds(bounds, 80);
         }
       }
     );
-  }, [mapReady, mapsApi, activeTrip]);
+  }, [mapReady, mapsApi, activeTrip, driverPos]);
 
   return (
     <div
@@ -503,4 +525,4 @@ export default function DriverMap({
       ) : null}
     </div>
   );
-      }
+}
