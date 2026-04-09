@@ -65,9 +65,7 @@ export default function RiderPage() {
     [requestData, offers, tripData, completedTrip]
   );
 
-  const driversNearby = useMemo(() => {
-    return offers.length || 0;
-  }, [offers]);
+const [nearbyDriversCount, setNearbyDriversCount] = useState(0);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (currentUser) => {
@@ -412,6 +410,7 @@ export default function RiderPage() {
   city={city}
   requestData={requestData}
   tripData={tripData}
+  onDriversCountChange={setNearbyDriversCount}
 />
 
       <FloatingTopBar
@@ -444,17 +443,17 @@ export default function RiderPage() {
           />
         )}
 
-        {mode === "waiting" && (
-          <WaitingSheet
-            requestData={requestData}
-            driversNearby={driversNearby}
-            onCancel={handleCancelRequest}
-            onOpenOffers={() => {
-              if (offers.length > 0) setSuccess("Offers refreshed.");
-              else setError("No driver offers yet.");
-            }}
-          />
-        )}
+{mode === "waiting" && (
+  <WaitingSheet
+    requestData={requestData}
+    driversNearby={nearbyDriversCount}
+    onCancel={handleCancelRequest}
+    onOpenOffers={() => {
+      if (offers.length > 0) setSuccess("Offers refreshed.");
+      else setError("No driver offers yet.");
+    }}
+  />
+)}
 
         {mode === "offers" && (
           <OffersSheet
