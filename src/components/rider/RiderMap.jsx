@@ -3,6 +3,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { onValue, ref as dbRef } from "firebase/database";
+import { db } from "../../lib/firebase";
 
 const CITY_CENTERS = {
   harare: { lat: -17.8252, lng: 31.0335 },
@@ -12,7 +14,7 @@ const CITY_CENTERS = {
   masvingo: { lat: -20.0744, lng: 30.8327 },
   mutare: { lat: -18.9707, lng: 32.6709 },
   kwekwe: { lat: -18.9281, lng: 29.8149 },
-  chinhoyi: { lat: -17.3667, lng: 30.2000 },
+  chinhoyi: { lat: -17.3667, lng: 30.2 },
   kadoma: { lat: -18.3333, lng: 29.9167 },
 };
 
@@ -159,7 +161,6 @@ export default function RiderMap({
     setMapReady(true);
   }, [mapsApi, city]);
 
-  // watch rider location
   useEffect(() => {
     if (!mapReady || !mapsApi || !mapRef.current) return;
     if (!navigator.geolocation) return;
@@ -179,38 +180,36 @@ export default function RiderMap({
 
       if (!movedEnough && !enoughTimePassed) return;
 
-      geocoderRef.current.geocode(
-        { location: { lat, lng } },
-        (results, status) => {
-          if (status !== "OK" || !results?.length) return;
+      geocoderRef.current.geocode({ location: { lat, lng } }, (results, status) => {
+        if (status !== "OK" || !results?.length) return;
 
-          lastResolvedRef.current = { lat, lng, at: Date.now() };
+        lastResolvedRef.current = { lat, lng, at: Date.now() };
 
-          const best = results[0];
-          const text = best.formatted_address || "Current location";
+        const best = results[0];
+        const text = best.formatted_address || "Current location";
 
-          let detectedCity = "";
-          const parts = best.address_components || [];
-          for (const part of parts) {
-            const types = part.types || [];
-            if (
-              types.includes("locality") ||
-              types.includes("administrative_area_level_2") ||
-              types.includes("administrative_area_level_1")
-            ) {
-              detectedCity = part.long_name;
-              break;
-            }
+        let detectedCity = "";
+        const parts = best.address_components || [];
+
+        for (const part of parts) {
+          const types = part.types || [];
+          if (
+            types.includes("locality") ||
+            types.includes("administrative_area_level_2") ||
+            types.includes("administrative_area_level_1")
+          ) {
+            detectedCity = part.long_name;
+            break;
           }
-
-          onPickupResolved?.({
-            pickupName: text,
-            pickupLat: lat,
-            pickupLng: lng,
-            city: detectedCity || "",
-          });
         }
-      );
+
+        onPickupResolved?.({
+          pickupName: text,
+          pickupLat: lat,
+          pickupLng: lng,
+          city: detectedCity || "",
+        });
+      });
     };
 
     const onSuccess = (pos) => {
@@ -267,14 +266,12 @@ export default function RiderMap({
     };
   }, [mapReady, mapsApi, mode, onPickupResolved]);
 
-  // listen to online drivers in the city
   useEffect(() => {
     if (!city) return;
-    const { onValue: fbOnValue, ref: fbRef } = require("firebase/database");
 
-    const onlineRef = fbRef(db, `driversOnline/${city}`);
+    const onlineRef = dbRef(db, `driversOnline/${city}`);
 
-    const unsub = fbOnValue(onlineRef, (snap) => {
+    const unsub = onValue(onlineRef, (snap) => {
       const data = snap.val() || {};
       const filtered = {};
 
@@ -291,7 +288,6 @@ export default function RiderMap({
     return () => unsub();
   }, [city, onDriversCountChange]);
 
-  // draw all online drivers
   useEffect(() => {
     if (!mapReady || !mapsApi || !mapRef.current) return;
 
@@ -328,9 +324,8 @@ export default function RiderMap({
         currentMarkers[driverId].setPosition(pos);
       }
     });
-  }, [mapReady, mapsApi, tripData, city, mode, onDriversCountChange]);
+  }, [mapReady, mapsApi, tripData, city, mode]);
 
-  // request route preview
   useEffect(() => {
     if (!mapReady || !mapsApi || !mapRef.current || !requestData) return;
     if (!requestData.pickupLat || !requestData.pickupLng) return;
@@ -359,7 +354,6 @@ export default function RiderMap({
     );
   }, [mapReady, mapsApi, requestData, mode]);
 
-  // live trip mode: accepted driver + route
   useEffect(() => {
     if (!mapReady || !mapsApi || !mapRef.current) return;
     if (!tripData) return;
@@ -500,4 +494,4 @@ export default function RiderMap({
       ) : null}
     </div>
   );
-  }
+                         }
