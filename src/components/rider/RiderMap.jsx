@@ -1,10 +1,10 @@
-// File: src/components/driver/DriverMap.jsx
+// File: src/components/rider/RiderMap.jsx
 
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ref as dbRef, update } from "firebase/database";
-import { db, auth } from "../../lib/firebase";
+import { onValue, ref as dbRef } from "firebase/database";
+import { db } from "../../lib/firebase";
 
 const CITY_CENTERS = {
   harare: { lat: -17.8252, lng: 31.0335 },
@@ -14,6 +14,7 @@ const CITY_CENTERS = {
   masvingo: { lat: -20.0744, lng: 30.8327 },
   mutare: { lat: -18.9707, lng: 32.6709 },
   kwekwe: { lat: -18.9281, lng: 29.8149 },
+  chinhoyi: { lat: -17.3667, lng: 30.2 },
   kadoma: { lat: -18.3333, lng: 29.9167 },
 };
 
@@ -25,13 +26,22 @@ function getDefaultCenter(city) {
 
 function loadGoogleMaps(apiKey) {
   return new Promise((resolve, reject) => {
-    if (typeof window === "undefined") return reject(new Error("No window"));
-    if (window.google?.maps) return resolve(window.google.maps);
+    if (typeof window === "undefined") {
+      reject(new Error("No window"));
+      return;
+    }
+
+    if (window.google?.maps) {
+      resolve(window.google.maps);
+      return;
+    }
 
     const existing = document.getElementById("google-maps-script");
     if (existing) {
       existing.addEventListener("load", () => resolve(window.google.maps));
-      existing.addEventListener("error", reject);
+      existing.addEventListener("error", () =>
+        reject(new Error("Failed to load Google Maps"))
+      );
       return;
     }
 
@@ -46,19 +56,7 @@ function loadGoogleMaps(apiKey) {
   });
 }
 
-function makeDriverArrow(mapsApi, heading = 0) {
-  return {
-    path: mapsApi.SymbolPath.FORWARD_CLOSED_ARROW,
-    scale: 7,
-    fillColor: "#8b5cf6",
-    fillOpacity: 1,
-    strokeColor: "#ffffff",
-    strokeWeight: 2,
-    rotation: Number(heading || 0),
-  };
-}
-
-function makeDot(mapsApi, color = "#8b5cf6", scale = 7) {
+function makeDotMarker(mapsApi, color = "#8b5cf6", scale = 7) {
   return {
     path: mapsApi.SymbolPath.CIRCLE,
     scale,
@@ -69,48 +67,46 @@ function makeDot(mapsApi, color = "#8b5cf6", scale = 7) {
   };
 }
 
-function stripHtml(text = "") {
-  return String(text).replace(/<[^>]+>/g, "");
+function makeDriverArrow(mapsApi, heading = 0, color = "#8b5cf6") {
+  return {
+    path: mapsApi.SymbolPath.FORWARD_CLOSED_ARROW,
+    scale: 6,
+    fillColor: color,
+    fillOpacity: 1,
+    strokeColor: "#ffffff",
+    strokeWeight: 1.5,
+    rotation: Number(heading || 0),
+  };
 }
 
-function speak(text) {
-  try {
-    if (!window?.speechSynthesis || !text) return;
-    window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(text);
-    utter.lang = "en-US";
-    window.speechSynthesis.speak(utter);
-  } catch {}
-}
-
-export default function DriverMap({
-  mode = "offline",
+export default function RiderMap({
+  mode = "request",
   city = "",
-  activeTrip = null,
-  requests = [],
+  requestData = null,
+  tripData = null,
+  onPickupResolved,
+  onDriversCountChange,
 }) {
   const mapNodeRef = useRef(null);
   const mapRef = useRef(null);
 
-  const driverMarkerRef = useRef(null);
   const riderMarkerRef = useRef(null);
+  const acceptedDriverMarkerRef = useRef(null);
+  const onlineDriverMarkersRef = useRef({});
   const pickupMarkerRef = useRef(null);
   const dropoffMarkerRef = useRef(null);
-  const requestMarkersRef = useRef({});
-  const directionsRendererRef = useRef(null);
-  const watchIdRef = useRef(null);
-  const lastSpeakKeyRef = useRef("");
-  const followRef = useRef(true);
 
-  const [mapsApi, setMapsApi] = useState(null);
+  const directionsRendererRef = useRef(null);
+  const geocoderRef = useRef(null);
+  const watchIdRef = useRef(null);
+
+  const lastResolvedRef = useRef({ lat: null, lng: null, at: 0 });
+
   const [mapReady, setMapReady] = useState(false);
+  const [mapsApi, setMapsApi] = useState(null);
   const [loadError, setLoadError] = useState("");
-  const [navInfo, setNavInfo] = useState({
-    distance: "",
-    duration: "",
-    instruction: "",
-  });
-  const [driverPos, setDriverPos] = useState(null);
+  const [onlineDrivers, setOnlineDrivers] = useState({});
+  const [riderPos, setRiderPos] = useState(null);
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   const cityKey = String(city || "").trim().toLowerCase();
@@ -149,22 +145,19 @@ export default function DriverMap({
       fullscreenControl: false,
       streetViewControl: false,
       styles: [
-        { elementType: "geometry", stylers: [{ color: "#f5f0ff" }] },
+        { elementType: "geometry", stylers: [{ color: "#f4efe7" }] },
         { elementType: "labels.text.fill", stylers: [{ color: "#5b5670" }] },
         { elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
         { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
-        { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#ddd6fe" }] },
-        { featureType: "water", elementType: "geometry", stylers: [{ color: "#e0e7ff" }] },
-        { featureType: "poi", elementType: "geometry", stylers: [{ color: "#efe9ff" }] },
+        { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#d7d5dd" }] },
+        { featureType: "poi", elementType: "geometry", stylers: [{ color: "#ece7f3" }] },
+        { featureType: "water", elementType: "geometry", stylers: [{ color: "#d9efff" }] },
         { featureType: "transit", stylers: [{ visibility: "off" }] },
       ],
     });
 
-    map.addListener("dragstart", () => {
-      followRef.current = false;
-    });
-
     mapRef.current = map;
+    geocoderRef.current = new mapsApi.Geocoder();
 
     directionsRendererRef.current = new mapsApi.DirectionsRenderer({
       suppressMarkers: true,
@@ -172,7 +165,7 @@ export default function DriverMap({
       polylineOptions: {
         strokeColor: "#8b5cf6",
         strokeOpacity: 0.95,
-        strokeWeight: 6,
+        strokeWeight: 5,
       },
     });
 
@@ -180,71 +173,93 @@ export default function DriverMap({
     setMapReady(true);
   }, [mapsApi, cityKey]);
 
-  // driver gps + push to firebase
+  // rider live gps + reverse geocode pickup
   useEffect(() => {
     if (!mapReady || !mapsApi || !mapRef.current) return;
     if (!navigator.geolocation) return;
-    if (!cityKey) return;
 
     const map = mapRef.current;
 
-    const pushDriverPosition = async (lat, lng, heading = 0) => {
-      const uid = auth.currentUser?.uid;
-      if (!uid) return;
+    const updatePickupAddress = (lat, lng) => {
+      if (!geocoderRef.current) return;
 
-      try {
-        await update(dbRef(db, `driversOnline/${cityKey}/${uid}`), {
-          lat,
-          lng,
-          heading: heading ?? 0,
-          online: true,
-          lastSeen: Date.now(),
-        });
+      const last = lastResolvedRef.current;
+      const now = Date.now();
 
-        if (activeTrip?.tripId) {
-          await update(dbRef(db, `activeTrips/${activeTrip.tripId}/driverLive`), {
-            lat,
-            lng,
-            heading: heading ?? 0,
-            updatedAt: Date.now(),
-          });
+      const movedEnough =
+        last.lat == null ||
+        Math.abs(last.lat - lat) > 0.0008 ||
+        Math.abs(last.lng - lng) > 0.0008;
+
+      const enoughTimePassed = now - (last.at || 0) > 15000;
+
+      if (!movedEnough && !enoughTimePassed) return;
+
+      geocoderRef.current.geocode({ location: { lat, lng } }, (results, status) => {
+        if (status !== "OK" || !results?.length) return;
+
+        lastResolvedRef.current = { lat, lng, at: Date.now() };
+
+        const best = results[0];
+        const text = best.formatted_address || "Current location";
+
+        let detectedCity = "";
+        const parts = best.address_components || [];
+
+        for (const part of parts) {
+          const types = part.types || [];
+          if (
+            types.includes("locality") ||
+            types.includes("administrative_area_level_2") ||
+            types.includes("administrative_area_level_1")
+          ) {
+            detectedCity = part.long_name;
+            break;
+          }
         }
-      } catch (err) {
-        console.error("pushDriverPosition failed", err);
-      }
+
+        onPickupResolved?.({
+          pickupName: text,
+          pickupLat: lat,
+          pickupLng: lng,
+          city: detectedCity || "",
+        });
+      });
     };
 
-    const onSuccess = async (pos) => {
+    const onSuccess = (pos) => {
       const lat = pos.coords.latitude;
       const lng = pos.coords.longitude;
-      const heading =
-        typeof pos.coords.heading === "number" ? pos.coords.heading : 0;
+      const me = { lat, lng };
 
-      const nextDriverPos = { lat, lng };
-      setDriverPos(nextDriverPos);
+      setRiderPos(me);
 
-      if (!driverMarkerRef.current) {
-        driverMarkerRef.current = new mapsApi.Marker({
-          position: nextDriverPos,
+      if (!riderMarkerRef.current) {
+        riderMarkerRef.current = new mapsApi.Marker({
+          position: me,
           map,
-          title: "You",
-          icon: makeDriverArrow(mapsApi, heading),
+          title: "Your location",
+          icon: makeDotMarker(mapsApi, "#06b6d4", 8),
           zIndex: 999,
         });
       } else {
-        driverMarkerRef.current.setPosition(nextDriverPos);
-        driverMarkerRef.current.setIcon(makeDriverArrow(mapsApi, heading));
+        riderMarkerRef.current.setPosition(me);
       }
 
-      if (!activeTrip && followRef.current) {
-        map.panTo(nextDriverPos);
+      if (mode === "request" || mode === "waiting" || mode === "offers") {
+        map.panTo(me);
       }
 
-      await pushDriverPosition(lat, lng, heading);
+      try {
+        localStorage.setItem("nexride-last-lat", String(lat));
+        localStorage.setItem("nexride-last-lng", String(lng));
+      } catch {}
+
+      updatePickupAddress(lat, lng);
     };
 
     const onError = (err) => {
-      console.error("driver geolocation error", err);
+      console.error("geolocation error", err);
     };
 
     navigator.geolocation.getCurrentPosition(onSuccess, onError, {
@@ -261,197 +276,312 @@ export default function DriverMap({
 
     return () => {
       try {
-        if (watchIdRef.current) {
-          navigator.geolocation.clearWatch(watchIdRef.current);
-        }
+        if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
       } catch {}
     };
-  }, [mapReady, mapsApi, cityKey, activeTrip]);
+  }, [mapReady, mapsApi, mode, onPickupResolved]);
 
-  // queue request markers
+  // online drivers listener
+  useEffect(() => {
+    if (!cityKey) return;
+
+    const onlineRef = dbRef(db, `driversOnline/${cityKey}`);
+
+    const unsub = onValue(onlineRef, (snap) => {
+      const data = snap.val() || {};
+      const filtered = {};
+
+      Object.entries(data).forEach(([id, value]) => {
+        if (value?.online === true) {
+          filtered[id] = value;
+        }
+      });
+
+      setOnlineDrivers(filtered);
+      onDriversCountChange?.(Object.keys(filtered).length);
+    });
+
+    return () => unsub();
+  }, [cityKey, onDriversCountChange]);
+
+  // online drivers dots
   useEffect(() => {
     if (!mapReady || !mapsApi || !mapRef.current) return;
 
     const map = mapRef.current;
-    const current = requestMarkersRef.current;
-    const queueMode = mode === "queue";
+    const drivers = onlineDrivers || {};
+    const currentMarkers = onlineDriverMarkersRef.current;
+    const acceptedDriverId = tripData?.driverId || "";
 
-    Object.keys(current).forEach((id) => {
-      const keep = queueMode && requests.some((r) => r.id === id);
-      if (!keep) {
-        current[id].setMap(null);
-        delete current[id];
+    Object.keys(currentMarkers).forEach((driverId) => {
+      if (!drivers[driverId] || driverId === acceptedDriverId) {
+        currentMarkers[driverId].setMap(null);
+        delete currentMarkers[driverId];
       }
     });
 
-    if (!queueMode) return;
+    Object.entries(drivers).forEach(([driverId, driver]) => {
+      if (driverId === acceptedDriverId) return;
 
-    requests.forEach((item) => {
-      const lat = Number(item?.pickupLat);
-      const lng = Number(item?.pickupLng);
+      const lat = Number(driver?.lat);
+      const lng = Number(driver?.lng);
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
       const pos = { lat, lng };
 
-      if (!current[item.id]) {
-        current[item.id] = new mapsApi.Marker({
+      if (!currentMarkers[driverId]) {
+        currentMarkers[driverId] = new mapsApi.Marker({
           position: pos,
           map,
-          title: item?.pickupName || "Ride request",
-          icon: makeDot(mapsApi, "#8b5cf6", 6),
-          zIndex: 40,
+          title: driver?.name || "Online driver",
+          icon: makeDotMarker(mapsApi, "#8b5cf6", 5),
+          zIndex: 20,
         });
       } else {
-        current[item.id].setPosition(pos);
+        currentMarkers[driverId].setPosition(pos);
       }
     });
-  }, [mapReady, mapsApi, requests, mode]);
+  }, [mapReady, mapsApi, tripData, cityKey, mode, onlineDrivers]);
 
-// live trip route + accepted driver marker
-useEffect(() => {
-  if (!mapReady || !mapsApi || !mapRef.current) return;
+  // request mode preview: pickup -> dropoff
+  useEffect(() => {
+    if (!mapReady || !mapsApi || !mapRef.current || !requestData) return;
+    if (!requestData.pickupLat || !requestData.pickupLng) return;
+    if (!requestData.dropoffLat || !requestData.dropoffLng) return;
+    if (mode === "trip") return;
 
-  const map = mapRef.current;
-  const directionsService = new mapsApi.DirectionsService();
+    const map = mapRef.current;
+    const directionsService = new mapsApi.DirectionsService();
 
-  if (!tripData) {
-    if (acceptedDriverMarkerRef.current) {
+    const pickupPos = {
+      lat: Number(requestData.pickupLat),
+      lng: Number(requestData.pickupLng),
+    };
+
+    const dropoffPos = {
+      lat: Number(requestData.dropoffLat),
+      lng: Number(requestData.dropoffLng),
+    };
+
+    if (pickupMarkerRef.current) {
+      pickupMarkerRef.current.setMap(null);
+      pickupMarkerRef.current = null;
+    }
+
+    if (dropoffMarkerRef.current) {
+      dropoffMarkerRef.current.setMap(null);
+      dropoffMarkerRef.current = null;
+    }
+
+    pickupMarkerRef.current = new mapsApi.Marker({
+      position: pickupPos,
+      map,
+      title: "Pickup",
+      icon: makeDotMarker(mapsApi, "#06b6d4", 7),
+      zIndex: 120,
+    });
+
+    dropoffMarkerRef.current = new mapsApi.Marker({
+      position: dropoffPos,
+      map,
+      title: "Destination",
+      icon: makeDotMarker(mapsApi, "#ec4899", 7),
+      zIndex: 120,
+    });
+
+    directionsService.route(
+      {
+        origin: pickupPos,
+        destination: dropoffPos,
+        travelMode: mapsApi.TravelMode.DRIVING,
+      },
+      (result, status) => {
+        if (status === "OK" && directionsRendererRef.current) {
+          directionsRendererRef.current.setDirections(result);
+
+          const bounds = new mapsApi.LatLngBounds();
+          bounds.extend(pickupPos);
+          bounds.extend(dropoffPos);
+          map.fitBounds(bounds, 90);
+        }
+      }
+    );
+  }, [mapReady, mapsApi, requestData, mode]);
+
+  // trip mode:
+  // accepted/arrived => driver -> rider/pickup
+  // picked/enroute => pickup -> destination
+  useEffect(() => {
+    if (!mapReady || !mapsApi || !mapRef.current) return;
+
+    const map = mapRef.current;
+    const directionsService = new mapsApi.DirectionsService();
+
+    if (!tripData) {
+      if (acceptedDriverMarkerRef.current) {
+        acceptedDriverMarkerRef.current.setMap(null);
+        acceptedDriverMarkerRef.current = null;
+      }
+
+      if (pickupMarkerRef.current) {
+        pickupMarkerRef.current.setMap(null);
+        pickupMarkerRef.current = null;
+      }
+
+      if (dropoffMarkerRef.current) {
+        dropoffMarkerRef.current.setMap(null);
+        dropoffMarkerRef.current = null;
+      }
+
+      if (directionsRendererRef.current) {
+        directionsRendererRef.current.setDirections({ routes: [] });
+      }
+
+      return;
+    }
+
+    const driverLat = Number(tripData?.driverLive?.lat);
+    const driverLng = Number(tripData?.driverLive?.lng);
+
+    const pickupPos =
+      tripData?.pickupLat != null && tripData?.pickupLng != null
+        ? {
+            lat: Number(tripData.pickupLat),
+            lng: Number(tripData.pickupLng),
+          }
+        : null;
+
+    const dropoffPos =
+      tripData?.dropoffLat != null && tripData?.dropoffLng != null
+        ? {
+            lat: Number(tripData.dropoffLat),
+            lng: Number(tripData.dropoffLng),
+          }
+        : null;
+
+    const currentRiderPos = riderPos || pickupPos;
+
+    if (pickupPos) {
+      if (!pickupMarkerRef.current) {
+        pickupMarkerRef.current = new mapsApi.Marker({
+          position: pickupPos,
+          map,
+          title: "Pickup",
+          icon: makeDotMarker(mapsApi, "#06b6d4", 7),
+          zIndex: 130,
+        });
+      } else {
+        pickupMarkerRef.current.setPosition(pickupPos);
+        pickupMarkerRef.current.setMap(map);
+      }
+    }
+
+    if (dropoffPos) {
+      if (!dropoffMarkerRef.current) {
+        dropoffMarkerRef.current = new mapsApi.Marker({
+          position: dropoffPos,
+          map,
+          title: "Destination",
+          icon: makeDotMarker(mapsApi, "#ec4899", 7),
+          zIndex: 130,
+        });
+      } else {
+        dropoffMarkerRef.current.setPosition(dropoffPos);
+        dropoffMarkerRef.current.setMap(map);
+      }
+    }
+
+    if (Number.isFinite(driverLat) && Number.isFinite(driverLng)) {
+      const driverPos = { lat: driverLat, lng: driverLng };
+
+      if (!acceptedDriverMarkerRef.current) {
+        acceptedDriverMarkerRef.current = new mapsApi.Marker({
+          position: driverPos,
+          map,
+          title: tripData?.driverName || "Driver",
+          icon: makeDriverArrow(
+            mapsApi,
+            Number(tripData?.driverLive?.heading || 0),
+            "#8b5cf6"
+          ),
+          zIndex: 300,
+        });
+      } else {
+        acceptedDriverMarkerRef.current.setPosition(driverPos);
+        acceptedDriverMarkerRef.current.setIcon(
+          makeDriverArrow(
+            mapsApi,
+            Number(tripData?.driverLive?.heading || 0),
+            "#8b5cf6"
+          )
+        );
+        acceptedDriverMarkerRef.current.setMap(map);
+      }
+
+      if (
+        (tripData.status === "accepted" || tripData.status === "arrived") &&
+        currentRiderPos
+      ) {
+        directionsService.route(
+          {
+            origin: driverPos,
+            destination: currentRiderPos,
+            travelMode: mapsApi.TravelMode.DRIVING,
+          },
+          (result, status) => {
+            if (status === "OK" && directionsRendererRef.current) {
+              directionsRendererRef.current.setDirections(result);
+
+              const bounds = new mapsApi.LatLngBounds();
+              bounds.extend(driverPos);
+              bounds.extend(currentRiderPos);
+              map.fitBounds(bounds, 90);
+            }
+          }
+        );
+        return;
+      }
+    } else if (acceptedDriverMarkerRef.current) {
       acceptedDriverMarkerRef.current.setMap(null);
       acceptedDriverMarkerRef.current = null;
+    }
+
+    if (
+      (tripData.status === "picked" || tripData.status === "enroute") &&
+      pickupPos &&
+      dropoffPos
+    ) {
+      directionsService.route(
+        {
+          origin: pickupPos,
+          destination: dropoffPos,
+          travelMode: mapsApi.TravelMode.DRIVING,
+        },
+        (result, status) => {
+          if (status === "OK" && directionsRendererRef.current) {
+            directionsRendererRef.current.setDirections(result);
+
+            const bounds = new mapsApi.LatLngBounds();
+            bounds.extend(pickupPos);
+            bounds.extend(dropoffPos);
+            map.fitBounds(bounds, 90);
+          }
+        }
+      );
+      return;
     }
 
     if (directionsRendererRef.current) {
       directionsRendererRef.current.setDirections({ routes: [] });
     }
+  }, [mapReady, mapsApi, tripData, riderPos]);
 
-    return;
-  }
-
-  const driverLat = Number(tripData?.driverLive?.lat);
-  const driverLng = Number(tripData?.driverLive?.lng);
-
-  const currentRiderPos =
-    lastKnownRiderPosRef.current ||
-    (
-      tripData?.pickupLat != null &&
-      tripData?.pickupLng != null
-        ? {
-            lat: Number(tripData.pickupLat),
-            lng: Number(tripData.pickupLng),
-          }
-        : null
-    );
-
-  // accepted driver marker
-  if (Number.isFinite(driverLat) && Number.isFinite(driverLng)) {
-    const driverPos = { lat: driverLat, lng: driverLng };
-
-    if (!acceptedDriverMarkerRef.current) {
-      acceptedDriverMarkerRef.current = new mapsApi.Marker({
-        position: driverPos,
-        map,
-        title: tripData?.driverName || "Driver",
-        icon: makeDriverArrow(
-          mapsApi,
-          Number(tripData?.driverLive?.heading || 0),
-          "#8b5cf6"
-        ),
-        zIndex: 300,
-      });
-    } else {
-      acceptedDriverMarkerRef.current.setPosition(driverPos);
-      acceptedDriverMarkerRef.current.setIcon(
-        makeDriverArrow(
-          mapsApi,
-          Number(tripData?.driverLive?.heading || 0),
-          "#8b5cf6"
-        )
-      );
-      acceptedDriverMarkerRef.current.setMap(map);
-    }
-  } else if (acceptedDriverMarkerRef.current) {
-    acceptedDriverMarkerRef.current.setMap(null);
-    acceptedDriverMarkerRef.current = null;
-  }
-
-  // route: driver -> rider pickup
-  if (
-    (tripData.status === "accepted" || tripData.status === "arrived") &&
-    Number.isFinite(driverLat) &&
-    Number.isFinite(driverLng) &&
-    currentRiderPos
-  ) {
-    directionsService.route(
-      {
-        origin: { lat: driverLat, lng: driverLng },
-        destination: currentRiderPos,
-        travelMode: mapsApi.TravelMode.DRIVING,
-      },
-      (result, status) => {
-        if (status === "OK" && directionsRendererRef.current) {
-          directionsRendererRef.current.setDirections(result);
-
-          const bounds = new mapsApi.LatLngBounds();
-          bounds.extend({ lat: driverLat, lng: driverLng });
-          bounds.extend(currentRiderPos);
-          map.fitBounds(bounds, 90);
-        }
-      }
-    );
-    return;
-  }
-
-  // route: pickup -> dropoff after otp verified
-  if (
-    (tripData.status === "picked" || tripData.status === "enroute") &&
-    tripData.pickupLat != null &&
-    tripData.pickupLng != null &&
-    tripData.dropoffLat != null &&
-    tripData.dropoffLng != null
-  ) {
-    directionsService.route(
-      {
-        origin: {
-          lat: Number(tripData.pickupLat),
-          lng: Number(tripData.pickupLng),
-        },
-        destination: {
-          lat: Number(tripData.dropoffLat),
-          lng: Number(tripData.dropoffLng),
-        },
-        travelMode: mapsApi.TravelMode.DRIVING,
-      },
-      (result, status) => {
-        if (status === "OK" && directionsRendererRef.current) {
-          directionsRendererRef.current.setDirections(result);
-
-          const bounds = new mapsApi.LatLngBounds();
-          bounds.extend({
-            lat: Number(tripData.pickupLat),
-            lng: Number(tripData.pickupLng),
-          });
-          bounds.extend({
-            lat: Number(tripData.dropoffLat),
-            lng: Number(tripData.dropoffLng),
-          });
-          map.fitBounds(bounds, 90);
-        }
-      }
-    );
-    return;
-  }
-
-  if (directionsRendererRef.current) {
-    directionsRendererRef.current.setDirections({ routes: [] });
-  }
-}, [mapReady, mapsApi, tripData]);
-  
   return (
     <div
       style={{
         position: "absolute",
         inset: 0,
-        background: "#f5f0ff",
+        background: "#f4efe7",
       }}
     >
       <div
@@ -462,46 +592,6 @@ useEffect(() => {
         }}
       />
 
-      {(navInfo.distance || navInfo.duration || navInfo.instruction) && (
-        <div
-          style={{
-            position: "absolute",
-            top: 86,
-            left: 12,
-            right: 12,
-            zIndex: 20,
-            borderRadius: 20,
-            padding: "12px 14px",
-            background:
-              "linear-gradient(180deg, rgba(31,20,53,0.82), rgba(45,27,72,0.78))",
-            border: "1px solid rgba(255,255,255,0.08)",
-            backdropFilter: "blur(16px)",
-            boxShadow: "0 12px 28px rgba(0,0,0,0.14)",
-            color: "#fff",
-          }}
-        >
-          <div
-            style={{
-              fontSize: 13,
-              fontWeight: 1000,
-              lineHeight: 1.3,
-            }}
-          >
-            {navInfo.instruction || "Navigation active"}
-          </div>
-
-          <div
-            style={{
-              marginTop: 6,
-              fontSize: 11,
-              color: "rgba(255,255,255,0.78)",
-            }}
-          >
-            {navInfo.distance || "--"} • {navInfo.duration || "--"}
-          </div>
-        </div>
-      )}
-
       {loadError ? (
         <div
           style={{
@@ -509,7 +599,7 @@ useEffect(() => {
             top: 90,
             left: 16,
             right: 16,
-            zIndex: 30,
+            zIndex: 5,
             padding: 12,
             borderRadius: 14,
             background: "rgba(255, 91, 91, 0.08)",
@@ -524,4 +614,4 @@ useEffect(() => {
       ) : null}
     </div>
   );
-}
+                     }
