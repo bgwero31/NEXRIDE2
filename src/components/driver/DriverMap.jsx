@@ -217,8 +217,6 @@ export default function DriverMap({
     const onSuccess = async (pos) => {
       const lat = pos.coords.latitude;
       const lng = pos.coords.longitude;
-      const me = { lat, lng };
-setRiderPos(me);
       const heading =
         typeof pos.coords.heading === "number" ? pos.coords.heading : 0;
 
