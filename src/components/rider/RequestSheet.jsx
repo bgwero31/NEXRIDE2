@@ -53,24 +53,18 @@ export default function RequestSheet({
   onRequestCreated,
 }) {
   const [city, setCity] = useState(initialCity || "harare");
-
-  const [pickupName, setPickupName] = useState(
-    cityLabel(initialCity || "harare")
-  );
+  const [pickupName, setPickupName] = useState(cityLabel(initialCity || "harare"));
   const [pickupLat, setPickupLat] = useState("");
   const [pickupLng, setPickupLng] = useState("");
-
   const [dropoffName, setDropoffName] = useState("");
   const [dropoffLat, setDropoffLat] = useState("");
   const [dropoffLng, setDropoffLng] = useState("");
-
   const [offerPrice, setOfferPrice] = useState(3);
   const [people, setPeople] = useState(1);
   const [notes, setNotes] = useState("");
 
   const [pickupSuggestions, setPickupSuggestions] = useState([]);
   const [dropoffSuggestions, setDropoffSuggestions] = useState([]);
-
   const [submitting, setSubmitting] = useState(false);
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState("");
@@ -78,17 +72,11 @@ export default function RequestSheet({
 
   const autoServiceRef = useRef(null);
   const placesServiceRef = useRef(null);
-  const geocoderRef = useRef(null);
   const sessionTokenRef = useRef(null);
 
   const canSubmit = useMemo(() => {
-    return (
-      pickupName.trim() &&
-      dropoffName.trim() &&
-      Number(offerPrice) > 0 &&
-      !submitting
-    );
-  }, [pickupName, dropoffName, offerPrice, submitting]);
+    return pickupName.trim() && dropoffName.trim() && Number(offerPrice) > 0;
+  }, [pickupName, dropoffName, offerPrice]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -100,27 +88,15 @@ export default function RequestSheet({
 
     placesServiceRef.current =
       placesServiceRef.current ||
-      new window.google.maps.places.PlacesService(
-        document.createElement("div")
-      );
-
-    geocoderRef.current =
-      geocoderRef.current || new window.google.maps.Geocoder();
+      new window.google.maps.places.PlacesService(document.createElement("div"));
 
     sessionTokenRef.current =
       sessionTokenRef.current ||
       new window.google.maps.places.AutocompleteSessionToken();
   }, []);
 
-  const resetSessionToken = () => {
-    if (!window.google?.maps?.places) return;
-    sessionTokenRef.current = new window.google.maps.places.AutocompleteSessionToken();
-  };
-
   const fetchSuggestions = (text, type) => {
-    const value = String(text || "").trim();
-
-    if (!value) {
+    if (!text?.trim()) {
       if (type === "pickup") setPickupSuggestions([]);
       else setDropoffSuggestions([]);
       return;
@@ -130,7 +106,7 @@ export default function RequestSheet({
 
     autoServiceRef.current.getPlacePredictions(
       {
-        input: value,
+        input: text,
         sessionToken: sessionTokenRef.current || undefined,
         componentRestrictions: { country: "zw" },
       },
@@ -159,12 +135,7 @@ export default function RequestSheet({
           return;
         }
 
-        const name =
-          place.formatted_address ||
-          place.name ||
-          prediction.description ||
-          "";
-
+        const name = place.formatted_address || place.name || prediction.description || "";
         const lat = place.geometry?.location?.lat?.();
         const lng = place.geometry?.location?.lng?.();
 
@@ -179,42 +150,8 @@ export default function RequestSheet({
           setDropoffLng(lng != null ? String(lng) : "");
           setDropoffSuggestions([]);
         }
-
-        resetSessionToken();
       }
     );
-  };
-
-  const geocodeTextAddress = (addressText) => {
-    return new Promise((resolve, reject) => {
-      if (!geocoderRef.current || !window.google?.maps) {
-        reject(new Error("Geocoder not ready"));
-        return;
-      }
-
-      geocoderRef.current.geocode(
-        {
-          address: addressText,
-          componentRestrictions: { country: "ZW" },
-        },
-        (results, status) => {
-          if (status !== "OK" || !results?.length) {
-            reject(new Error("Address not found"));
-            return;
-          }
-
-          const best = results[0];
-          const lat = best.geometry?.location?.lat?.();
-          const lng = best.geometry?.location?.lng?.();
-
-          resolve({
-            name: best.formatted_address || addressText,
-            lat,
-            lng,
-          });
-        }
-      );
-    });
   };
 
   const useMyCurrentLocation = () => {
@@ -275,7 +212,7 @@ export default function RequestSheet({
       return;
     }
 
-    const cleanCity = String(city || "").trim().toLowerCase();
+    const cleanCity = city.trim().toLowerCase();
     const cleanPickup = pickupName.trim();
     const cleanDropoff = dropoffName.trim();
     const cleanOffer = Number(offerPrice);
@@ -295,49 +232,6 @@ export default function RequestSheet({
     try {
       setSubmitting(true);
 
-      let finalPickupName = cleanPickup;
-      let finalPickupLat = pickupLat ? Number(pickupLat) : null;
-      let finalPickupLng = pickupLng ? Number(pickupLng) : null;
-
-      let finalDropoffName = cleanDropoff;
-      let finalDropoffLat = dropoffLat ? Number(dropoffLat) : null;
-      let finalDropoffLng = dropoffLng ? Number(dropoffLng) : null;
-
-      if (
-        (!Number.isFinite(finalPickupLat) || !Number.isFinite(finalPickupLng)) &&
-        finalPickupName
-      ) {
-        const pickupGeo = await geocodeTextAddress(
-          `${finalPickupName}, ${cityLabel(cleanCity)}, Zimbabwe`
-        );
-        finalPickupName = pickupGeo.name || finalPickupName;
-        finalPickupLat = Number(pickupGeo.lat);
-        finalPickupLng = Number(pickupGeo.lng);
-      }
-
-      if (
-        (!Number.isFinite(finalDropoffLat) || !Number.isFinite(finalDropoffLng)) &&
-        finalDropoffName
-      ) {
-        const dropoffGeo = await geocodeTextAddress(
-          `${finalDropoffName}, ${cityLabel(cleanCity)}, Zimbabwe`
-        );
-        finalDropoffName = dropoffGeo.name || finalDropoffName;
-        finalDropoffLat = Number(dropoffGeo.lat);
-        finalDropoffLng = Number(dropoffGeo.lng);
-      }
-
-      if (
-        !Number.isFinite(finalPickupLat) ||
-        !Number.isFinite(finalPickupLng) ||
-        !Number.isFinite(finalDropoffLat) ||
-        !Number.isFinite(finalDropoffLng)
-      ) {
-        setError("Please choose valid pickup and destination places.");
-        setSubmitting(false);
-        return;
-      }
-
       const requestRef = push(ref(db, `rideRequests/${cleanCity}`));
       const requestId = requestRef.key;
       const now = Date.now();
@@ -346,12 +240,12 @@ export default function RequestSheet({
         riderId: user.uid,
         riderName: profile.fullName || "Rider",
         riderPhone: profile.phone || "",
-        pickupName: finalPickupName,
-        pickupLat: finalPickupLat,
-        pickupLng: finalPickupLng,
-        dropoffName: finalDropoffName,
-        dropoffLat: finalDropoffLat,
-        dropoffLng: finalDropoffLng,
+        pickupName: cleanPickup,
+        pickupLat: pickupLat ? Number(pickupLat) : null,
+        pickupLng: pickupLng ? Number(pickupLng) : null,
+        dropoffName: cleanDropoff,
+        dropoffLat: dropoffLat ? Number(dropoffLat) : null,
+        dropoffLng: dropoffLng ? Number(dropoffLng) : null,
         offerPrice: cleanOffer,
         people: cleanPeople,
         notes: cleanNotes,
@@ -488,8 +382,6 @@ export default function RequestSheet({
                       value={pickupName}
                       onChange={(e) => {
                         setPickupName(e.target.value);
-                        setPickupLat("");
-                        setPickupLng("");
                         fetchSuggestions(e.target.value, "pickup");
                       }}
                       placeholder="Your current location"
@@ -543,8 +435,6 @@ export default function RequestSheet({
                       value={dropoffName}
                       onChange={(e) => {
                         setDropoffName(e.target.value);
-                        setDropoffLat("");
-                        setDropoffLng("");
                         fetchSuggestions(e.target.value, "dropoff");
                       }}
                       placeholder="Type destination"
@@ -681,7 +571,7 @@ export default function RequestSheet({
 
         <button
           type="submit"
-          disabled={!canSubmit}
+          disabled={!canSubmit || submitting}
           style={{
             width: "100%",
             border: "none",
@@ -699,4 +589,4 @@ export default function RequestSheet({
       </form>
     </div>
   );
-}
+    }
