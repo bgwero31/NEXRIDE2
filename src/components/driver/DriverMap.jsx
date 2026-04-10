@@ -111,7 +111,6 @@ export default function DriverMap({
     instruction: "",
   });
   const [driverPos, setDriverPos] = useState(null);
-  const [riderPos, setRiderPos] = useState(null);
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   const cityKey = String(city || "").trim().toLowerCase();
 
