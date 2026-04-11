@@ -99,6 +99,12 @@ export default function RequestSheet({
       new window.google.maps.places.AutocompleteSessionToken();
   }, []);
 
+  const resetSessionToken = () => {
+    if (typeof window === "undefined") return;
+    if (!window.google?.maps?.places) return;
+    sessionTokenRef.current = new window.google.maps.places.AutocompleteSessionToken();
+  };
+
   const fetchSuggestions = (text, type) => {
     if (!text?.trim()) {
       if (type === "pickup") setPickupSuggestions([]);
@@ -140,7 +146,11 @@ export default function RequestSheet({
         }
 
         const name =
-          place.formatted_address || place.name || prediction.description || "";
+          place.formatted_address ||
+          place.name ||
+          prediction.description ||
+          "";
+
         const lat = place.geometry?.location?.lat?.();
         const lng = place.geometry?.location?.lng?.();
 
@@ -155,20 +165,20 @@ export default function RequestSheet({
           setDropoffLng(lng != null ? String(lng) : "");
           setDropoffSuggestions([]);
         }
+
+        resetSessionToken();
       }
     );
   };
 
   const geocodeTypedPlace = async (text) => {
-    return new Promise((resolve) => {
-      if (!geocoderRef.current || !text?.trim()) {
-        resolve(null);
-        return;
-      }
+    if (!text?.trim()) return null;
+    if (!geocoderRef.current) return null;
 
+    return new Promise((resolve) => {
       geocoderRef.current.geocode(
         {
-          address: `${text}, ${city}, Zimbabwe`,
+          address: text,
           componentRestrictions: { country: "ZW" },
         },
         (results, status) => {
@@ -181,15 +191,10 @@ export default function RequestSheet({
           const lat = best.geometry?.location?.lat?.();
           const lng = best.geometry?.location?.lng?.();
 
-          if (lat == null || lng == null) {
-            resolve(null);
-            return;
-          }
-
           resolve({
             name: best.formatted_address || text,
-            lat,
-            lng,
+            lat: lat != null ? lat : null,
+            lng: lng != null ? lng : null,
           });
         }
       );
@@ -208,13 +213,23 @@ export default function RequestSheet({
     }
 
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
+      async (pos) => {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
 
         setPickupLat(String(lat));
         setPickupLng(String(lng));
         setPickupName("Current location");
+
+        if (geocoderRef.current) {
+          geocoderRef.current.geocode({ location: { lat, lng } }, (results, status) => {
+            if (status === "OK" && results?.length) {
+              const best = results[0];
+              const name = best.formatted_address || "Current location";
+              setPickupName(name);
+            }
+          });
+        }
 
         try {
           localStorage.setItem("nexride-last-lat", String(lat));
@@ -255,19 +270,17 @@ export default function RequestSheet({
     }
 
     const cleanCity = city.trim().toLowerCase();
-    const cleanPickup = pickupName.trim();
-    let finalPickupLat = pickupLat ? Number(pickupLat) : null;
-    let finalPickupLng = pickupLng ? Number(pickupLng) : null;
-
+    let finalPickupName = pickupName.trim();
     let finalDropoffName = dropoffName.trim();
-    let finalDropoffLat = dropoffLat ? Number(dropoffLat) : null;
-    let finalDropoffLng = dropoffLng ? Number(dropoffLng) : null;
-
+    let finalPickupLat = pickupLat !== "" ? Number(pickupLat) : null;
+    let finalPickupLng = pickupLng !== "" ? Number(pickupLng) : null;
+    let finalDropoffLat = dropoffLat !== "" ? Number(dropoffLat) : null;
+    let finalDropoffLng = dropoffLng !== "" ? Number(dropoffLng) : null;
     const cleanOffer = Number(offerPrice);
     const cleanPeople = Number(people) || 1;
     const cleanNotes = notes.trim();
 
-    if (!cleanPickup || !finalDropoffName || !cleanCity) {
+    if (!finalPickupName || !finalDropoffName || !cleanCity) {
       setError("Enter pickup and destination.");
       return;
     }
@@ -277,36 +290,45 @@ export default function RequestSheet({
       return;
     }
 
-    // auto-geocode typed destination if user didn't tap Google suggestion
-    if (
-      finalDropoffName &&
-      (!Number.isFinite(finalDropoffLat) || !Number.isFinite(finalDropoffLng))
-    ) {
-      const foundDropoff = await geocodeTypedPlace(finalDropoffName);
-
-   if (
-  finalDropoffName &&
-  (!Number.isFinite(finalDropoffLat) || !Number.isFinite(finalDropoffLng))
-) {
-  const foundDropoff = await geocodeTypedPlace(finalDropoffName);
-
-  if (foundDropoff) {
-    finalDropoffName = foundDropoff.name;
-    finalDropoffLat = foundDropoff.lat;
-    finalDropoffLng = foundDropoff.lng;
-
-    setDropoffName(foundDropoff.name);
-    setDropoffLat(String(foundDropoff.lat));
-    setDropoffLng(String(foundDropoff.lng));
-  } else {
-    // allow manual destination text even if Google doesn't know it
-    finalDropoffLat = null;
-    finalDropoffLng = null;
-  }
-   }
-
     try {
       setSubmitting(true);
+
+      if (
+        finalPickupName &&
+        (!Number.isFinite(finalPickupLat) || !Number.isFinite(finalPickupLng))
+      ) {
+        const foundPickup = await geocodeTypedPlace(finalPickupName);
+
+        if (foundPickup) {
+          finalPickupName = foundPickup.name;
+          finalPickupLat = foundPickup.lat;
+          finalPickupLng = foundPickup.lng;
+
+          setPickupName(foundPickup.name);
+          setPickupLat(foundPickup.lat != null ? String(foundPickup.lat) : "");
+          setPickupLng(foundPickup.lng != null ? String(foundPickup.lng) : "");
+        }
+      }
+
+      if (
+        finalDropoffName &&
+        (!Number.isFinite(finalDropoffLat) || !Number.isFinite(finalDropoffLng))
+      ) {
+        const foundDropoff = await geocodeTypedPlace(finalDropoffName);
+
+        if (foundDropoff) {
+          finalDropoffName = foundDropoff.name;
+          finalDropoffLat = foundDropoff.lat;
+          finalDropoffLng = foundDropoff.lng;
+
+          setDropoffName(foundDropoff.name);
+          setDropoffLat(foundDropoff.lat != null ? String(foundDropoff.lat) : "");
+          setDropoffLng(foundDropoff.lng != null ? String(foundDropoff.lng) : "");
+        } else {
+          finalDropoffLat = null;
+          finalDropoffLng = null;
+        }
+      }
 
       const requestRef = push(ref(db, `rideRequests/${cleanCity}`));
       const requestId = requestRef.key;
@@ -316,7 +338,7 @@ export default function RequestSheet({
         riderId: user.uid,
         riderName: profile.fullName || "Rider",
         riderPhone: profile.phone || "",
-        pickupName: cleanPickup,
+        pickupName: finalPickupName,
         pickupLat: Number.isFinite(finalPickupLat) ? finalPickupLat : null,
         pickupLng: Number.isFinite(finalPickupLng) ? finalPickupLng : null,
         dropoffName: finalDropoffName,
@@ -645,9 +667,9 @@ export default function RequestSheet({
           >
             {success}
           </div>
-        ) : null}
+        ) : 
 
-        <button
+                <button
           type="submit"
           disabled={!canSubmit || submitting}
           style={{
@@ -667,4 +689,4 @@ export default function RequestSheet({
       </form>
     </div>
   );
-}
+        }
