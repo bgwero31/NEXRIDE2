@@ -72,6 +72,7 @@ export default function RequestSheet({
 
   const autoServiceRef = useRef(null);
   const placesServiceRef = useRef(null);
+  const geocoderRef = useRef(null);
   const sessionTokenRef = useRef(null);
 
   const canSubmit = useMemo(() => {
@@ -89,6 +90,9 @@ export default function RequestSheet({
     placesServiceRef.current =
       placesServiceRef.current ||
       new window.google.maps.places.PlacesService(document.createElement("div"));
+
+    geocoderRef.current =
+      geocoderRef.current || new window.google.maps.Geocoder();
 
     sessionTokenRef.current =
       sessionTokenRef.current ||
@@ -135,7 +139,8 @@ export default function RequestSheet({
           return;
         }
 
-        const name = place.formatted_address || place.name || prediction.description || "";
+        const name =
+          place.formatted_address || place.name || prediction.description || "";
         const lat = place.geometry?.location?.lat?.();
         const lng = place.geometry?.location?.lng?.();
 
@@ -152,6 +157,43 @@ export default function RequestSheet({
         }
       }
     );
+  };
+
+  const geocodeTypedPlace = async (text) => {
+    return new Promise((resolve) => {
+      if (!geocoderRef.current || !text?.trim()) {
+        resolve(null);
+        return;
+      }
+
+      geocoderRef.current.geocode(
+        {
+          address: `${text}, ${city}, Zimbabwe`,
+          componentRestrictions: { country: "ZW" },
+        },
+        (results, status) => {
+          if (status !== "OK" || !results?.length) {
+            resolve(null);
+            return;
+          }
+
+          const best = results[0];
+          const lat = best.geometry?.location?.lat?.();
+          const lng = best.geometry?.location?.lng?.();
+
+          if (lat == null || lng == null) {
+            resolve(null);
+            return;
+          }
+
+          resolve({
+            name: best.formatted_address || text,
+            lat,
+            lng,
+          });
+        }
+      );
+    });
   };
 
   const useMyCurrentLocation = () => {
@@ -202,133 +244,113 @@ export default function RequestSheet({
     });
   };
 
- const handleRequestRide = async (e) => {
-  e.preventDefault();
-  setError("");
-  setSuccess("");
+  const handleRequestRide = async (e) => {
+    e.preventDefault();
+    setError("");
+    setSuccess("");
 
-  if (!user || !profile) {
-    setError("User not ready.");
-    return;
-  }
+    if (!user || !profile) {
+      setError("User not ready.");
+      return;
+    }
 
-  const cleanCity = String(city || "").trim().toLowerCase();
-  const cleanPickup = pickupName.trim();
-  const cleanDropoff = dropoffName.trim();
-  const cleanOffer = Number(offerPrice);
-  const cleanPeople = Number(people) || 1;
-  const cleanNotes = notes.trim();
-
-  if (!cleanPickup || !cleanDropoff || !cleanCity) {
-    setError("Enter pickup and dropoff.");
-    return;
-  }
-
-  if (!cleanOffer || cleanOffer <= 0) {
-    setError("Enter a valid offer price.");
-    return;
-  }
-
-  try {
-    setSubmitting(true);
-
-    let finalPickupName = cleanPickup;
+    const cleanCity = city.trim().toLowerCase();
+    const cleanPickup = pickupName.trim();
     let finalPickupLat = pickupLat ? Number(pickupLat) : null;
     let finalPickupLng = pickupLng ? Number(pickupLng) : null;
 
-    let finalDropoffName = cleanDropoff;
+    let finalDropoffName = dropoffName.trim();
     let finalDropoffLat = dropoffLat ? Number(dropoffLat) : null;
     let finalDropoffLng = dropoffLng ? Number(dropoffLng) : null;
 
-    // pickup fallback geocode
-    if (
-      (!Number.isFinite(finalPickupLat) || !Number.isFinite(finalPickupLng)) &&
-      finalPickupName
-    ) {
-      try {
-        const pickupGeo = await geocodeTextAddress(
-          `${finalPickupName}, ${cityLabel(cleanCity)}, Zimbabwe`
-        );
-        finalPickupName = pickupGeo.name || finalPickupName;
-        finalPickupLat = Number(pickupGeo.lat);
-        finalPickupLng = Number(pickupGeo.lng);
-      } catch (err) {
-        console.error("pickup geocode failed", err);
-      }
-    }
+    const cleanOffer = Number(offerPrice);
+    const cleanPeople = Number(people) || 1;
+    const cleanNotes = notes.trim();
 
-    // dropoff fallback geocode
-    if (
-      (!Number.isFinite(finalDropoffLat) || !Number.isFinite(finalDropoffLng)) &&
-      finalDropoffName
-    ) {
-      try {
-        const dropoffGeo = await geocodeTextAddress(
-          `${finalDropoffName}, ${cityLabel(cleanCity)}, Zimbabwe`
-        );
-        finalDropoffName = dropoffGeo.name || finalDropoffName;
-        finalDropoffLat = Number(dropoffGeo.lat);
-        finalDropoffLng = Number(dropoffGeo.lng);
-      } catch (err) {
-        console.error("dropoff geocode failed", err);
-      }
-    }
-
-    if (!Number.isFinite(finalPickupLat) || !Number.isFinite(finalPickupLng)) {
-      setError("Pickup location not found. Tap GPS or choose a pickup suggestion.");
-      setSubmitting(false);
+    if (!cleanPickup || !finalDropoffName || !cleanCity) {
+      setError("Enter pickup and destination.");
       return;
     }
 
-    if (!Number.isFinite(finalDropoffLat) || !Number.isFinite(finalDropoffLng)) {
-      setError("Destination not found. Choose a destination from Google suggestions.");
-      setSubmitting(false);
+    if (!cleanOffer || cleanOffer <= 0) {
+      setError("Enter a valid offer price.");
       return;
     }
 
-    const requestRef = push(ref(db, `rideRequests/${cleanCity}`));
-    const requestId = requestRef.key;
-    const now = Date.now();
+    // auto-geocode typed destination if user didn't tap Google suggestion
+    if (
+      finalDropoffName &&
+      (!Number.isFinite(finalDropoffLat) || !Number.isFinite(finalDropoffLng))
+    ) {
+      const foundDropoff = await geocodeTypedPlace(finalDropoffName);
 
-    const payload = {
-      riderId: user.uid,
-      riderName: profile.fullName || "Rider",
-      riderPhone: profile.phone || "",
-      pickupName: finalPickupName,
-      pickupLat: finalPickupLat,
-      pickupLng: finalPickupLng,
-      dropoffName: finalDropoffName,
-      dropoffLat: finalDropoffLat,
-      dropoffLng: finalDropoffLng,
-      offerPrice: cleanOffer,
-      people: cleanPeople,
-      notes: cleanNotes,
-      city: cleanCity,
-      status: "open",
-      createdAt: now,
-      expiresAt: now + 1000 * 60 * 10,
-    };
+   if (
+  finalDropoffName &&
+  (!Number.isFinite(finalDropoffLat) || !Number.isFinite(finalDropoffLng))
+) {
+  const foundDropoff = await geocodeTypedPlace(finalDropoffName);
 
-    await set(requestRef, payload);
+  if (foundDropoff) {
+    finalDropoffName = foundDropoff.name;
+    finalDropoffLat = foundDropoff.lat;
+    finalDropoffLng = foundDropoff.lng;
+
+    setDropoffName(foundDropoff.name);
+    setDropoffLat(String(foundDropoff.lat));
+    setDropoffLng(String(foundDropoff.lng));
+  } else {
+    // allow manual destination text even if Google doesn't know it
+    finalDropoffLat = null;
+    finalDropoffLng = null;
+  }
+   }
 
     try {
-      localStorage.setItem("nexride-last-place", cleanCity);
-      localStorage.setItem("nexride-last-request-id", requestId);
-    } catch {}
+      setSubmitting(true);
 
-    setSuccess("Ride request created successfully.");
+      const requestRef = push(ref(db, `rideRequests/${cleanCity}`));
+      const requestId = requestRef.key;
+      const now = Date.now();
 
-    onRequestCreated?.({
-      id: requestId,
-      ...payload,
-    });
-  } catch (err) {
-    console.error("request create failed", err);
-    setError(err?.message || "Failed to create ride request.");
-  } finally {
-    setSubmitting(false);
-  }
-};
+      const payload = {
+        riderId: user.uid,
+        riderName: profile.fullName || "Rider",
+        riderPhone: profile.phone || "",
+        pickupName: cleanPickup,
+        pickupLat: Number.isFinite(finalPickupLat) ? finalPickupLat : null,
+        pickupLng: Number.isFinite(finalPickupLng) ? finalPickupLng : null,
+        dropoffName: finalDropoffName,
+        dropoffLat: Number.isFinite(finalDropoffLat) ? finalDropoffLat : null,
+        dropoffLng: Number.isFinite(finalDropoffLng) ? finalDropoffLng : null,
+        offerPrice: cleanOffer,
+        people: cleanPeople,
+        notes: cleanNotes,
+        city: cleanCity,
+        status: "open",
+        createdAt: now,
+        expiresAt: now + 1000 * 60 * 10,
+      };
+
+      await set(requestRef, payload);
+
+      try {
+        localStorage.setItem("nexride-last-place", cleanCity);
+        localStorage.setItem("nexride-last-request-id", requestId);
+      } catch {}
+
+      setSuccess("Ride request created successfully.");
+
+      onRequestCreated?.({
+        id: requestId,
+        ...payload,
+      });
+    } catch (err) {
+      console.error(err);
+      setError("Failed to create ride request.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const suggestionBox = (items, type) =>
     items.length ? (
@@ -489,6 +511,8 @@ export default function RequestSheet({
                       value={dropoffName}
                       onChange={(e) => {
                         setDropoffName(e.target.value);
+                        setDropoffLat("");
+                        setDropoffLng("");
                         fetchSuggestions(e.target.value, "dropoff");
                       }}
                       placeholder="Type destination"
@@ -643,4 +667,4 @@ export default function RequestSheet({
       </form>
     </div>
   );
-    }
+}
