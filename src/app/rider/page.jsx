@@ -5,15 +5,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { get, onValue, ref, remove } from "firebase/database";
+import { get, onValue, ref, remove, set, update, push } from "firebase/database";
 import { auth, db } from "../../lib/firebase";
 
 import MobileShell from "../../components/ui/MobileShell";
 import FloatingTopBar from "../../components/ui/FloatingTopBar";
 import BottomSheet from "../../components/ui/BottomSheet";
-import RiderMap from "../../components/rider/RiderMap";
 import ActionCard from "../../components/ui/ActionCard";
-
+import RiderMap from "../../components/rider/RiderMap";
 import RequestSheet from "../../components/rider/RequestSheet";
 import WaitingSheet from "../../components/rider/WaitingSheet";
 import OffersSheet from "../../components/rider/OffersSheet";
@@ -21,7 +20,7 @@ import TripSheet from "../../components/rider/TripSheet";
 import CompletedSheet from "../../components/rider/CompletedSheet";
 
 function cityLabel(city) {
-  if (!city) return "Unknown";
+  if (!city) return "City";
   return city.charAt(0).toUpperCase() + city.slice(1);
 }
 
@@ -33,21 +32,27 @@ function getMode({ requestData, offers, tripData, completedTrip }) {
   return "request";
 }
 
+function offersList(data) {
+  return Object.entries(data || {}).map(([id, value]) => ({ id, ...value }));
+}
+
 export default function RiderPage() {
   const router = useRouter();
 
   const [authReady, setAuthReady] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(true);
-
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
+  const [appSettings, setAppSettings] = useState({});
   const [city, setCity] = useState("harare");
 
   const [requestId, setRequestId] = useState("");
   const [requestData, setRequestData] = useState(null);
-
   const [offers, setOffers] = useState([]);
+  const [viewCount, setViewCount] = useState(0);
+  const [viewers, setViewers] = useState([]);
 
+  const [nearbyDriversCount, setNearbyDriversCount] = useState(0);
   const [tripId, setTripId] = useState("");
   const [tripData, setTripData] = useState(null);
   const [completedTrip, setCompletedTrip] = useState(null);
@@ -55,17 +60,13 @@ export default function RiderPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  const mode = useMemo(() => getMode({ requestData, offers, tripData, completedTrip }), [requestData, offers, tripData, completedTrip]);
+
   const requestUnsubRef = useRef(null);
   const offersUnsubRef = useRef(null);
+  const viewsUnsubRef = useRef(null);
   const tripUnsubRef = useRef(null);
   const completedTripUnsubRef = useRef(null);
-
-  const mode = useMemo(
-    () => getMode({ requestData, offers, tripData, completedTrip }),
-    [requestData, offers, tripData, completedTrip]
-  );
-
-const [nearbyDriversCount, setNearbyDriversCount] = useState(0);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (currentUser) => {
@@ -82,49 +83,44 @@ const [nearbyDriversCount, setNearbyDriversCount] = useState(0);
         setLoadingProfile(true);
         setError("");
 
-        const snap = await get(ref(db, `profiles/${currentUser.uid}`));
-        const profileData = snap.val();
+        const [profileSnap, settingsSnap] = await Promise.all([
+          get(ref(db, `profiles/${currentUser.uid}`)),
+          get(ref(db, `appSettings/${currentUser.uid}`)),
+        ]);
 
-        if (!profileData) {
-          setError("Profile not found.");
-          return;
-        }
+        const profileData = profileSnap.val() || {};
+        const settingsData = settingsSnap.val() || {};
 
         if (profileData.role && profileData.role !== "rider") {
-          router.push("/driver");
+          router.push(profileData.role === "admin" ? "/admin" : "/driver");
           return;
         }
 
-        setProfile(profileData);
-
         const savedCity =
+          settingsData.city ||
           profileData.city ||
-          (typeof window !== "undefined"
-            ? localStorage.getItem("nexride-last-place")
-            : null) ||
+          (typeof window !== "undefined" ? localStorage.getItem("nexride-last-place") : null) ||
           "harare";
 
-        setCity(savedCity);
+        setProfile({ ...profileData, role: profileData.role || "rider" });
+        setAppSettings(settingsData);
+        setCity(String(savedCity).toLowerCase());
 
         try {
-          localStorage.setItem("nexride-last-place", savedCity);
+          localStorage.setItem("nexride-last-place", String(savedCity).toLowerCase());
+          if (settingsData.defaultPickup) localStorage.setItem("nexride-default-pickup", settingsData.defaultPickup);
+          if (settingsData.defaultDropoff) localStorage.setItem("nexride-default-dropoff", settingsData.defaultDropoff);
+          if (settingsData.preferredPayment) localStorage.setItem("nexride-preferred-payment", settingsData.preferredPayment);
+          if (settingsData.rideMode) localStorage.setItem("nexride-ride-mode", settingsData.rideMode);
         } catch {}
 
-        const savedRequestId =
-          typeof window !== "undefined"
-            ? localStorage.getItem("nexride-last-request-id") || ""
-            : "";
-
-        const savedTripId =
-          typeof window !== "undefined"
-            ? localStorage.getItem("nexride-active-trip-id") || ""
-            : "";
-
+        const savedRequestId = typeof window !== "undefined" ? localStorage.getItem("nexride-last-request-id") || "" : "";
+        const savedTripId = typeof window !== "undefined" ? localStorage.getItem("nexride-active-trip-id") || "" : "";
         if (savedRequestId) setRequestId(savedRequestId);
         if (savedTripId) setTripId(savedTripId);
       } catch (err) {
         console.error(err);
-        setError("Failed to load your profile.");
+        setError("Failed to load your rider profile.");
       } finally {
         setLoadingProfile(false);
       }
@@ -139,41 +135,39 @@ const [nearbyDriversCount, setNearbyDriversCount] = useState(0);
     try {
       requestUnsubRef.current?.();
       offersUnsubRef.current?.();
+      viewsUnsubRef.current?.();
     } catch {}
 
     const reqRef = ref(db, `rideRequests/${city}/${requestId}`);
     requestUnsubRef.current = onValue(reqRef, (snap) => {
       const data = snap.val();
       setRequestData(data || null);
+      if (data?.matchedTripId) setTripId(data.matchedTripId);
     });
 
-    const offersRef = ref(db, `rideOffers/${requestId}`);
-    offersUnsubRef.current = onValue(offersRef, (snap) => {
+    offersUnsubRef.current = onValue(ref(db, `rideOffers/${requestId}`), (snap) => {
+      setOffers(offersList(snap.val()).filter((offer) => offer.status !== "closed"));
+    });
+
+    viewsUnsubRef.current = onValue(ref(db, `rideViews/${requestId}`), async (snap) => {
       const data = snap.val() || {};
-      const arr = Object.entries(data).map(([id, value]) => ({
-        id,
-        ...value,
-      }));
-      setOffers(arr);
+      const list = Object.entries(data).map(([driverId, value]) => ({ driverId, ...value }));
+      setViewers(list);
+      setViewCount(list.length);
+
+      try {
+        await update(reqRef, { viewCount: list.length, offersCount: offers.length, updatedAt: Date.now() });
+      } catch {}
     });
 
     return () => {
       try {
         requestUnsubRef.current?.();
         offersUnsubRef.current?.();
+        viewsUnsubRef.current?.();
       } catch {}
     };
-  }, [city, requestId]);
-
-  useEffect(() => {
-    if (!requestData?.matchedTripId) return;
-
-    setTripId(requestData.matchedTripId);
-
-    try {
-      localStorage.setItem("nexride-active-trip-id", requestData.matchedTripId);
-    } catch {}
-  }, [requestData?.matchedTripId]);
+  }, [city, requestId, offers.length]);
 
   useEffect(() => {
     if (!tripId) return;
@@ -183,10 +177,8 @@ const [nearbyDriversCount, setNearbyDriversCount] = useState(0);
       completedTripUnsubRef.current?.();
     } catch {}
 
-    const activeRef = ref(db, `activeTrips/${tripId}`);
-    tripUnsubRef.current = onValue(activeRef, (snap) => {
+    tripUnsubRef.current = onValue(ref(db, `activeTrips/${tripId}`), (snap) => {
       const data = snap.val();
-
       if (data) {
         setTripData(data);
         setCompletedTrip(null);
@@ -194,11 +186,8 @@ const [nearbyDriversCount, setNearbyDriversCount] = useState(0);
       }
 
       setTripData(null);
-
-      const doneRef = ref(db, `completedTrips/${tripId}`);
-      completedTripUnsubRef.current = onValue(doneRef, (doneSnap) => {
-        const doneData = doneSnap.val();
-        setCompletedTrip(doneData || null);
+      completedTripUnsubRef.current = onValue(ref(db, `completedTrips/${tripId}`), (doneSnap) => {
+        setCompletedTrip(doneSnap.val() || null);
       });
     });
 
@@ -212,11 +201,13 @@ const [nearbyDriversCount, setNearbyDriversCount] = useState(0);
 
   const handleRequestCreated = (request) => {
     setError("");
-    setSuccess("");
+    setSuccess("Request posted. Drivers can view and negotiate now.");
     setCompletedTrip(null);
     setTripData(null);
     setTripId("");
     setOffers([]);
+    setViewers([]);
+    setViewCount(0);
     setRequestId(request.id);
     setRequestData(request);
     setCity(request.city || city);
@@ -229,21 +220,17 @@ const [nearbyDriversCount, setNearbyDriversCount] = useState(0);
   };
 
   const handleAcceptOffer = async (offer) => {
-    // Accept logic already handled inside OffersSheet parent previously,
-    // but now we keep it centralized here by routing to same state changes
-    // through the listener after Firebase updates.
-    // OffersSheet will call this with the offer; we do the write here.
     if (!user || !profile || !requestId || !requestData || !offer?.id) return;
 
     setError("");
     setSuccess("");
 
     try {
-      const { push, set, update } = await import("firebase/database");
       const tripRef = push(ref(db, "activeTrips"));
       const newTripId = tripRef.key;
       const now = Date.now();
       const otp = String(Math.floor(100000 + Math.random() * 900000));
+      const agreedPrice = Number(offer.proposedPrice || requestData.offerPrice || 0);
 
       const payload = {
         tripId: newTripId,
@@ -256,42 +243,33 @@ const [nearbyDriversCount, setNearbyDriversCount] = useState(0);
         driverId: offer.driverId,
         driverName: offer.driverName || "Driver",
         driverPhone: offer.driverPhone || "",
+        carName: offer.carName || "",
+        plateNumber: offer.plateNumber || "",
         pickupName: requestData.pickupName || "",
         pickupLat: requestData.pickupLat ?? null,
         pickupLng: requestData.pickupLng ?? null,
         dropoffName: requestData.dropoffName || "",
         dropoffLat: requestData.dropoffLat ?? null,
         dropoffLng: requestData.dropoffLng ?? null,
-        agreedPrice: Number(offer.proposedPrice || requestData.offerPrice || 0),
+        agreedPrice,
         people: Number(requestData.people || 1),
         notes: requestData.notes || "",
+        preferredPayment: requestData.preferredPayment || "cash",
+        rideMode: requestData.rideMode || "standard",
         otp,
         status: "accepted",
         createdAt: now,
-        driverLive: {
-          lat: null,
-          lng: null,
-          heading: null,
-          updatedAt: now,
-        },
+        updatedAt: now,
+        driverLive: { lat: null, lng: null, heading: null, updatedAt: now },
       };
 
       await set(tripRef, payload);
+      await update(ref(db, `rideOffers/${requestId}/${offer.id}`), { status: "accepted", acceptedAt: now, acceptedTripId: newTripId });
 
-      await update(ref(db, `rideOffers/${requestId}/${offer.id}`), {
-        status: "accepted",
-        acceptedAt: now,
-        acceptedTripId: newTripId,
-      });
-
-      const otherOffers = offers.filter((item) => item.id !== offer.id);
       await Promise.all(
-        otherOffers.map((item) =>
-          update(ref(db, `rideOffers/${requestId}/${item.id}`), {
-            status: "closed",
-            closedAt: now,
-          })
-        )
+        offers
+          .filter((item) => item.id !== offer.id)
+          .map((item) => update(ref(db, `rideOffers/${requestId}/${item.id}`), { status: "closed", closedAt: now }))
       );
 
       await update(ref(db, `rideRequests/${city}/${requestId}`), {
@@ -299,18 +277,19 @@ const [nearbyDriversCount, setNearbyDriversCount] = useState(0);
         matchedDriverId: offer.driverId,
         matchedTripId: newTripId,
         matchedAt: now,
+        agreedPrice,
+        updatedAt: now,
       });
 
       setTripId(newTripId);
       setTripData(payload);
-      setSuccess("Driver accepted successfully.");
-
+      setSuccess("Driver selected. Trip is now live.");
       try {
         localStorage.setItem("nexride-active-trip-id", newTripId);
       } catch {}
     } catch (err) {
       console.error(err);
-      setError("Failed to accept this offer.");
+      setError("Failed to accept this driver offer.");
     }
   };
 
@@ -321,13 +300,18 @@ const [nearbyDriversCount, setNearbyDriversCount] = useState(0);
     setSuccess("");
 
     try {
-      await remove(ref(db, `rideRequests/${city}/${requestId}`));
+      await Promise.all([
+        remove(ref(db, `rideRequests/${city}/${requestId}`)),
+        remove(ref(db, `rideOffers/${requestId}`)),
+        remove(ref(db, `rideViews/${requestId}`)),
+      ]);
 
       setRequestData(null);
       setOffers([]);
+      setViewers([]);
+      setViewCount(0);
       setRequestId("");
       setSuccess("Ride request cancelled.");
-
       try {
         localStorage.removeItem("nexride-last-request-id");
       } catch {}
@@ -337,19 +321,14 @@ const [nearbyDriversCount, setNearbyDriversCount] = useState(0);
     }
   };
 
-  const handleCancelTrip = () => {
-    setError("Trip cancellation flow not added yet.");
-  };
+  const handleCancelTrip = () => setError("Trip cancellation can be added next: cancel reason, driver alert, and admin log.");
 
   const handleContactDriver = () => {
     if (!tripData?.driverPhone) {
-      setError("Driver phone is not available.");
+      setError("Driver phone is not available yet.");
       return;
     }
-
-    if (typeof window !== "undefined") {
-      window.location.href = `tel:${tripData.driverPhone}`;
-    }
+    window.location.href = `tel:${tripData.driverPhone}`;
   };
 
   const handleRequestAgain = () => {
@@ -359,9 +338,10 @@ const [nearbyDriversCount, setNearbyDriversCount] = useState(0);
     setRequestId("");
     setRequestData(null);
     setOffers([]);
+    setViewers([]);
+    setViewCount(0);
     setError("");
     setSuccess("");
-
     try {
       localStorage.removeItem("nexride-active-trip-id");
       localStorage.removeItem("nexride-last-request-id");
@@ -381,22 +361,10 @@ const [nearbyDriversCount, setNearbyDriversCount] = useState(0);
   if (!authReady || loadingProfile) {
     return (
       <MobileShell>
-        <div
-          style={{
-            minHeight: "100vh",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 20,
-          }}
-        >
-          <ActionCard style={{ width: "100%", textAlign: "center" }}>
-            <div style={{ fontSize: 24, fontWeight: 1000 }}>
-              Loading rider app...
-            </div>
-            <div style={{ fontSize: 13, color: "#9fb3c8", marginTop: 8 }}>
-              Preparing your dashboard
-            </div>
+        <div className="nx-center-loader">
+          <ActionCard>
+            <h2 className="nx-sheet-title">Loading NEXRIDE...</h2>
+            <p className="nx-sheet-copy">Preparing your map-first rider flow.</p>
           </ActionCard>
         </div>
       </MobileShell>
@@ -405,79 +373,47 @@ const [nearbyDriversCount, setNearbyDriversCount] = useState(0);
 
   return (
     <MobileShell>
-<RiderMap
-  mode={mode}
-  city={city}
-  requestData={requestData}
-  tripData={tripData}
-  onDriversCountChange={setNearbyDriversCount}
-/>
+      <RiderMap
+        mode={mode}
+        city={city}
+        requestData={requestData}
+        tripData={tripData}
+        viewCount={viewCount}
+        offersCount={offers.length}
+        onDriversCountChange={setNearbyDriversCount}
+      />
 
       <FloatingTopBar
         title="NEXRIDE"
         subtitle={`${profile?.fullName || "Rider"} • ${cityLabel(city)}`}
-        right={
-          <button
-            onClick={handleLogout}
-            style={{
-              border: "1px solid rgba(255,255,255,0.12)",
-              background: "rgba(255,255,255,0.04)",
-              color: "#fff",
-              borderRadius: 14,
-              padding: "10px 14px",
-              fontWeight: 800,
-            }}
-          >
-            Logout
-          </button>
-        }
+        right={<button onClick={handleLogout} className="nx-topbar-btn">Logout</button>}
       />
 
-      <BottomSheet height="18vh">
+      <BottomSheet height={mode === "request" ? "32vh" : "22vh"}>
+        {error ? <div className="nx-alert-error">{error}</div> : null}
+        {success ? <div className="nx-alert-success">{success}</div> : null}
+
         {mode === "request" && (
-          <RequestSheet
-            user={user}
-            profile={profile}
-            initialCity={city}
-            onRequestCreated={handleRequestCreated}
-          />
+          <RequestSheet user={user} profile={profile} appSettings={appSettings} initialCity={city} onRequestCreated={handleRequestCreated} />
         )}
 
-{mode === "waiting" && (
-  <WaitingSheet
-    requestData={requestData}
-    driversNearby={nearbyDriversCount}
-    onCancel={handleCancelRequest}
-    onOpenOffers={() => {
-      if (offers.length > 0) setSuccess("Offers refreshed.");
-      else setError("No driver offers yet.");
-    }}
-  />
-)}
+        {mode === "waiting" && (
+          <WaitingSheet
+            requestData={requestData}
+            driversNearby={nearbyDriversCount}
+            viewCount={viewCount}
+            offersCount={offers.length}
+            onCancel={handleCancelRequest}
+            onOpenOffers={() => (offers.length > 0 ? setSuccess("Offers refreshed.") : setError("No offers yet. Drivers are still viewing your request."))}
+          />
+        )}
 
         {mode === "offers" && (
-          <OffersSheet
-            requestData={requestData}
-            offers={offers}
-            onAcceptOffer={handleAcceptOffer}
-            onCancelRequest={handleCancelRequest}
-          />
+          <OffersSheet requestData={requestData} offers={offers} viewCount={viewCount} onAcceptOffer={handleAcceptOffer} onCancelRequest={handleCancelRequest} />
         )}
 
-        {mode === "trip" && (
-          <TripSheet
-            tripData={tripData}
-            onCancelTrip={handleCancelTrip}
-            onContactDriver={handleContactDriver}
-          />
-        )}
-
-        {mode === "completed" && (
-          <CompletedSheet
-            completedTrip={completedTrip}
-            onRequestAgain={handleRequestAgain}
-          />
-        )}
+        {mode === "trip" && <TripSheet tripData={tripData} onCancelTrip={handleCancelTrip} onContactDriver={handleContactDriver} />}
+        {mode === "completed" && <CompletedSheet completedTrip={completedTrip} onRequestAgain={handleRequestAgain} />}
       </BottomSheet>
     </MobileShell>
   );

@@ -5,69 +5,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import {
-  get,
-  onValue,
-  push,
-  ref,
-  set,
-  update,
-} from "firebase/database";
+import { get, onValue, push, ref, set, update } from "firebase/database";
 import { auth, db } from "../../lib/firebase";
 
 import MobileShell from "../../components/ui/MobileShell";
 import FloatingTopBar from "../../components/ui/FloatingTopBar";
 import BottomSheet from "../../components/ui/BottomSheet";
-import DriverMap from "../../components/driver/DriverMap";
 import ActionCard from "../../components/ui/ActionCard";
-import DriverTripControls, {
-  pushDriverLivePosition,
-} from "../../components/driver/DriverTripControls";
+import PremiumButton from "../../components/ui/PremiumButton";
+import DriverMap from "../../components/driver/DriverMap";
+import DriverTripControls from "../../components/driver/DriverTripControls";
 
 function cityLabel(city) {
-  if (!city) return "Unknown";
+  if (!city) return "City";
   return city.charAt(0).toUpperCase() + city.slice(1);
-}
-
-function requestStatusStyle(status) {
-  const base = {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "5px 9px",
-    borderRadius: 999,
-    fontSize: 10,
-    fontWeight: 900,
-    letterSpacing: 0.35,
-    textTransform: "uppercase",
-    border: "1px solid transparent",
-    whiteSpace: "nowrap",
-  };
-
-  if (status === "open") {
-    return {
-      ...base,
-      color: "#6d28d9",
-      background: "rgba(124,58,237,0.10)",
-      border: "1px solid rgba(124,58,237,0.12)",
-    };
-  }
-
-  if (status === "matched" || status === "accepted") {
-    return {
-      ...base,
-      color: "#0f7a4e",
-      background: "rgba(31,214,122,0.10)",
-      border: "1px solid rgba(31,214,122,0.16)",
-    };
-  }
-
-  return {
-    ...base,
-    color: "#5f557c",
-    background: "rgba(255,255,255,0.58)",
-    border: "1px solid rgba(124,58,237,0.08)",
-  };
 }
 
 function getMode({ online, activeTrip, completedTrip }) {
@@ -77,23 +28,21 @@ function getMode({ online, activeTrip, completedTrip }) {
   return "queue";
 }
 
+function money(value) {
+  return Number(value || 0).toFixed(2);
+}
+
 export default function DriverPage() {
   const router = useRouter();
 
   const [authReady, setAuthReady] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(true);
-
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
-
-  const [city, setCity] = useState("");
-  const cityKey = useMemo(
-    () => String(city || "").trim().toLowerCase(),
-    [city]
-  );
+  const [city, setCity] = useState("harare");
+  const cityKey = useMemo(() => String(city || "harare").trim().toLowerCase(), [city]);
 
   const [online, setOnline] = useState(false);
-
   const [requests, setRequests] = useState([]);
   const [activeTrip, setActiveTrip] = useState(null);
   const [completedTrip, setCompletedTrip] = useState(null);
@@ -101,30 +50,22 @@ export default function DriverPage() {
   const [negotiatingFor, setNegotiatingFor] = useState(null);
   const [proposedPrice, setProposedPrice] = useState("");
   const [proposedMessage, setProposedMessage] = useState("");
-
-  const [statusText, setStatusText] = useState("Loading driver app...");
-  const [savingOnline, setSavingOnline] = useState(false);
   const [workingRequestId, setWorkingRequestId] = useState("");
-  const [sendingNegotiation, setSendingNegotiation] = useState(false);
-
+  const [savingOnline, setSavingOnline] = useState(false);
+  const [sendingOffer, setSendingOffer] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
   const requestsUnsubRef = useRef(null);
   const activeTripUnsubRef = useRef(null);
-  const onlineStateUnsubRef = useRef(null);
-  const locationWatchRef = useRef(null);
+  const onlineUnsubRef = useRef(null);
 
-  const visibleRequests = useMemo(() => {
-    return requests
-      .filter((r) => r.status === "open")
-      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  }, [requests]);
-
-  const mode = useMemo(
-    () => getMode({ online, activeTrip, completedTrip }),
-    [online, activeTrip, completedTrip]
+  const visibleRequests = useMemo(
+    () => requests.filter((item) => (item.status || "open") === "open" && item.riderId !== user?.uid).sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0)),
+    [requests, user?.uid]
   );
+
+  const mode = useMemo(() => getMode({ online, activeTrip, completedTrip }), [online, activeTrip, completedTrip]);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (currentUser) => {
@@ -141,40 +82,25 @@ export default function DriverPage() {
         setLoadingProfile(true);
         setError("");
 
-        const snap = await get(ref(db, `profiles/${currentUser.uid}`));
-        const profileData = snap.val();
+        const [profileSnap, settingsSnap] = await Promise.all([
+          get(ref(db, `profiles/${currentUser.uid}`)),
+          get(ref(db, `appSettings/${currentUser.uid}`)),
+        ]);
 
-        if (!profileData) {
-          setError("Driver profile not found.");
+        const profileData = profileSnap.val() || {};
+        const settingsData = settingsSnap.val() || {};
+
+        if (profileData.role && profileData.role !== "driver") {
+          router.push(profileData.role === "admin" ? "/admin" : "/rider");
           return;
         }
 
-        const userSnap = await get(ref(db, `users/${currentUser.uid}`));
-        const userData = userSnap.val();
-        const actualRole = profileData.role || userData?.role || "rider";
-
-        if (actualRole !== "driver") {
-          router.push("/rider");
-          return;
-        }
-
-        setProfile({
-          ...profileData,
-          role: actualRole,
-        });
-
-        const savedCity =
-          profileData.city ||
-          (typeof window !== "undefined"
-            ? localStorage.getItem("nexride-last-place")
-            : null) ||
-          "harare";
-
-        setCity(savedCity);
-        setStatusText("Driver dashboard ready");
+        const savedCity = settingsData.city || profileData.city || "harare";
+        setProfile({ ...profileData, role: "driver" });
+        setCity(String(savedCity).toLowerCase());
 
         try {
-          localStorage.setItem("nexride-last-place", savedCity);
+          localStorage.setItem("nexride-last-place", String(savedCity).toLowerCase());
         } catch {}
       } catch (err) {
         console.error(err);
@@ -191,17 +117,32 @@ export default function DriverPage() {
     if (!user || !cityKey) return;
 
     try {
+      onlineUnsubRef.current?.();
+    } catch {}
+
+    onlineUnsubRef.current = onValue(ref(db, `driversOnline/${cityKey}/${user.uid}`), (snap) => {
+      const data = snap.val();
+      setOnline(!!data?.online);
+    });
+
+    return () => {
+      try {
+        onlineUnsubRef.current?.();
+      } catch {}
+    };
+  }, [user, cityKey]);
+
+  useEffect(() => {
+    if (!cityKey || !user) return;
+
+    try {
       requestsUnsubRef.current?.();
     } catch {}
 
-    const requestsRef = ref(db, `rideRequests/${cityKey}`);
-    requestsUnsubRef.current = onValue(requestsRef, (snap) => {
+    requestsUnsubRef.current = onValue(ref(db, `rideRequests/${cityKey}`), (snap) => {
       const data = snap.val() || {};
-      const arr = Object.entries(data).map(([id, value]) => ({
-        id,
-        ...value,
-      }));
-      setRequests(arr);
+      const list = Object.entries(data).map(([id, value]) => ({ id, ...value }));
+      setRequests(list);
     });
 
     return () => {
@@ -218,24 +159,14 @@ export default function DriverPage() {
       activeTripUnsubRef.current?.();
     } catch {}
 
-    const activeTripsRef = ref(db, "activeTrips");
-    activeTripUnsubRef.current = onValue(activeTripsRef, (snap) => {
+    activeTripUnsubRef.current = onValue(ref(db, "activeTrips"), (snap) => {
       const data = snap.val() || {};
-      const arr = Object.entries(data).map(([id, value]) => ({
-        id,
-        ...value,
-      }));
-
-      const mine = arr.find((trip) => trip.driverId === user.uid) || null;
+      const mine = Object.entries(data)
+        .map(([id, value]) => ({ id, ...value }))
+        .find((trip) => trip.driverId === user.uid) || null;
 
       setActiveTrip(mine);
-
-      if (mine) {
-        setCompletedTrip(null);
-        try {
-          localStorage.setItem("nexride-driver-active-trip-id", mine.tripId);
-        } catch {}
-      }
+      if (mine) setCompletedTrip(null);
     });
 
     return () => {
@@ -245,147 +176,74 @@ export default function DriverPage() {
     };
   }, [user]);
 
-  // keep online state synced from firebase
   useEffect(() => {
-    if (!user || !cityKey) return;
+    if (!user || !profile || !online || !cityKey) return;
+    if (visibleRequests.length === 0) return;
 
-    try {
-      onlineStateUnsubRef.current?.();
-    } catch {}
-
-    const onlineRef = ref(db, `driversOnline/${cityKey}/${user.uid}`);
-    onlineStateUnsubRef.current = onValue(onlineRef, (snap) => {
-      const data = snap.val();
-      setOnline(!!data?.online);
-    });
-
-    return () => {
+    const now = Date.now();
+    visibleRequests.forEach(async (requestItem) => {
       try {
-        onlineStateUnsubRef.current?.();
-      } catch {}
-    };
-  }, [user, cityKey]);
-
-  useEffect(() => {
-    if (!user || !cityKey) return;
-
-    const driverNode = ref(db, `driversOnline/${cityKey}/${user.uid}`);
-
-    const handleUnload = () => {
-      try {
-        update(driverNode, {
-          online: false,
-          lastSeen: Date.now(),
+        await set(ref(db, `rideViews/${requestItem.id}/${user.uid}`), {
+          driverId: user.uid,
+          driverName: profile.fullName || "Driver",
+          driverPhone: profile.phone || "",
+          carName: profile.carName || "",
+          plateNumber: profile.plateNumber || "",
+          city: cityKey,
+          viewedAt: now,
         });
       } catch {}
-    };
+    });
+  }, [visibleRequests, user, profile, online, cityKey]);
 
-    window.addEventListener("beforeunload", handleUnload);
-
-    return () => {
-      window.removeEventListener("beforeunload", handleUnload);
-    };
-  }, [user, cityKey]);
-
-  // backup live gps watcher
   useEffect(() => {
     if (!user || !cityKey || !online) return;
-    if (!navigator.geolocation) return;
+    if (typeof navigator === "undefined" || !navigator.geolocation) return;
 
-    const driverOnlineRef = ref(db, `driversOnline/${cityKey}/${user.uid}`);
+    const onlineRef = ref(db, `driversOnline/${cityKey}/${user.uid}`);
 
-    const handlePosition = async (pos) => {
-      const lat = pos.coords.latitude;
-      const lng = pos.coords.longitude;
-      const heading =
-        typeof pos.coords.heading === "number" ? pos.coords.heading : null;
-
+    const pushLocation = async (pos) => {
       try {
-        await update(driverOnlineRef, {
-          lat,
-          lng,
-          heading,
-          online: true,
+        await update(onlineRef, {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          heading: typeof pos.coords.heading === "number" ? pos.coords.heading : null,
           lastSeen: Date.now(),
         });
-
-        if (activeTrip?.tripId) {
-          await pushDriverLivePosition(activeTrip.tripId, lat, lng, heading);
-        }
-      } catch (err) {
-        console.error("driver live location update failed", err);
-      }
-    };
-
-    const handleError = (err) => {
-      console.error("driver geolocation error", err);
-    };
-
-    navigator.geolocation.getCurrentPosition(handlePosition, handleError, {
-      enableHighAccuracy: true,
-      timeout: 15000,
-      maximumAge: 0,
-    });
-
-    locationWatchRef.current = navigator.geolocation.watchPosition(
-      handlePosition,
-      handleError,
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 3000,
-      }
-    );
-
-    return () => {
-      try {
-        if (locationWatchRef.current) {
-          navigator.geolocation.clearWatch(locationWatchRef.current);
-        }
       } catch {}
     };
-  }, [user, cityKey, online, activeTrip?.tripId]);
+
+    const watchId = navigator.geolocation.watchPosition(pushLocation, () => {}, {
+      enableHighAccuracy: true,
+      maximumAge: 30000,
+      timeout: 12000,
+    });
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [user, cityKey, online]);
 
   const toggleOnline = async () => {
     if (!user || !profile || !cityKey) return;
 
+    setSavingOnline(true);
     setError("");
     setSuccess("");
 
     try {
-      setSavingOnline(true);
-
-      const node = ref(db, `driversOnline/${cityKey}/${user.uid}`);
-
-      if (!online) {
-        await set(node, {
-          driverId: user.uid,
-          name: profile.fullName || "Driver",
-          phone: profile.phone || "",
-          vehicleType: profile.vehicleType || "car",
-          carName: profile.carName || "",
-          plateNumber: profile.plateNumber || "",
-          city: cityKey,
-          lat: null,
-          lng: null,
-          heading: null,
-          online: true,
-          lastSeen: Date.now(),
-        });
-
-        setOnline(true);
-        setStatusText("You are now online");
-        setSuccess("Driver is online.");
-      } else {
-        await update(node, {
-          online: false,
-          lastSeen: Date.now(),
-        });
-
-        setOnline(false);
-        setStatusText("You are offline");
-        setSuccess("Driver is offline.");
-      }
+      const nextOnline = !online;
+      await update(ref(db, `driversOnline/${cityKey}/${user.uid}`), {
+        driverId: user.uid,
+        name: profile.fullName || "Driver",
+        phone: profile.phone || "",
+        carName: profile.carName || "",
+        plateNumber: profile.plateNumber || "",
+        city: cityKey,
+        online: nextOnline,
+        updatedAt: Date.now(),
+        lastSeen: Date.now(),
+      });
+      setOnline(nextOnline);
+      setSuccess(nextOnline ? "You are online. Requests will appear on your map." : "You are offline.");
     } catch (err) {
       console.error(err);
       setError("Failed to update online status.");
@@ -394,108 +252,66 @@ export default function DriverPage() {
     }
   };
 
-  const acceptRequest = async (requestItem) => {
-    if (!user || !profile || !cityKey || !requestItem?.id) return;
+  const createTripFromRequest = async (requestItem, agreedPrice) => {
+    const tripRef = push(ref(db, "activeTrips"));
+    const tripId = tripRef.key;
+    const now = Date.now();
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
 
+    const payload = {
+      tripId,
+      requestId: requestItem.id,
+      city: cityKey,
+      riderId: requestItem.riderId,
+      riderName: requestItem.riderName || "Rider",
+      riderPhone: requestItem.riderPhone || "",
+      driverId: user.uid,
+      driverName: profile.fullName || "Driver",
+      driverPhone: profile.phone || "",
+      carName: profile.carName || "",
+      plateNumber: profile.plateNumber || "",
+      pickupName: requestItem.pickupName || "",
+      pickupLat: requestItem.pickupLat ?? null,
+      pickupLng: requestItem.pickupLng ?? null,
+      dropoffName: requestItem.dropoffName || "",
+      dropoffLat: requestItem.dropoffLat ?? null,
+      dropoffLng: requestItem.dropoffLng ?? null,
+      agreedPrice: Number(agreedPrice || requestItem.offerPrice || 0),
+      people: Number(requestItem.people || 1),
+      notes: requestItem.notes || "",
+      preferredPayment: requestItem.preferredPayment || "cash",
+      rideMode: requestItem.rideMode || "standard",
+      otp,
+      status: "accepted",
+      createdAt: now,
+      updatedAt: now,
+      driverLive: { lat: null, lng: null, heading: null, updatedAt: now },
+    };
+
+    await set(tripRef, payload);
+    await update(ref(db, `rideRequests/${cityKey}/${requestItem.id}`), {
+      status: "matched",
+      matchedDriverId: user.uid,
+      matchedTripId: tripId,
+      agreedPrice: Number(agreedPrice || requestItem.offerPrice || 0),
+      matchedAt: now,
+      updatedAt: now,
+    });
+
+    setActiveTrip(payload);
+    return payload;
+  };
+
+  const acceptRequest = async (requestItem) => {
+    if (!user || !profile || !requestItem?.id) return;
+
+    setWorkingRequestId(requestItem.id);
     setError("");
     setSuccess("");
-    setWorkingRequestId(requestItem.id);
 
     try {
-      const requestPath = ref(db, `rideRequests/${cityKey}/${requestItem.id}`);
-      const snap = await get(requestPath);
-      const freshRequest = snap.val();
-
-      if (!freshRequest || freshRequest.status !== "open") {
-        setError("This request is no longer available.");
-        setWorkingRequestId("");
-        return;
-      }
-
-      const tripRef = push(ref(db, "activeTrips"));
-      const tripId = tripRef.key;
-      const now = Date.now();
-      const otp = String(Math.floor(100000 + Math.random() * 900000));
-
-      const payload = {
-        tripId,
-        requestId: requestItem.id,
-        city: cityKey,
-        riderId: freshRequest.riderId,
-        riderName: freshRequest.riderName || "Rider",
-        riderPhone: freshRequest.riderPhone || "",
-        driverId: user.uid,
-        driverName: profile.fullName || "Driver",
-        driverPhone: profile.phone || "",
-        pickupName: freshRequest.pickupName || "",
-        pickupLat: freshRequest.pickupLat ?? null,
-        pickupLng: freshRequest.pickupLng ?? null,
-        dropoffName: freshRequest.dropoffName || "",
-        dropoffLat: freshRequest.dropoffLat ?? null,
-        dropoffLng: freshRequest.dropoffLng ?? null,
-        agreedPrice: Number(freshRequest.offerPrice || 0),
-        people: Number(freshRequest.people || 1),
-        notes: freshRequest.notes || "",
-        otp,
-        status: "accepted",
-        createdAt: now,
-        driverLive: {
-          lat: null,
-          lng: null,
-          heading: null,
-          updatedAt: now,
-        },
-      };
-
-      await set(tripRef, payload);
-
-      try {
-        if (navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(
-            async (pos) => {
-              const lat = pos.coords.latitude;
-              const lng = pos.coords.longitude;
-              const heading =
-                typeof pos.coords.heading === "number"
-                  ? pos.coords.heading
-                  : null;
-
-              await pushDriverLivePosition(tripId, lat, lng, heading);
-              await update(ref(db, `driversOnline/${cityKey}/${user.uid}`), {
-                lat,
-                lng,
-                heading,
-                online: true,
-                lastSeen: Date.now(),
-              });
-            },
-            (err) => console.error("initial trip location push failed", err),
-            {
-              enableHighAccuracy: true,
-              timeout: 10000,
-              maximumAge: 0,
-            }
-          );
-        }
-      } catch (err) {
-        console.error("initial driver location set failed", err);
-      }
-
-      await update(requestPath, {
-        status: "matched",
-        matchedDriverId: user.uid,
-        matchedTripId: tripId,
-        matchedAt: now,
-      });
-
-      setActiveTrip(payload);
-      setCompletedTrip(null);
-      setSuccess("Ride accepted successfully.");
-      setStatusText("Trip accepted");
-
-      try {
-        localStorage.setItem("nexride-driver-active-trip-id", tripId);
-      } catch {}
+      await createTripFromRequest(requestItem, requestItem.offerPrice);
+      setSuccess("Ride accepted. Head to pickup and verify OTP.");
     } catch (err) {
       console.error(err);
       setError("Failed to accept request.");
@@ -515,74 +331,60 @@ export default function DriverPage() {
   const sendNegotiation = async () => {
     if (!user || !profile || !negotiatingFor?.id) return;
 
-    setError("");
-    setSuccess("");
-
-    const price = Number(proposedPrice);
-
-    if (!price || price <= 0) {
-      setError("Enter a valid price.");
+    const priceNumber = Number(proposedPrice);
+    if (!Number.isFinite(priceNumber) || priceNumber <= 0) {
+      setError("Enter a valid counter price.");
       return;
     }
 
+    setSendingOffer(true);
+    setError("");
+    setSuccess("");
+
     try {
-      setSendingNegotiation(true);
-
       const offerRef = push(ref(db, `rideOffers/${negotiatingFor.id}`));
-
       await set(offerRef, {
+        id: offerRef.key,
+        requestId: negotiatingFor.id,
+        city: cityKey,
         driverId: user.uid,
         driverName: profile.fullName || "Driver",
         driverPhone: profile.phone || "",
-        proposedPrice: price,
+        carName: profile.carName || "",
+        plateNumber: profile.plateNumber || "",
+        proposedPrice: priceNumber,
+        originalPrice: Number(negotiatingFor.offerPrice || 0),
         message: proposedMessage.trim(),
         status: "pending",
         createdAt: Date.now(),
       });
-
-      setSuccess("Negotiation sent.");
+      await update(ref(db, `rideRequests/${cityKey}/${negotiatingFor.id}`), {
+        offersCount: Number(negotiatingFor.offersCount || 0) + 1,
+        updatedAt: Date.now(),
+      });
+      setSuccess("Offer sent to rider.");
       setNegotiatingFor(null);
       setProposedPrice("");
       setProposedMessage("");
     } catch (err) {
       console.error(err);
-      setError("Failed to send negotiation.");
+      setError("Failed to send offer.");
     } finally {
-      setSendingNegotiation(false);
+      setSendingOffer(false);
     }
   };
 
-  const handleTripUpdated = (updatedTrip) => {
-    setActiveTrip(updatedTrip);
-    setStatusText(`Trip ${updatedTrip.status}`);
-  };
-
-  const handleTripCompleted = (doneTrip) => {
-    setCompletedTrip(doneTrip);
+  const handleTripUpdated = (trip) => setActiveTrip(trip);
+  const handleTripCompleted = (trip) => {
+    setCompletedTrip(trip);
     setActiveTrip(null);
-    setStatusText("Trip completed");
-
-    try {
-      localStorage.removeItem("nexride-driver-active-trip-id");
-    } catch {}
-  };
-
-  const resetCompletedState = () => {
-    setCompletedTrip(null);
-    setSuccess("");
-    setError("");
   };
 
   const handleLogout = async () => {
     try {
       if (user && cityKey) {
-        const node = ref(db, `driversOnline/${cityKey}/${user.uid}`);
-        await update(node, {
-          online: false,
-          lastSeen: Date.now(),
-        });
+        await update(ref(db, `driversOnline/${cityKey}/${user.uid}`), { online: false, lastSeen: Date.now() });
       }
-
       await signOut(auth);
       router.push("/login");
     } catch (err) {
@@ -594,34 +396,10 @@ export default function DriverPage() {
   if (!authReady || loadingProfile) {
     return (
       <MobileShell>
-        <div
-          style={{
-            minHeight: "100vh",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 20,
-          }}
-        >
-          <ActionCard
-            style={{
-              width: "100%",
-              textAlign: "center",
-              padding: 16,
-              borderRadius: 22,
-              background:
-                "linear-gradient(180deg, rgba(255,255,255,0.60), rgba(247,241,255,0.88))",
-              border: "1px solid rgba(124,58,237,0.10)",
-              boxShadow: "0 10px 30px rgba(41,19,78,0.12)",
-              backdropFilter: "blur(16px)",
-            }}
-          >
-            <div style={{ fontSize: 20, fontWeight: 1000, color: "#23153d" }}>
-              Loading driver app...
-            </div>
-            <div style={{ fontSize: 12, color: "#615682", marginTop: 6 }}>
-              Preparing your dashboard
-            </div>
+        <div className="nx-center-loader">
+          <ActionCard>
+            <h2 className="nx-sheet-title">Loading driver map...</h2>
+            <p className="nx-sheet-copy">Preparing the NEXRIDE request marketplace.</p>
           </ActionCard>
         </div>
       </MobileShell>
@@ -630,554 +408,106 @@ export default function DriverPage() {
 
   return (
     <MobileShell>
-      <DriverMap
-        mode={mode}
-        city={cityKey}
-        activeTrip={activeTrip}
-        requests={visibleRequests}
-      />
+      <DriverMap mode={mode} city={cityKey} activeTrip={activeTrip} requests={visibleRequests} />
 
       <FloatingTopBar
         title="NEXRIDE DRIVER"
-        subtitle={`${profile?.fullName || "Driver"} • ${cityLabel(city)}`}
-        right={
-          <button
-            onClick={handleLogout}
-            style={{
-              border: "1px solid rgba(124,58,237,0.10)",
-              background: "rgba(255,255,255,0.58)",
-              color: "#5b21b6",
-              borderRadius: 14,
-              padding: "10px 12px",
-              fontWeight: 900,
-              fontSize: 12,
-            }}
-          >
-            Logout
-          </button>
-        }
+        subtitle={`${profile?.fullName || "Driver"} • ${cityLabel(cityKey)}`}
+        right={<button onClick={handleLogout} className="nx-topbar-btn">Logout</button>}
       />
 
-      <BottomSheet height="12vh" padding={10}>
-        <div style={{ display: "grid", gap: 8 }}>
-          {error ? (
-            <div
-              style={{
-                padding: 10,
-                borderRadius: 12,
-                background: "rgba(255, 91, 91, 0.08)",
-                border: "1px solid rgba(255, 91, 91, 0.18)",
-                color: "#a61b3c",
-                fontSize: 12,
-                fontWeight: 700,
-              }}
-            >
-              {error}
-            </div>
-          ) : null}
+      <BottomSheet height={mode === "queue" ? "28vh" : "18vh"}>
+        {error ? <div className="nx-alert-error">{error}</div> : null}
+        {success ? <div className="nx-alert-success">{success}</div> : null}
 
-          {success ? (
-            <div
-              style={{
-                padding: 10,
-                borderRadius: 12,
-                background: "rgba(31,214,122,0.10)",
-                border: "1px solid rgba(31,214,122,0.18)",
-                color: "#0f7a4e",
-                fontSize: 12,
-                fontWeight: 700,
-              }}
-            >
-              {success}
-            </div>
-          ) : null}
-
-          {(mode === "offline" || mode === "queue") && (
-            <ActionCard
-              style={{
-                padding: 12,
-                borderRadius: 22,
-                background:
-                  "linear-gradient(180deg, rgba(255,255,255,0.60), rgba(247,241,255,0.88))",
-                border: "1px solid rgba(124,58,237,0.10)",
-                boxShadow: "0 10px 30px rgba(41,19,78,0.12)",
-                backdropFilter: "blur(16px)",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 10,
-                  alignItems: "center",
-                }}
-              >
-                <div style={{ minWidth: 0 }}>
-                  <div
-                    style={{
-                      fontSize: 15,
-                      fontWeight: 1000,
-                      color: "#23153d",
-                      lineHeight: 1.1,
-                    }}
-                  >
-                    {profile?.carName || "Your car"}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: "#74698f",
-                      marginTop: 3,
-                    }}
-                  >
-                    {profile?.plateNumber || "No plate"} • {cityLabel(city)}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: "#615682",
-                      marginTop: 6,
-                    }}
-                  >
-                          {statusText}
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    padding: "6px 10px",
-                    borderRadius: 999,
-                    fontSize: 10,
-                    fontWeight: 900,
-                    color: online ? "#0f7a4e" : "#5f557c",
-                    background: online
-                      ? "rgba(31,214,122,0.10)"
-                      : "rgba(255,255,255,0.58)",
-                    border: online
-                      ? "1px solid rgba(31,214,122,0.16)"
-                      : "1px solid rgba(124,58,237,0.08)",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {online ? "ONLINE" : "OFFLINE"}
-                </div>
+        {(mode === "offline" || mode === "queue") && (
+          <div className="nx-stack">
+            <ActionCard className="nx-driver-command">
+              <div>
+                <div className="nx-eyebrow">Driver status</div>
+                <h2 className="nx-sheet-title">{online ? "You are online" : "Go online to receive rides"}</h2>
+                <p className="nx-sheet-copy">{profile?.carName || "Your car"} {profile?.plateNumber ? `• ${profile.plateNumber}` : ""}</p>
               </div>
-
-              <div style={{ marginTop: 10 }}>
-                <button
-                  onClick={toggleOnline}
-                  disabled={savingOnline}
-                  style={{
-                    width: "100%",
-                    border: "none",
-                    borderRadius: 18,
-                    padding: "13px 14px",
-                    fontSize: 13,
-                    fontWeight: 1000,
-                    color: online ? "#5b21b6" : "#fff",
-                    background: online
-                      ? "rgba(255,255,255,0.72)"
-                      : "linear-gradient(90deg,#8b5cf6,#7c3aed,#6366f1)",
-                    boxShadow: online
-                      ? "none"
-                      : "0 14px 30px rgba(124,58,237,0.24)",
-                  }}
-                >
-                  {savingOnline
-                    ? "Saving..."
-                    : online
-                    ? "Go offline"
-                    : "Go online"}
-                </button>
-              </div>
+              <div className={online ? "nx-online-pill on" : "nx-online-pill"}>{online ? "ONLINE" : "OFFLINE"}</div>
             </ActionCard>
-          )}
 
-          {mode === "offline" && (
-            <ActionCard
-              style={{
-                padding: 12,
-                borderRadius: 20,
-                background:
-                  "linear-gradient(180deg, rgba(255,255,255,0.54), rgba(246,240,255,0.84))",
-                border: "1px solid rgba(124,58,237,0.08)",
-              }}
-            >
-              <div
-                style={{
-                  fontWeight: 1000,
-                  marginBottom: 6,
-                  fontSize: 14,
-                  color: "#23153d",
-                }}
-              >
-                You are offline
-              </div>
-              <div style={{ fontSize: 12, color: "#615682", lineHeight: 1.5 }}>
-                Go online first to start receiving rider requests in your city.
-              </div>
-            </ActionCard>
-          )}
+            <PremiumButton onClick={toggleOnline} disabled={savingOnline} variant={online ? "secondary" : "primary"}>
+              {savingOnline ? "Saving..." : online ? "Go offline" : "Go online"}
+            </PremiumButton>
+          </div>
+        )}
 
-          {mode === "queue" && (
-            <>
-              <div style={{ padding: "0 2px" }}>
-                <div
-                  style={{
-                    fontSize: 16,
-                    fontWeight: 1000,
-                    color: "#23153d",
-                  }}
-                >
-                  Nearby requests
-                </div>
-                <div
-                  style={{
-                    fontSize: 11,
-                    color: "#74698f",
-                    marginTop: 3,
-                  }}
-                >
-                  Open ride requests in {cityLabel(city)}
-                </div>
+        {mode === "queue" && (
+          <div className="nx-stack nx-driver-list">
+            <div className="nx-sheet-head compact">
+              <div>
+                <div className="nx-eyebrow">inDrive request marketplace</div>
+                <h2 className="nx-sheet-title">Nearby requests</h2>
               </div>
+              <div className="nx-price-badge">{visibleRequests.length}</div>
+            </div>
 
-              {visibleRequests.length === 0 ? (
-                <ActionCard
-                  style={{
-                    padding: 12,
-                    borderRadius: 20,
-                    background:
-                      "linear-gradient(180deg, rgba(255,255,255,0.54), rgba(246,240,255,0.84))",
-                    border: "1px solid rgba(124,58,237,0.08)",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontWeight: 1000,
-                      marginBottom: 6,
-                      fontSize: 14,
-                      color: "#23153d",
-                    }}
-                  >
-                    No open requests
+            {visibleRequests.length === 0 ? (
+              <ActionCard>
+                <h3 className="nx-card-title">No open rides yet</h3>
+                <p className="nx-sheet-copy">Stay online. New requests will appear here and on your map.</p>
+              </ActionCard>
+            ) : (
+              visibleRequests.map((item) => (
+                <ActionCard key={item.id} className="nx-driver-request-card">
+                  <div className="nx-offer-top">
+                    <div className="nx-driver-avatar">${Number(item.offerPrice || 0).toFixed(0)}</div>
+                    <div>
+                      <h3 className="nx-card-title">{item.pickupName || "Pickup"} → {item.dropoffName || "Destination"}</h3>
+                      <p className="nx-sheet-copy">{item.riderName || "Rider"} • {item.people || 1} passenger{Number(item.people || 1) === 1 ? "" : "s"}</p>
+                    </div>
+                    <div className="nx-status-pill">viewed</div>
                   </div>
-                  <div style={{ fontSize: 12, color: "#615682", lineHeight: 1.5 }}>
-                    Waiting for riders to request trips in your city.
-                  </div>
+                  {item.notes ? <p className="nx-offer-message">{item.notes}</p> : null}
+
+                  {negotiatingFor?.id === item.id ? (
+                    <div className="nx-stack">
+                      <div className="nx-field-grid two">
+                        <label className="nx-field">
+                          <span>Your price</span>
+                          <input className="nx-input" type="number" min="1" step="0.50" value={proposedPrice} onChange={(e) => setProposedPrice(e.target.value)} />
+                        </label>
+                        <label className="nx-field">
+                          <span>Original</span>
+                          <input className="nx-input" type="text" readOnly value={`$${money(item.offerPrice)}`} />
+                        </label>
+                      </div>
+                      <textarea className="nx-input" rows={2} placeholder="Message to rider" value={proposedMessage} onChange={(e) => setProposedMessage(e.target.value)} />
+                      <div className="nx-button-grid two">
+                        <PremiumButton onClick={sendNegotiation} disabled={sendingOffer}>{sendingOffer ? "Sending..." : "Send offer"}</PremiumButton>
+                        <PremiumButton variant="secondary" onClick={() => setNegotiatingFor(null)}>Cancel</PremiumButton>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="nx-button-grid two">
+                      <PremiumButton onClick={() => acceptRequest(item)} disabled={workingRequestId === item.id}>{workingRequestId === item.id ? "Accepting..." : `Accept $${money(item.offerPrice)}`}</PremiumButton>
+                      <PremiumButton variant="secondary" onClick={() => openNegotiate(item)}>Counter offer</PremiumButton>
+                    </div>
+                  )}
                 </ActionCard>
-              ) : (
-                visibleRequests.map((item) => (
-                  <ActionCard
-                    key={item.id}
-                    style={{
-                      padding: 12,
-                      borderRadius: 22,
-                      background:
-                        "linear-gradient(180deg, rgba(255,255,255,0.64), rgba(247,241,255,0.90))",
-                      border: "1px solid rgba(124,58,237,0.10)",
-                      boxShadow: "0 10px 30px rgba(41,19,78,0.10)",
-                      backdropFilter: "blur(16px)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: 10,
-                        alignItems: "flex-start",
-                      }}
-                    >
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div
-                          style={{
-                            fontSize: 15,
-                            fontWeight: 1000,
-                            color: "#23153d",
-                            lineHeight: 1.25,
-                          }}
-                        >
-                          {item.pickupName} → {item.dropoffName}
-                        </div>
+              ))
+            )}
+          </div>
+        )}
 
-                        <div
-                          style={{
-                            fontSize: 12,
-                            color: "#615682",
-                            marginTop: 6,
-                          }}
-                        >
-                          Rider: {item.riderName || "Rider"}
-                        </div>
+        {mode === "trip" && <DriverTripControls trip={activeTrip} onTripUpdated={handleTripUpdated} onTripCompleted={handleTripCompleted} />}
 
-                        <div
-                          style={{
-                            fontSize: 12,
-                            color: "#615682",
-                            marginTop: 4,
-                          }}
-                        >
-                          Offer: ${Number(item.offerPrice || 0).toFixed(2)} •
-                          {" "}People: {item.people || 1}
-                        </div>
-
-                        {item.notes ? (
-                          <div
-                            style={{
-                              fontSize: 12,
-                              color: "#6b5f86",
-                              marginTop: 6,
-                              lineHeight: 1.5,
-                            }}
-                          >
-                            {item.notes}
-                          </div>
-                        ) : null}
-                      </div>
-
-                      <div style={requestStatusStyle(item.status || "open")}>
-                        {item.status || "open"}
-                      </div>
-                    </div>
-
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: negotiatingFor?.id === item.id ? "1fr" : "1fr 1fr",
-                        gap: 8,
-                        marginTop: 12,
-                      }}
-                    >
-                      <button
-                        onClick={() => acceptRequest(item)}
-                        disabled={workingRequestId === item.id}
-                        style={{
-                          border: "none",
-                          borderRadius: 16,
-                          padding: "13px 14px",
-                          fontSize: 13,
-                          fontWeight: 1000,
-                          color: "#fff",
-                          background: "linear-gradient(90deg,#06b6d4,#2563eb)",
-                          boxShadow: "0 10px 24px rgba(37,99,235,0.18)",
-                        }}
-                      >
-                        {workingRequestId === item.id ? "Accepting..." : "Accept"}
-                      </button>
-
-                      {negotiatingFor?.id !== item.id ? (
-                        <button
-                          onClick={() => openNegotiate(item)}
-                          style={{
-                            border: "1px solid rgba(124,58,237,0.10)",
-                            borderRadius: 16,
-                            padding: "13px 14px",
-                            fontSize: 13,
-                            fontWeight: 1000,
-                            color: "#5b21b6",
-                            background: "rgba(255,255,255,0.68)",
-                          }}
-                        >
-                          Negotiate
-                        </button>
-                      ) : null}
-                    </div>
-
-                    {negotiatingFor?.id === item.id ? (
-                      <div
-                        style={{
-                          marginTop: 10,
-                          display: "grid",
-                          gap: 8,
-                        }}
-                      >
-                        <input
-                          className="nx-input"
-                          type="number"
-                          placeholder="Your proposed price"
-                          value={proposedPrice}
-                          onChange={(e) => setProposedPrice(e.target.value)}
-                        />
-
-                        <textarea
-                          className="nx-input"
-                          placeholder="Optional message"
-                          value={proposedMessage}
-                          onChange={(e) => setProposedMessage(e.target.value)}
-                          rows={3}
-                          style={{ resize: "none" }}
-                        />
-
-                        <div
-                          style={{
-                            display: "grid",
-                            gridTemplateColumns: "1fr 1fr",
-                            gap: 8,
-                          }}
-                        >
-                          <button
-                            onClick={sendNegotiation}
-                            disabled={sendingNegotiation}
-                            style={{
-                              border: "none",
-                              borderRadius: 16,
-                              padding: "12px 14px",
-                              fontSize: 13,
-                              fontWeight: 1000,
-                              color: "#fff",
-                              background:
-                                "linear-gradient(90deg,#8b5cf6,#7c3aed,#6366f1)",
-                              boxShadow: "0 10px 24px rgba(124,58,237,0.20)",
-                            }}
-                          >
-                            {sendingNegotiation ? "Sending..." : "Send"}
-                          </button>
-
-                          <button
-                            onClick={() => {
-                              setNegotiatingFor(null);
-                              setProposedPrice("");
-                              setProposedMessage("");
-                            }}
-                            style={{
-                              border: "1px solid rgba(124,58,237,0.10)",
-                              borderRadius: 16,
-                              padding: "12px 14px",
-                              fontSize: 13,
-                              fontWeight: 1000,
-                              color: "#5b21b6",
-                              background: "rgba(255,255,255,0.68)",
-                            }}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    ) : null}
-                  </ActionCard>
-                ))
-              )}
-            </>
-          )}
-
-          {mode === "trip" && (
-            <DriverTripControls
-              trip={activeTrip}
-              onTripUpdated={handleTripUpdated}
-              onTripCompleted={handleTripCompleted}
-            />
-          )}
-
-          {mode === "completed" && (
-            <ActionCard
-              style={{
-                padding: 14,
-                borderRadius: 22,
-                background:
-                  "linear-gradient(180deg, rgba(255,255,255,0.64), rgba(247,241,255,0.90))",
-                border: "1px solid rgba(124,58,237,0.10)",
-                boxShadow: "0 10px 30px rgba(41,19,78,0.10)",
-                backdropFilter: "blur(16px)",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 10,
-                  alignItems: "flex-start",
-                }}
-              >
-                <div>
-                  <div
-                    style={{
-                      fontSize: 18,
-                      fontWeight: 1000,
-                      color: "#23153d",
-                    }}
-                  >
-                    Trip completed
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: "#615682",
-                      marginTop: 4,
-                    }}
-                  >
-                    Your last trip has been completed successfully.
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    padding: "6px 10px",
-                    borderRadius: 999,
-                    fontSize: 10,
-                    fontWeight: 900,
-                    color: "#0f7a4e",
-                    background: "rgba(31,214,122,0.10)",
-                    border: "1px solid rgba(31,214,122,0.16)",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  COMPLETED
-                </div>
-              </div>
-
-              <div
-                style={{
-                  marginTop: 12,
-                  fontSize: 14,
-                  fontWeight: 1000,
-                  color: "#23153d",
-                  lineHeight: 1.3,
-                }}
-              >
-                {completedTrip?.pickupName} → {completedTrip?.dropoffName}
-              </div>
-
-              <div
-                style={{
-                  marginTop: 6,
-                  fontSize: 12,
-                  color: "#615682",
-                }}
-              >
-                Rider: {completedTrip?.riderName || "Rider"}
-              </div>
-
-              <div
-                style={{
-                  marginTop: 4,
-                  fontSize: 12,
-                  color: "#615682",
-                }}
-              >
-                Fare: ${Number(completedTrip?.agreedPrice || 0).toFixed(2)}
-              </div>
-
-              <button
-                onClick={resetCompletedState}
-                style={{
-                  marginTop: 12,
-                  width: "100%",
-                  border: "none",
-                  borderRadius: 18,
-                  padding: "13px 14px",
-                  fontSize: 13,
-                  fontWeight: 1000,
-                  color: "#fff",
-                  background: "linear-gradient(90deg,#06b6d4,#2563eb)",
-                  boxShadow: "0 10px 24px rgba(37,99,235,0.18)",
-                }}
-              >
-                Back to queue
-              </button>
+        {mode === "completed" && (
+          <div className="nx-stack">
+            <ActionCard className="nx-complete-card">
+              <div className="nx-complete-icon">✓</div>
+              <h2 className="nx-sheet-title">Trip completed</h2>
+              <p className="nx-sheet-copy">You completed the ride. Go online again to receive more requests.</p>
             </ActionCard>
-          )}
-        </div>
+            <PremiumButton onClick={() => setCompletedTrip(null)}>Back to requests</PremiumButton>
+          </div>
+        )}
       </BottomSheet>
     </MobileShell>
   );
-     }
+}

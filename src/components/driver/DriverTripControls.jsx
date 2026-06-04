@@ -6,163 +6,86 @@ import { useMemo, useState } from "react";
 import { ref, remove, set, update } from "firebase/database";
 import { db } from "../../lib/firebase";
 import ActionCard from "../ui/ActionCard";
+import PremiumButton from "../ui/PremiumButton";
 
-function statusPill(status) {
-  const base = {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "5px 9px",
-    borderRadius: 999,
-    fontSize: 10,
-    fontWeight: 900,
-    letterSpacing: 0.35,
-    textTransform: "uppercase",
-    border: "1px solid transparent",
-    whiteSpace: "nowrap",
-  };
-
-  if (status === "accepted") {
-    return {
-      ...base,
-      color: "#6d28d9",
-      background: "rgba(124,58,237,0.10)",
-      border: "1px solid rgba(124,58,237,0.12)",
-    };
-  }
-
-  if (status === "arrived") {
-    return {
-      ...base,
-      color: "#a16207",
-      background: "rgba(245,158,11,0.10)",
-      border: "1px solid rgba(245,158,11,0.16)",
-    };
-  }
-
-  if (status === "picked" || status === "enroute") {
-    return {
-      ...base,
-      color: "#0f7a4e",
-      background: "rgba(31,214,122,0.10)",
-      border: "1px solid rgba(31,214,122,0.16)",
-    };
-  }
-
-  if (status === "completed") {
-    return {
-      ...base,
-      color: "#4338ca",
-      background: "rgba(99,102,241,0.10)",
-      border: "1px solid rgba(99,102,241,0.16)",
-    };
-  }
-
-  return {
-    ...base,
-    color: "#5f557c",
-    background: "rgba(255,255,255,0.58)",
-    border: "1px solid rgba(124,58,237,0.08)",
-  };
+function money(value) {
+  return Number(value || 0).toFixed(2);
 }
 
-function statusText(status) {
-  if (status === "accepted") return "Head to pickup and verify rider OTP when they board.";
-  if (status === "arrived") return "You have arrived at pickup. Wait for rider and verify OTP.";
-  if (status === "picked") return "Trip has started. You can now continue the route.";
-  if (status === "enroute") return "You are on the route to the destination.";
-  if (status === "completed") return "Trip completed successfully.";
-  return "Manage this trip from pickup to completion.";
+function copy(status) {
+  if (status === "accepted") return "Head to pickup";
+  if (status === "arrived") return "Verify rider OTP";
+  if (status === "picked") return "Trip started";
+  if (status === "enroute") return "Driving to destination";
+  return "Manage trip";
 }
 
-export default function DriverTripControls({
-  trip,
-  onTripUpdated,
-  onTripCompleted,
-}) {
+export async function pushDriverLivePosition(tripId, { lat, lng, heading }) {
+  if (!tripId) return;
+  await update(ref(db, `activeTrips/${tripId}/driverLive`), {
+    lat: lat ?? null,
+    lng: lng ?? null,
+    heading: heading ?? null,
+    updatedAt: Date.now(),
+  });
+}
+
+export default function DriverTripControls({ trip, onTripUpdated, onTripCompleted }) {
   const [otpInput, setOtpInput] = useState("");
   const [loadingAction, setLoadingAction] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const livePath = useMemo(() => {
-    if (!trip?.tripId) return null;
-    return `activeTrips/${trip.tripId}/driverLive`;
-  }, [trip]);
+  const canVerifyOtp = useMemo(() => trip?.status === "accepted" || trip?.status === "arrived", [trip?.status]);
 
-  const canVerifyOtp = useMemo(() => {
-    return trip?.status === "accepted" || trip?.status === "arrived";
-  }, [trip]);
+  if (!trip) {
+    return (
+      <ActionCard>
+        <h3 className="nx-card-title">No active trip</h3>
+        <p className="nx-sheet-copy">Accept a rider request to start the Uber-style trip flow.</p>
+      </ActionCard>
+    );
+  }
 
-  const setTripStatus = async (nextStatus) => {
-    if (!trip?.tripId) return;
-
+  const updateStatus = async (nextStatus) => {
     setError("");
     setSuccess("");
     setLoadingAction(nextStatus);
-
     try {
-      await update(ref(db, `activeTrips/${trip.tripId}`), {
-        status: nextStatus,
-        updatedAt: Date.now(),
-      });
-
-      if (onTripUpdated) {
-        onTripUpdated({
-          ...trip,
-          status: nextStatus,
-          updatedAt: Date.now(),
-        });
-      }
-
-      setSuccess(`Trip marked as ${nextStatus}.`);
+      const payload = { status: nextStatus, updatedAt: Date.now() };
+      if (nextStatus === "arrived") payload.arrivedAt = Date.now();
+      if (nextStatus === "enroute") payload.enrouteAt = Date.now();
+      await update(ref(db, `activeTrips/${trip.tripId}`), payload);
+      onTripUpdated?.({ ...trip, ...payload });
+      setSuccess(`Trip marked: ${nextStatus}`);
     } catch (err) {
       console.error(err);
-      setError(`Failed to mark trip as ${nextStatus}.`);
+      setError("Failed to update trip.");
     } finally {
       setLoadingAction("");
     }
   };
 
   const verifyOtp = async () => {
-    if (!trip?.tripId) return;
+    const entered = otpInput.trim();
+    if (!entered) {
+      setError("Enter the rider OTP first.");
+      return;
+    }
+    if (entered !== String(trip.otp || "").trim()) {
+      setError("Wrong OTP. Ask rider to show the code again.");
+      return;
+    }
 
+    setLoadingAction("otp");
     setError("");
     setSuccess("");
-
-    const entered = otpInput.trim();
-    const realOtp = String(trip?.otp || "").trim();
-
-    if (!entered) {
-      setError("Enter OTP first.");
-      return;
-    }
-
-    if (entered !== realOtp) {
-      setError("Incorrect OTP.");
-      return;
-    }
-
-    setLoadingAction("verify-otp");
-
     try {
-      await update(ref(db, `activeTrips/${trip.tripId}`), {
-        status: "picked",
-        pickedAt: Date.now(),
-        updatedAt: Date.now(),
-      });
-
-      if (onTripUpdated) {
-        onTripUpdated({
-          ...trip,
-          status: "picked",
-          pickedAt: Date.now(),
-          updatedAt: Date.now(),
-        });
-      }
-
-      setSuccess("OTP verified. Trip started.");
+      const payload = { status: "picked", pickedAt: Date.now(), updatedAt: Date.now() };
+      await update(ref(db, `activeTrips/${trip.tripId}`), payload);
+      onTripUpdated?.({ ...trip, ...payload });
       setOtpInput("");
+      setSuccess("OTP verified. Trip started.");
     } catch (err) {
       console.error(err);
       setError("Failed to verify OTP.");
@@ -172,28 +95,14 @@ export default function DriverTripControls({
   };
 
   const completeTrip = async () => {
-    if (!trip?.tripId) return;
-
+    setLoadingAction("complete");
     setError("");
     setSuccess("");
-    setLoadingAction("complete");
-
     try {
-      const completedPayload = {
-        ...trip,
-        status: "completed",
-        completedAt: Date.now(),
-        updatedAt: Date.now(),
-      };
-
-      await set(ref(db, `completedTrips/${trip.tripId}`), completedPayload);
+      const completed = { ...trip, status: "completed", completedAt: Date.now(), updatedAt: Date.now() };
+      await set(ref(db, `completedTrips/${trip.tripId}`), completed);
       await remove(ref(db, `activeTrips/${trip.tripId}`));
-
-      if (onTripCompleted) {
-        onTripCompleted(completedPayload);
-      }
-
-      setSuccess("Trip completed successfully.");
+      onTripCompleted?.(completed);
     } catch (err) {
       console.error(err);
       setError("Failed to complete trip.");
@@ -202,289 +111,56 @@ export default function DriverTripControls({
     }
   };
 
-  const updateDriverLocation = async ({ lat, lng, heading }) => {
-    if (!livePath) return;
-
-    try {
-      await update(ref(db, livePath), {
-        lat: lat ?? null,
-        lng: lng ?? null,
-        heading: heading ?? null,
-        updatedAt: Date.now(),
-      });
-    } catch (err) {
-      console.error("driver live update failed", err);
-    }
-  };
-
-  if (!trip) {
-    return (
-      <ActionCard
-        style={{
-          padding: 12,
-          borderRadius: 20,
-          background:
-            "linear-gradient(180deg, rgba(255,255,255,0.58), rgba(247,241,255,0.86))",
-          border: "1px solid rgba(124,58,237,0.10)",
-          boxShadow: "0 10px 30px rgba(41,19,78,0.12)",
-          backdropFilter: "blur(16px)",
-        }}
-      >
-        <div
-          style={{
-            fontWeight: 1000,
-            fontSize: 13,
-            color: "#23153d",
-            marginBottom: 5,
-          }}
-        >
-          No active trip
-        </div>
-        <div
-          style={{
-            fontSize: 12,
-            color: "#615682",
-            lineHeight: 1.45,
-          }}
-        >
-          Accept a ride request to start managing a trip.
-        </div>
-      </ActionCard>
-    );
-  }
+  const navigateHref = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(trip.dropoffName || "")}&travelmode=driving`;
 
   return (
-    <ActionCard
-      style={{
-        padding: 12,
-        borderRadius: 22,
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.60), rgba(247,241,255,0.88))",
-        border: "1px solid rgba(124,58,237,0.10)",
-        boxShadow: "0 10px 30px rgba(41,19,78,0.12)",
-        backdropFilter: "blur(16px)",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 10,
-          alignItems: "flex-start",
-          marginBottom: 10,
-        }}
-      >
-        <div>
-          <div
-            style={{
-              fontSize: 15,
-              fontWeight: 1000,
-              color: "#23153d",
-              lineHeight: 1.1,
-            }}
-          >
-            Trip controls
+    <div className="nx-stack">
+      {error ? <div className="nx-alert-error">{error}</div> : null}
+      {success ? <div className="nx-alert-success">{success}</div> : null}
+
+      <ActionCard className="nx-driver-card">
+        <div className="nx-offer-top">
+          <div className="nx-driver-avatar">OTP</div>
+          <div>
+            <h3 className="nx-card-title">{copy(trip.status)}</h3>
+            <p className="nx-sheet-copy">{trip.riderName || "Rider"} • ${money(trip.agreedPrice)} • {trip.people || 1} passenger</p>
           </div>
-          <div
-            style={{
-              fontSize: 12,
-              color: "#615682",
-              marginTop: 4,
-              lineHeight: 1.45,
-            }}
-          >
-            {statusText(trip.status || "accepted")}
+          <div className="nx-status-pill">{trip.status || "accepted"}</div>
+        </div>
+
+        <div className="nx-route-mini compact">
+          <div className="nx-route-mini-row"><span className="nx-dot nx-dot-pickup" />{trip.pickupName || "Pickup"}</div>
+          <div className="nx-route-mini-row"><span className="nx-dot nx-dot-destination" />{trip.dropoffName || "Destination"}</div>
+        </div>
+      </ActionCard>
+
+      {canVerifyOtp ? (
+        <ActionCard>
+          <div className="nx-field-grid two">
+            <label className="nx-field">
+              <span>Rider OTP</span>
+              <input className="nx-input" value={otpInput} onChange={(e) => setOtpInput(e.target.value)} placeholder="Enter 6 digits" />
+            </label>
+            <label className="nx-field">
+              <span>Expected</span>
+              <input className="nx-input" readOnly value="Ask rider" />
+            </label>
           </div>
-        </div>
+          <div className="nx-button-grid two" style={{ marginTop: 10 }}>
+            <PremiumButton onClick={() => updateStatus("arrived")} disabled={loadingAction === "arrived"}>I arrived</PremiumButton>
+            <PremiumButton variant="secondary" onClick={verifyOtp} disabled={loadingAction === "otp"}>Verify OTP</PremiumButton>
+          </div>
+        </ActionCard>
+      ) : null}
 
-        <div style={statusPill(trip.status || "accepted")}>
-          {trip.status || "accepted"}
-        </div>
+      <div className="nx-button-grid two">
+        <a className="nx-btn nx-btn-secondary" href={navigateHref} target="_blank" rel="noreferrer">Navigate</a>
+        {trip.status === "picked" ? (
+          <PremiumButton onClick={() => updateStatus("enroute")} disabled={loadingAction === "enroute"}>Start route</PremiumButton>
+        ) : (
+          <PremiumButton onClick={completeTrip} disabled={loadingAction === "complete"}>Complete trip</PremiumButton>
+        )}
       </div>
-
-      <div
-        style={{
-          display: "grid",
-          gap: 8,
-          padding: 10,
-          borderRadius: 18,
-          background: "rgba(255,255,255,0.58)",
-          border: "1px solid rgba(124,58,237,0.08)",
-        }}
-      >
-        <div
-          style={{
-            fontSize: 13,
-            fontWeight: 1000,
-            color: "#23153d",
-            lineHeight: 1.3,
-          }}
-        >
-          {trip.pickupName} → {trip.dropoffName}
-        </div>
-
-        <div
-          style={{
-            fontSize: 11,
-            color: "#74698f",
-          }}
-        >
-          Rider: {trip.riderName || "Rider"}
-        </div>
-
-        <div
-          style={{
-            fontSize: 11,
-            color: "#615682",
-          }}
-        >
-          Fare: ${Number(trip.agreedPrice || 0).toFixed(2)}
-        </div>
-      </div>
-
-      {(error || success) && (
-        <div style={{ marginTop: 10 }}>
-          {error ? (
-            <div
-              style={{
-                padding: 10,
-                borderRadius: 12,
-                background: "rgba(255, 91, 91, 0.08)",
-                border: "1px solid rgba(255, 91, 91, 0.18)",
-                color: "#a61b3c",
-                fontSize: 12,
-                fontWeight: 700,
-              }}
-            >
-              {error}
-            </div>
-          ) : null}
-
-          {success ? (
-            <div
-              style={{
-                padding: 10,
-                borderRadius: 12,
-                background: "rgba(31,214,122,0.10)",
-                border: "1px solid rgba(31,214,122,0.18)",
-                color: "#0f7a4e",
-                fontSize: 12,
-                fontWeight: 700,
-              }}
-            >
-              {success}
-            </div>
-          ) : null}
-        </div>
-      )}
-
-      {canVerifyOtp && (
-        <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
-          <input
-            className="nx-input"
-            type="text"
-            placeholder="Enter rider OTP"
-            value={otpInput}
-            onChange={(e) => setOtpInput(e.target.value)}
-          />
-
-          <button
-            onClick={verifyOtp}
-            disabled={loadingAction === "verify-otp"}
-            style={{
-              width: "100%",
-              border: "none",
-              borderRadius: 16,
-              padding: "13px 14px",
-              fontSize: 13,
-              fontWeight: 1000,
-              color: "#fff",
-              background: "linear-gradient(90deg,#7c3aed,#8b5cf6,#a855f7)",
-              boxShadow: "0 10px 22px rgba(124,58,237,0.18)",
-            }}
-          >
-            {loadingAction === "verify-otp" ? "Verifying..." : "Verify OTP"}
-          </button>
-        </div>
-      )}
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 8,
-          marginTop: 10,
-        }}
-      >
-        <button
-          onClick={() => setTripStatus("arrived")}
-          disabled={loadingAction === "arrived" || trip.status === "completed"}
-          style={{
-            width: "100%",
-            border: "1px solid rgba(124,58,237,0.10)",
-            borderRadius: 16,
-            padding: "12px 14px",
-            fontSize: 13,
-            fontWeight: 1000,
-            color: "#5b21b6",
-            background: "rgba(255,255,255,0.58)",
-          }}
-        >
-          {loadingAction === "arrived" ? "Saving..." : "Mark arrived"}
-        </button>
-
-        <button
-          onClick={() => setTripStatus("enroute")}
-          disabled={loadingAction === "enroute" || trip.status === "completed"}
-          style={{
-            width: "100%",
-            border: "1px solid rgba(124,58,237,0.10)",
-            borderRadius: 16,
-            padding: "12px 14px",
-            fontSize: 13,
-            fontWeight: 1000,
-            color: "#5b21b6",
-            background: "rgba(255,255,255,0.58)",
-          }}
-        >
-          {loadingAction === "enroute" ? "Saving..." : "Start route"}
-        </button>
-      </div>
-
-      <div style={{ marginTop: 8 }}>
-        <button
-          onClick={completeTrip}
-          disabled={loadingAction === "complete"}
-          style={{
-            width: "100%",
-            border: "none",
-            borderRadius: 16,
-            padding: "13px 14px",
-            fontSize: 13,
-            fontWeight: 1000,
-            color: "#fff",
-            background: "linear-gradient(90deg,#7c3aed,#8b5cf6,#a855f7)",
-            boxShadow: "0 10px 22px rgba(124,58,237,0.18)",
-          }}
-        >
-          {loadingAction === "complete" ? "Completing..." : "Complete trip"}
-        </button>
-      </div>
-    </ActionCard>
+    </div>
   );
 }
-
-export async function pushDriverLivePosition(tripId, lat, lng, heading = null) {
-  if (!tripId) return;
-
-  try {
-    await update(ref(db, `activeTrips/${tripId}/driverLive`), {
-      lat: lat ?? null,
-      lng: lng ?? null,
-      heading: heading ?? null,
-      updatedAt: Date.now(),
-    });
-  } catch (err) {
-    console.error("pushDriverLivePosition error", err);
-  }
-      }
