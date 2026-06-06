@@ -101,12 +101,12 @@ select option { background: #071421; color: #fff; }
   box-shadow: 0 18px 40px rgba(0,102,255,0.36), inset 0 1px 0 rgba(255,255,255,0.38);
   display: grid; place-items: center;
 }
-.nx-brand-mark span, .nx-brand-mark::after {
-  content: "";
-  width: 28px; height: 8px; border-radius: 999px;
-  background: rgba(255,255,255,0.96);
-  box-shadow: 0 10px 0 rgba(255,255,255,0.48);
-  transform: skewX(-18deg);
+.nx-brand-mark img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  border-radius: inherit;
 }
 .nx-brand-text {
   font-size: 20px; font-weight: 1000; letter-spacing: 0.2px;
@@ -118,7 +118,7 @@ select option { background: #071421; color: #fff; }
 }
 .nx-brand-subtitle { color: var(--soft); font-size: 11px; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
 .nx-brand-small .nx-brand-mark { width: 42px; height: 42px; border-radius: 15px; }
-.nx-brand-small .nx-brand-mark span, .nx-brand-small .nx-brand-mark::after { width: 22px; height: 6px; box-shadow: 0 8px 0 rgba(255,255,255,0.48); }
+
 .nx-brand-small .nx-brand-text { font-size: 16px; }
 .nx-brand-small .nx-brand-subtitle { max-width: 210px; }
 
@@ -283,4 +283,109 @@ select option { background: #071421; color: #fff; }
   .nx-map-route-card { bottom: 38vh; }
   .nx-live-card { grid-template-columns: 1fr; text-align: center; }
   .nx-live-radar { margin: 0 auto; }
+}
+
+/* Google Maps live route upgrade */
+.nx-google-map-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  background: #06101f;
+}
+.nx-google-map-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  filter: saturate(1.18) contrast(1.02);
+}
+.nx-google-map-layer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 28%, transparent 0%, rgba(2, 8, 20, 0.10) 55%, rgba(2, 8, 20, 0.46) 100%),
+    linear-gradient(180deg, rgba(2,8,20,0.30), transparent 28%, rgba(2,8,20,0.44));
+}
+.nx-google-map-loading,
+.nx-google-map-warning {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  top: 180px;
+  z-index: 3;
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  border-radius: 22px;
+  background: rgba(3, 13, 30, 0.76);
+  border: 1px solid rgba(255,255,255,0.14);
+  backdrop-filter: blur(18px);
+  color: #fff;
+  box-shadow: 0 18px 50px rgba(0,0,0,0.26);
+}
+.nx-google-map-loading span,
+.nx-google-map-warning span {
+  color: var(--soft);
+  font-size: 12px;
+  font-weight: 800;
+}
+.nx-map-open-link,
+.nx-request-metrics a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  min-height: 34px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  color: #e9fbff;
+  font-size: 11px;
+  font-weight: 1000;
+  background: linear-gradient(120deg, rgba(0,212,255,0.20), rgba(0,102,255,0.20));
+  border: 1px solid rgba(0,212,255,0.25);
+  box-shadow: 0 10px 24px rgba(0,102,255,0.16);
+}
+.nx-request-metrics {
+  margin: 10px 0;
+}
+.nx-route-preview-card {
+  border-color: rgba(0,212,255,0.22);
+  background: linear-gradient(150deg, rgba(0,102,255,0.12), rgba(255,255,255,0.06));
+}
+
+/* NEXRIDE driver verification upgrade */
+.nx-driver-verification-box {
+  display: grid;
+  gap: 10px;
+  padding: 13px;
+  border-radius: 22px;
+  background: linear-gradient(150deg, rgba(0,102,255,0.12), rgba(255,255,255,0.055));
+  border: 1px solid rgba(0,212,255,0.20);
+}
+.nx-file-field {
+  display: grid;
+  gap: 7px;
+  min-height: 88px;
+  padding: 12px;
+  border-radius: 18px;
+  background: rgba(255,255,255,0.065);
+  border: 1px dashed rgba(0,212,255,0.28);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 1000;
+}
+.nx-file-field input {
+  width: 100%;
+  font-size: 11px;
+  color: var(--soft2);
+}
+.nx-file-field small {
+  color: var(--soft);
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

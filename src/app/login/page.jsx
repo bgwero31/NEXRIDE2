@@ -62,7 +62,7 @@ export default function LoginPage() {
           ))}
         </div>
 
-        <p className="nx-auth-copy">A blue-black premium ride app with Uber-style tracking and inDrive-style fare negotiation.</p>
+        <p className="nx-auth-copy">A blue-black premium NEXRIDE experience with live tracking, smart fare offers, and trusted local drivers.</p>
 
         <form onSubmit={handleLogin} className="nx-stack">
           <label className="nx-field">

@@ -7,6 +7,8 @@ import { useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { get, onValue, ref, remove, set, update, push } from "firebase/database";
 import { auth, db } from "../../lib/firebase";
+import { googleMapsDirectionsUrl } from "../../lib/googleMaps";
+import { nexrideNotificationTypes, queueNexrideEvent } from "../../lib/nexrideNotifications";
 
 import MobileShell from "../../components/ui/MobileShell";
 import FloatingTopBar from "../../components/ui/FloatingTopBar";
@@ -199,6 +201,29 @@ export default function RiderPage() {
     };
   }, [tripId]);
 
+  useEffect(() => {
+    if (!user || !tripId || !tripData) return;
+    if (!["accepted", "arrived"].includes(tripData.status)) return;
+    if (typeof navigator === "undefined" || !navigator.geolocation) return;
+
+    const watchId = navigator.geolocation.watchPosition(
+      async (pos) => {
+        try {
+          await update(ref(db, `activeTrips/${tripId}/riderLive`), {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            heading: typeof pos.coords.heading === "number" ? pos.coords.heading : null,
+            updatedAt: Date.now(),
+          });
+        } catch {}
+      },
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 15000, timeout: 12000 }
+    );
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [tripData, tripId, user]);
+
   const handleRequestCreated = (request) => {
     setError("");
     setSuccess("Request posted. Drivers can view and negotiate now.");
@@ -251,6 +276,12 @@ export default function RiderPage() {
         dropoffName: requestData.dropoffName || "",
         dropoffLat: requestData.dropoffLat ?? null,
         dropoffLng: requestData.dropoffLng ?? null,
+        distanceText: requestData.distanceText || "",
+        distanceMeters: requestData.distanceMeters || null,
+        durationText: requestData.durationText || "",
+        durationSeconds: requestData.durationSeconds || null,
+        routeSource: requestData.routeSource || "manual",
+        mapsUrl: requestData.mapsUrl || googleMapsDirectionsUrl({ origin: requestData.pickupName || "", destination: requestData.dropoffName || "", city }),
         agreedPrice,
         people: Number(requestData.people || 1),
         notes: requestData.notes || "",
@@ -264,6 +295,15 @@ export default function RiderPage() {
       };
 
       await set(tripRef, payload);
+      await queueNexrideEvent({
+        type: nexrideNotificationTypes.OFFER_ACCEPTED,
+        city,
+        targetUid: offer.driverId,
+        title: "Your offer was accepted",
+        message: `${profile.fullName || "The rider"} selected your NEXRIDE offer. Head to pickup.`,
+        url: "/driver",
+        data: { tripId: newTripId, requestId, offerId: offer.id },
+      });
       await update(ref(db, `rideOffers/${requestId}/${offer.id}`), { status: "accepted", acceptedAt: now, acceptedTripId: newTripId });
 
       await Promise.all(
@@ -300,6 +340,16 @@ export default function RiderPage() {
     setSuccess("");
 
     try {
+      await queueNexrideEvent({
+        type: nexrideNotificationTypes.REQUEST_CANCELLED,
+        city,
+        targetRole: "driver",
+        title: "Ride request cancelled",
+        message: `${profile?.fullName || "A rider"} cancelled a NEXRIDE request.`,
+        url: "/driver",
+        data: { requestId, city },
+      });
+
       await Promise.all([
         remove(ref(db, `rideRequests/${city}/${requestId}`)),
         remove(ref(db, `rideOffers/${requestId}`)),

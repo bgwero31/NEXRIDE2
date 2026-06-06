@@ -6,7 +6,7 @@ export default function NexrideBrand({ size = "normal", subtitle = "" }) {
   return (
     <div className={`nx-brand ${compact ? "nx-brand-small" : ""}`}>
       <div className="nx-brand-mark" aria-hidden="true">
-        <span />
+        <img src="/nexride-logo.svg" alt="" />
       </div>
       <div className="nx-brand-copy">
         <div className="nx-brand-text">NEXRIDE</div>

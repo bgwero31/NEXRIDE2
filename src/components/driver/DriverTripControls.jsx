@@ -5,6 +5,8 @@
 import { useMemo, useState } from "react";
 import { ref, remove, set, update } from "firebase/database";
 import { db } from "../../lib/firebase";
+import { googleMapsDirectionsUrl, toLatLng } from "../../lib/googleMaps";
+import { nexrideNotificationTypes, queueNexrideEvent } from "../../lib/nexrideNotifications";
 import ActionCard from "../ui/ActionCard";
 import PremiumButton from "../ui/PremiumButton";
 
@@ -42,7 +44,7 @@ export default function DriverTripControls({ trip, onTripUpdated, onTripComplete
     return (
       <ActionCard>
         <h3 className="nx-card-title">No active trip</h3>
-        <p className="nx-sheet-copy">Accept a rider request to start the Uber-style trip flow.</p>
+        <p className="nx-sheet-copy">Accept a rider request to start the NEXRIDE trip flow.</p>
       </ActionCard>
     );
   }
@@ -56,6 +58,22 @@ export default function DriverTripControls({ trip, onTripUpdated, onTripComplete
       if (nextStatus === "arrived") payload.arrivedAt = Date.now();
       if (nextStatus === "enroute") payload.enrouteAt = Date.now();
       await update(ref(db, `activeTrips/${trip.tripId}`), payload);
+      const eventMap = {
+        arrived: [nexrideNotificationTypes.DRIVER_ARRIVED, "Driver arrived", `${trip.driverName || "Your driver"} has arrived at pickup.`],
+        enroute: [nexrideNotificationTypes.TRIP_ENROUTE, "Trip started route", `You are now heading to ${trip.dropoffName || "destination"}.`],
+      };
+      if (eventMap[nextStatus]) {
+        const [type, title, message] = eventMap[nextStatus];
+        await queueNexrideEvent({
+          type,
+          city: trip.city || "",
+          targetUid: trip.riderId,
+          title,
+          message,
+          url: "/rider",
+          data: { tripId: trip.tripId, status: nextStatus },
+        });
+      }
       onTripUpdated?.({ ...trip, ...payload });
       setSuccess(`Trip marked: ${nextStatus}`);
     } catch (err) {
@@ -83,6 +101,15 @@ export default function DriverTripControls({ trip, onTripUpdated, onTripComplete
     try {
       const payload = { status: "picked", pickedAt: Date.now(), updatedAt: Date.now() };
       await update(ref(db, `activeTrips/${trip.tripId}`), payload);
+      await queueNexrideEvent({
+        type: nexrideNotificationTypes.OTP_VERIFIED,
+        city: trip.city || "",
+        targetUid: trip.riderId,
+        title: "Trip started",
+        message: `${trip.driverName || "Your driver"} verified the OTP. Your ride is now active.`,
+        url: "/rider",
+        data: { tripId: trip.tripId, status: "picked" },
+      });
       onTripUpdated?.({ ...trip, ...payload });
       setOtpInput("");
       setSuccess("OTP verified. Trip started.");
@@ -101,6 +128,15 @@ export default function DriverTripControls({ trip, onTripUpdated, onTripComplete
     try {
       const completed = { ...trip, status: "completed", completedAt: Date.now(), updatedAt: Date.now() };
       await set(ref(db, `completedTrips/${trip.tripId}`), completed);
+      await queueNexrideEvent({
+        type: nexrideNotificationTypes.TRIP_COMPLETED,
+        city: trip.city || "",
+        targetUid: trip.riderId,
+        title: "Trip completed",
+        message: `Your NEXRIDE trip has been completed.`,
+        url: "/rider",
+        data: { tripId: trip.tripId, status: "completed" },
+      });
       await remove(ref(db, `activeTrips/${trip.tripId}`));
       onTripCompleted?.(completed);
     } catch (err) {
@@ -111,7 +147,13 @@ export default function DriverTripControls({ trip, onTripUpdated, onTripComplete
     }
   };
 
-  const navigateHref = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(trip.dropoffName || "")}&travelmode=driving`;
+  const driverLive = toLatLng(trip.driverLive);
+  const navigatingToPickup = trip.status === "accepted" || trip.status === "arrived";
+  const navigateHref = googleMapsDirectionsUrl({
+    origin: driverLive || trip.pickupName || "My location",
+    destination: navigatingToPickup ? (trip.pickupName || "Pickup") : (trip.dropoffName || "Destination"),
+    city: trip.city || "harare",
+  });
 
   return (
     <div className="nx-stack">
@@ -131,6 +173,11 @@ export default function DriverTripControls({ trip, onTripUpdated, onTripComplete
         <div className="nx-route-mini compact">
           <div className="nx-route-mini-row"><span className="nx-dot nx-dot-pickup" />{trip.pickupName || "Pickup"}</div>
           <div className="nx-route-mini-row"><span className="nx-dot nx-dot-destination" />{trip.dropoffName || "Destination"}</div>
+        </div>
+        <div className="nx-map-metrics nx-request-metrics">
+          <span>{trip.distanceText || "Distance loading"}</span>
+          <span>{trip.durationText || "ETA loading"}</span>
+          <span>{navigatingToPickup ? "To pickup" : "To destination"}</span>
         </div>
       </ActionCard>
 

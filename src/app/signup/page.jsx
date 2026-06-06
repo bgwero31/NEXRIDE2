@@ -7,7 +7,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { ref, set } from "firebase/database";
-import { auth, db } from "../../lib/firebase";
+import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
+import { auth, db, storage } from "../../lib/firebase";
 import NexrideBrand from "../../components/ui/NexrideBrand";
 import PremiumButton from "../../components/ui/PremiumButton";
 
@@ -15,6 +16,19 @@ const cityOptions = ["harare", "bulawayo", "gweru", "mutare", "masvingo", "zvish
 
 function cityLabel(city) {
   return city.charAt(0).toUpperCase() + city.slice(1);
+}
+
+function fileExt(file) {
+  const fromName = String(file?.name || "").split(".").pop();
+  return fromName && fromName !== file?.name ? fromName.toLowerCase() : "upload";
+}
+
+async function uploadVerificationFile(uid, file, type) {
+  if (!uid || !file) return "";
+  const path = `driverVerification/${uid}/${type}-${Date.now()}.${fileExt(file)}`;
+  const target = storageRef(storage, path);
+  await uploadBytes(target, file, { contentType: file.type || "application/octet-stream" });
+  return getDownloadURL(target);
 }
 
 export default function SignupPage() {
@@ -27,6 +41,10 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [carName, setCarName] = useState("");
   const [plateNumber, setPlateNumber] = useState("");
+  const [driverPhotoFile, setDriverPhotoFile] = useState(null);
+  const [licenseFile, setLicenseFile] = useState(null);
+  const [nationalIdFile, setNationalIdFile] = useState(null);
+  const [vehiclePhotoFile, setVehiclePhotoFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -54,12 +72,35 @@ export default function SignupPage() {
       setError("Drivers must add car name and plate number.");
       return;
     }
+    if (role === "driver" && (!driverPhotoFile || !licenseFile || !nationalIdFile || !vehiclePhotoFile)) {
+      setError("Drivers must upload a profile photo, licence, national ID, and vehicle photo.");
+      return;
+    }
 
     try {
       setLoading(true);
       const cred = await createUserWithEmailAndPassword(auth, cleanEmail, cleanPassword);
       const uid = cred.user.uid;
       const now = Date.now();
+
+      let driverDocuments = {};
+      if (role === "driver") {
+        const [profilePhotoUrl, licenceUrl, nationalIdUrl, vehiclePhotoUrl] = await Promise.all([
+          uploadVerificationFile(uid, driverPhotoFile, "profile-photo"),
+          uploadVerificationFile(uid, licenseFile, "licence"),
+          uploadVerificationFile(uid, nationalIdFile, "national-id"),
+          uploadVerificationFile(uid, vehiclePhotoFile, "vehicle-photo"),
+        ]);
+
+        driverDocuments = {
+          profilePhotoUrl,
+          licenceUrl,
+          nationalIdUrl,
+          vehiclePhotoUrl,
+          verificationStatus: "pending",
+          submittedAt: now,
+        };
+      }
 
       await set(ref(db, `users/${uid}`), { role, email: cleanEmail, createdAt: now });
       await set(ref(db, `profiles/${uid}`), {
@@ -70,8 +111,31 @@ export default function SignupPage() {
         rating: 5,
         tripsCount: 0,
         createdAt: now,
-        ...(role === "driver" ? { vehicleType: "car", carName: cleanCarName, plateNumber: cleanPlate, online: false } : {}),
+        ...(role === "driver" ? {
+          vehicleType: "car",
+          carName: cleanCarName,
+          plateNumber: cleanPlate,
+          online: false,
+          verificationStatus: "pending",
+          photoUrl: driverDocuments.profilePhotoUrl || "",
+          vehiclePhotoUrl: driverDocuments.vehiclePhotoUrl || "",
+        } : {}),
       });
+      if (role === "driver") {
+        await set(ref(db, `driverVerification/${uid}`), {
+          driverId: uid,
+          fullName: cleanName,
+          phone: cleanPhone,
+          email: cleanEmail,
+          city: cleanCity,
+          carName: cleanCarName,
+          plateNumber: cleanPlate,
+          ...driverDocuments,
+          reviewedAt: null,
+          reviewedBy: "",
+        });
+      }
+
       await set(ref(db, `appSettings/${uid}`), {
         city: cleanCity,
         preferredPayment: "cash",
@@ -112,9 +176,24 @@ export default function SignupPage() {
           </div>
 
           {role === "driver" ? (
-            <div className="nx-field-grid two">
-              <label className="nx-field"><span>Car name</span><input className="nx-input" value={carName} onChange={(e) => setCarName(e.target.value)} placeholder="Toyota Aqua" /></label>
-              <label className="nx-field"><span>Plate number</span><input className="nx-input" value={plateNumber} onChange={(e) => setPlateNumber(e.target.value)} placeholder="ABC 1234" /></label>
+            <div className="nx-stack">
+              <div className="nx-field-grid two">
+                <label className="nx-field"><span>Car name</span><input className="nx-input" value={carName} onChange={(e) => setCarName(e.target.value)} placeholder="Toyota Aqua" /></label>
+                <label className="nx-field"><span>Plate number</span><input className="nx-input" value={plateNumber} onChange={(e) => setPlateNumber(e.target.value)} placeholder="ABC 1234" /></label>
+              </div>
+
+              <div className="nx-driver-verification-box">
+                <div>
+                  <div className="nx-eyebrow">Driver verification</div>
+                  <p className="nx-sheet-copy">Upload clear photos/documents. Admin can approve drivers before they start receiving rides.</p>
+                </div>
+                <div className="nx-field-grid two">
+                  <label className="nx-file-field"><span>Profile photo</span><input type="file" accept="image/*" onChange={(e) => setDriverPhotoFile(e.target.files?.[0] || null)} /><small>{driverPhotoFile?.name || "Required"}</small></label>
+                  <label className="nx-file-field"><span>Driver licence</span><input type="file" accept="image/*,.pdf" onChange={(e) => setLicenseFile(e.target.files?.[0] || null)} /><small>{licenseFile?.name || "Required"}</small></label>
+                  <label className="nx-file-field"><span>National ID</span><input type="file" accept="image/*,.pdf" onChange={(e) => setNationalIdFile(e.target.files?.[0] || null)} /><small>{nationalIdFile?.name || "Required"}</small></label>
+                  <label className="nx-file-field"><span>Vehicle photo</span><input type="file" accept="image/*" onChange={(e) => setVehiclePhotoFile(e.target.files?.[0] || null)} /><small>{vehiclePhotoFile?.name || "Required"}</small></label>
+                </div>
+              </div>
             </div>
           ) : null}
 

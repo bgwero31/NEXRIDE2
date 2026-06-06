@@ -4,6 +4,7 @@
 
 import ActionCard from "../ui/ActionCard";
 import PremiumButton from "../ui/PremiumButton";
+import { googleMapsDirectionsUrl, toLatLng } from "../../lib/googleMaps";
 
 function money(value) {
   return Number(value || 0).toFixed(2);
@@ -23,12 +24,19 @@ export default function TripSheet({ tripData, onCancelTrip, onContactDriver }) {
 
   const steps = ["accepted", "arrived", "picked", "enroute", "completed"];
   const activeIndex = Math.max(0, steps.indexOf(tripData.status || "accepted"));
+  const driverLive = toLatLng(tripData.driverLive);
+  const navigatingToPickup = tripData.status === "accepted" || tripData.status === "arrived";
+  const mapsHref = googleMapsDirectionsUrl({
+    origin: driverLive || tripData.pickupName || "Pickup",
+    destination: navigatingToPickup ? (tripData.pickupName || "Pickup") : (tripData.dropoffName || "Destination"),
+    city: tripData.city || "harare",
+  });
 
   return (
     <div className="nx-stack">
       <div className="nx-sheet-head">
         <div>
-          <div className="nx-eyebrow">Uber-style trip tracking</div>
+          <div className="nx-eyebrow">NEXRIDE live trip tracking</div>
           <h2 className="nx-sheet-title">{statusLabel(tripData.status)}</h2>
           <p className="nx-sheet-copy">{tripData.driverName || "Driver"} is handling your ride.</p>
         </div>
@@ -63,11 +71,17 @@ export default function TripSheet({ tripData, onCancelTrip, onContactDriver }) {
       <ActionCard className="nx-route-mini">
         <div className="nx-route-mini-row"><span className="nx-dot nx-dot-pickup" />{tripData.pickupName || "Pickup"}</div>
         <div className="nx-route-mini-row"><span className="nx-dot nx-dot-destination" />{tripData.dropoffName || "Destination"}</div>
+        <div className="nx-map-metrics nx-request-metrics">
+          <span>{tripData.distanceText || "Distance loading"}</span>
+          <span>{tripData.durationText || "ETA loading"}</span>
+          <span>{navigatingToPickup ? "Driver to pickup" : "To destination"}</span>
+        </div>
         <div className="nx-soft-text">Payment: {(tripData.preferredPayment || "cash").toUpperCase()} • Ride: {tripData.rideMode || "standard"}</div>
       </ActionCard>
 
       <div className="nx-button-grid two">
         <PremiumButton variant="secondary" onClick={onContactDriver}>Call driver</PremiumButton>
+        <a className="nx-btn nx-btn-secondary" href={mapsHref} target="_blank" rel="noreferrer">Open map</a>
         <PremiumButton variant="ghost" onClick={onCancelTrip}>Cancel trip</PremiumButton>
       </div>
     </div>

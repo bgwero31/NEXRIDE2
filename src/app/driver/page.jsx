@@ -15,6 +15,8 @@ import ActionCard from "../../components/ui/ActionCard";
 import PremiumButton from "../../components/ui/PremiumButton";
 import DriverMap from "../../components/driver/DriverMap";
 import DriverTripControls from "../../components/driver/DriverTripControls";
+import { googleMapsDirectionsUrl } from "../../lib/googleMaps";
+import { nexrideNotificationTypes, queueNexrideEvent } from "../../lib/nexrideNotifications";
 
 function cityLabel(city) {
   if (!city) return "City";
@@ -183,7 +185,11 @@ export default function DriverPage() {
     const now = Date.now();
     visibleRequests.forEach(async (requestItem) => {
       try {
-        await set(ref(db, `rideViews/${requestItem.id}/${user.uid}`), {
+        const viewRef = ref(db, `rideViews/${requestItem.id}/${user.uid}`);
+        const alreadyViewed = await get(viewRef);
+        if (alreadyViewed.exists()) return;
+
+        await set(viewRef, {
           driverId: user.uid,
           driverName: profile.fullName || "Driver",
           driverPhone: profile.phone || "",
@@ -191,6 +197,16 @@ export default function DriverPage() {
           plateNumber: profile.plateNumber || "",
           city: cityKey,
           viewedAt: now,
+        });
+
+        await queueNexrideEvent({
+          type: nexrideNotificationTypes.REQUEST_VIEWED,
+          city: cityKey,
+          targetUid: requestItem.riderId,
+          title: "Your ride was viewed",
+          message: `${profile.fullName || "A driver"} viewed your NEXRIDE request.`,
+          url: "/rider",
+          data: { requestId: requestItem.id, driverId: user.uid, city: cityKey },
         });
       } catch {}
     });
@@ -203,24 +219,34 @@ export default function DriverPage() {
     const onlineRef = ref(db, `driversOnline/${cityKey}/${user.uid}`);
 
     const pushLocation = async (pos) => {
+      const live = {
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        heading: typeof pos.coords.heading === "number" ? pos.coords.heading : null,
+        lastSeen: Date.now(),
+      };
+
       try {
-        await update(onlineRef, {
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          heading: typeof pos.coords.heading === "number" ? pos.coords.heading : null,
-          lastSeen: Date.now(),
-        });
+        await update(onlineRef, live);
+        if (activeTrip?.tripId) {
+          await update(ref(db, `activeTrips/${activeTrip.tripId}/driverLive`), {
+            lat: live.lat,
+            lng: live.lng,
+            heading: live.heading,
+            updatedAt: live.lastSeen,
+          });
+        }
       } catch {}
     };
 
     const watchId = navigator.geolocation.watchPosition(pushLocation, () => {}, {
       enableHighAccuracy: true,
-      maximumAge: 30000,
+      maximumAge: 15000,
       timeout: 12000,
     });
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [user, cityKey, online]);
+  }, [user, cityKey, online, activeTrip?.tripId]);
 
   const toggleOnline = async () => {
     if (!user || !profile || !cityKey) return;
@@ -276,6 +302,12 @@ export default function DriverPage() {
       dropoffName: requestItem.dropoffName || "",
       dropoffLat: requestItem.dropoffLat ?? null,
       dropoffLng: requestItem.dropoffLng ?? null,
+      distanceText: requestItem.distanceText || "",
+      distanceMeters: requestItem.distanceMeters || null,
+      durationText: requestItem.durationText || "",
+      durationSeconds: requestItem.durationSeconds || null,
+      routeSource: requestItem.routeSource || "manual",
+      mapsUrl: requestItem.mapsUrl || googleMapsDirectionsUrl({ origin: requestItem.pickupName || "", destination: requestItem.dropoffName || "", city: cityKey }),
       agreedPrice: Number(agreedPrice || requestItem.offerPrice || 0),
       people: Number(requestItem.people || 1),
       notes: requestItem.notes || "",
@@ -289,6 +321,15 @@ export default function DriverPage() {
     };
 
     await set(tripRef, payload);
+    await queueNexrideEvent({
+      type: nexrideNotificationTypes.REQUEST_ACCEPTED,
+      city: cityKey,
+      targetUid: requestItem.riderId,
+      title: "Driver accepted your ride",
+      message: `${profile.fullName || "Your driver"} accepted your $${money(agreedPrice || requestItem.offerPrice)} ride request.`,
+      url: "/rider",
+      data: { tripId, requestId: requestItem.id, driverId: user.uid },
+    });
     await update(ref(db, `rideRequests/${cityKey}/${requestItem.id}`), {
       status: "matched",
       matchedDriverId: user.uid,
@@ -357,6 +398,15 @@ export default function DriverPage() {
         message: proposedMessage.trim(),
         status: "pending",
         createdAt: Date.now(),
+      });
+      await queueNexrideEvent({
+        type: nexrideNotificationTypes.OFFER_SENT,
+        city: cityKey,
+        targetUid: negotiatingFor.riderId,
+        title: "New driver offer",
+        message: `${profile.fullName || "A driver"} sent a $${money(priceNumber)} offer for your ride.`,
+        url: "/rider",
+        data: { requestId: negotiatingFor.id, offerId: offerRef.key, driverId: user.uid, proposedPrice: priceNumber },
       });
       await update(ref(db, `rideRequests/${cityKey}/${negotiatingFor.id}`), {
         offersCount: Number(negotiatingFor.offersCount || 0) + 1,
@@ -441,7 +491,7 @@ export default function DriverPage() {
           <div className="nx-stack nx-driver-list">
             <div className="nx-sheet-head compact">
               <div>
-                <div className="nx-eyebrow">inDrive request marketplace</div>
+                <div className="nx-eyebrow">NEXRIDE ride marketplace</div>
                 <h2 className="nx-sheet-title">Nearby requests</h2>
               </div>
               <div className="nx-price-badge">{visibleRequests.length}</div>
@@ -462,6 +512,14 @@ export default function DriverPage() {
                       <p className="nx-sheet-copy">{item.riderName || "Rider"} • {item.people || 1} passenger{Number(item.people || 1) === 1 ? "" : "s"}</p>
                     </div>
                     <div className="nx-status-pill">viewed</div>
+                  </div>
+                  <div className="nx-map-metrics nx-request-metrics">
+                    <span>{item.distanceText || "Distance pending"}</span>
+                    <span>{item.durationText || "ETA pending"}</span>
+                    <span>{item.preferredPayment || "cash"}</span>
+                    {item.mapsUrl ? (
+                      <a href={item.mapsUrl} target="_blank" rel="noreferrer">Map</a>
+                    ) : null}
                   </div>
                   {item.notes ? <p className="nx-offer-message">{item.notes}</p> : null}
 

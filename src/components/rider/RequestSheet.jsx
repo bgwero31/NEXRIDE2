@@ -2,9 +2,11 @@
 
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { push, ref, set } from "firebase/database";
 import { db } from "../../lib/firebase";
+import { getGoogleRouteDetails, googleMapsDirectionsUrl, hasGoogleMapsApiKey, loadGoogleMapsApi } from "../../lib/googleMaps";
+import { nexrideNotificationTypes, queueNexrideEvent } from "../../lib/nexrideNotifications";
 import ActionCard from "../ui/ActionCard";
 import PremiumButton from "../ui/PremiumButton";
 
@@ -39,9 +41,12 @@ export default function RequestSheet({ user, profile, appSettings = {}, initialC
   const [people, setPeople] = useState("1");
   const [notes, setNotes] = useState("");
   const [pickupCoords, setPickupCoords] = useState(null);
+  const [routePreview, setRoutePreview] = useState(null);
   const [saving, setSaving] = useState(false);
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState("");
+  const pickupInputRef = useRef(null);
+  const dropoffInputRef = useRef(null);
 
   useEffect(() => {
     try {
@@ -63,6 +68,71 @@ export default function RequestSheet({ user, profile, appSettings = {}, initialC
       setRideMode(appSettings.rideMode || "standard");
     }
   }, [appSettings.defaultDropoff, appSettings.defaultPickup, appSettings.preferredPayment, appSettings.rideMode, initialCity, profile?.city]);
+
+  useEffect(() => {
+    if (!hasGoogleMapsApiKey()) return;
+    if (!pickupInputRef.current || !dropoffInputRef.current) return;
+
+    let pickupListener = null;
+    let dropoffListener = null;
+    let cancelled = false;
+
+    loadGoogleMapsApi()
+      .then((google) => {
+        if (cancelled || !google?.maps?.places) return;
+
+        const options = {
+          componentRestrictions: { country: "zw" },
+          fields: ["formatted_address", "geometry", "name"],
+        };
+
+        const pickupAutocomplete = new google.maps.places.Autocomplete(pickupInputRef.current, options);
+        const dropoffAutocomplete = new google.maps.places.Autocomplete(dropoffInputRef.current, options);
+
+        pickupListener = pickupAutocomplete.addListener("place_changed", () => {
+          const place = pickupAutocomplete.getPlace();
+          const formatted = place.formatted_address || place.name || pickupInputRef.current?.value || "";
+          const location = place.geometry?.location;
+          if (formatted) setPickupName(formatted);
+          if (location) setPickupCoords({ lat: location.lat(), lng: location.lng() });
+        });
+
+        dropoffListener = dropoffAutocomplete.addListener("place_changed", () => {
+          const place = dropoffAutocomplete.getPlace();
+          const formatted = place.formatted_address || place.name || dropoffInputRef.current?.value || "";
+          if (formatted) setDropoffName(formatted);
+        });
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+      pickupListener?.remove?.();
+      dropoffListener?.remove?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    setRoutePreview(null);
+    const cleanPickup = pickupName.trim();
+    const cleanDropoff = dropoffName.trim();
+    if (!cleanPickup || !cleanDropoff) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        const route = await getGoogleRouteDetails({
+          origin: pickupCoords || cleanPickup,
+          destination: cleanDropoff,
+          city,
+        });
+        if (route) setRoutePreview(route);
+      } catch {
+        // Google route preview is optional. The request still works without it.
+      }
+    }, 650);
+
+    return () => clearTimeout(timer);
+  }, [city, dropoffName, pickupCoords, pickupName]);
 
   const cleanCity = useMemo(() => String(city || "harare").trim().toLowerCase(), [city]);
   const canSubmit = Boolean(
@@ -123,6 +193,22 @@ export default function RequestSheet({ user, profile, appSettings = {}, initialC
 
     try {
       setSaving(true);
+
+      let googleRoute = routePreview;
+      if (!googleRoute) {
+        try {
+          googleRoute = await getGoogleRouteDetails({
+            origin: pickupCoords || cleanPickup,
+            destination: cleanDropoff,
+            city: cleanCity,
+          });
+        } catch {
+          googleRoute = null;
+        }
+      }
+
+      const resolvedPickup = googleRoute?.pickupCoords || pickupCoords || null;
+      const resolvedDropoff = googleRoute?.dropoffCoords || null;
       const requestRef = push(ref(db, `rideRequests/${cleanCity}`));
       const now = Date.now();
       const payload = {
@@ -131,12 +217,18 @@ export default function RequestSheet({ user, profile, appSettings = {}, initialC
         riderId: user.uid,
         riderName: profile?.fullName || user.email || "Rider",
         riderPhone: profile?.phone || "",
-        pickupName: cleanPickup,
-        pickupLat: pickupCoords?.lat ?? null,
-        pickupLng: pickupCoords?.lng ?? null,
-        dropoffName: cleanDropoff,
-        dropoffLat: null,
-        dropoffLng: null,
+        pickupName: googleRoute?.startAddress || cleanPickup,
+        pickupLat: resolvedPickup?.lat ?? null,
+        pickupLng: resolvedPickup?.lng ?? null,
+        dropoffName: googleRoute?.endAddress || cleanDropoff,
+        dropoffLat: resolvedDropoff?.lat ?? null,
+        dropoffLng: resolvedDropoff?.lng ?? null,
+        distanceText: googleRoute?.distanceText || "",
+        distanceMeters: googleRoute?.distanceMeters || null,
+        durationText: googleRoute?.durationText || "",
+        durationSeconds: googleRoute?.durationSeconds || null,
+        routeSource: googleRoute?.source || "manual",
+        mapsUrl: googleMapsDirectionsUrl({ origin: resolvedPickup || cleanPickup, destination: resolvedDropoff || cleanDropoff, city: cleanCity }),
         offerPrice: priceNumber,
         people: peopleNumber,
         notes: notes.trim(),
@@ -150,6 +242,16 @@ export default function RequestSheet({ user, profile, appSettings = {}, initialC
       };
 
       await set(requestRef, payload);
+
+      await queueNexrideEvent({
+        type: nexrideNotificationTypes.REQUEST_CREATED,
+        city: cleanCity,
+        targetRole: "driver",
+        title: "New NEXRIDE request",
+        message: `${profile?.fullName || "A rider"} is offering $${price(priceNumber)} from ${payload.pickupName || "pickup"}.`,
+        url: "/driver",
+        data: { requestId: requestRef.key, city: cleanCity, offerPrice: priceNumber },
+      });
 
       try {
         localStorage.setItem("nexride-last-request-id", requestRef.key);
@@ -171,7 +273,7 @@ export default function RequestSheet({ user, profile, appSettings = {}, initialC
     <form onSubmit={submitRequest} className="nx-request-sheet">
       <div className="nx-sheet-head">
         <div>
-          <div className="nx-eyebrow">inDrive-style bidding</div>
+          <div className="nx-eyebrow">Smart fare offers</div>
           <h2 className="nx-sheet-title">Set your fare</h2>
           <p className="nx-sheet-copy">Drivers can accept your price or send better offers.</p>
         </div>
@@ -184,6 +286,7 @@ export default function RequestSheet({ user, profile, appSettings = {}, initialC
         <div className="nx-route-row">
           <span className="nx-dot nx-dot-pickup" />
           <input
+            ref={pickupInputRef}
             className="nx-route-input"
             type="text"
             placeholder="Pickup location"
@@ -198,6 +301,7 @@ export default function RequestSheet({ user, profile, appSettings = {}, initialC
         <div className="nx-route-row">
           <span className="nx-dot nx-dot-destination" />
           <input
+            ref={dropoffInputRef}
             className="nx-route-input"
             type="text"
             placeholder="Where to?"
@@ -246,6 +350,26 @@ export default function RequestSheet({ user, profile, appSettings = {}, initialC
           </select>
         </label>
       </div>
+
+      {routePreview ? (
+        <ActionCard className="nx-route-preview-card">
+          <div className="nx-offer-top">
+            <div>
+              <div className="nx-eyebrow">Google route preview</div>
+              <h3 className="nx-card-title">{routePreview.distanceText} • {routePreview.durationText}</h3>
+              <p className="nx-sheet-copy">Real distance and ETA will be saved with this request.</p>
+            </div>
+            <a
+              className="nx-status-pill"
+              href={googleMapsDirectionsUrl({ origin: pickupCoords || pickupName, destination: dropoffName, city })}
+              target="_blank"
+              rel="noreferrer"
+            >
+              OPEN
+            </a>
+          </div>
+        </ActionCard>
+      ) : null}
 
       <textarea
         className="nx-input"
