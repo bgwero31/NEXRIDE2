@@ -32,7 +32,7 @@ export async function pushDriverLivePosition(tripId, { lat, lng, heading }) {
   });
 }
 
-export default function DriverTripControls({ trip, onTripUpdated, onTripCompleted }) {
+export default function DriverTripControls({ trip, liveRouteInfo = null, onTripUpdated, onTripCompleted }) {
   const [otpInput, setOtpInput] = useState("");
   const [loadingAction, setLoadingAction] = useState("");
   const [error, setError] = useState("");
@@ -175,8 +175,8 @@ export default function DriverTripControls({ trip, onTripUpdated, onTripComplete
           <div className="nx-route-mini-row"><span className="nx-dot nx-dot-destination" />{trip.dropoffName || "Destination"}</div>
         </div>
         <div className="nx-map-metrics nx-request-metrics">
-          <span>{trip.distanceText || "Distance loading"}</span>
-          <span>{trip.durationText || "ETA loading"}</span>
+          <span>{liveRouteInfo?.distanceText || trip.distanceText || "Distance loading"}</span>
+          <span>{liveRouteInfo?.durationText || trip.durationText || "ETA loading"}</span>
           <span>{navigatingToPickup ? "To pickup" : "To destination"}</span>
         </div>
       </ActionCard>

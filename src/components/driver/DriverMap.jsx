@@ -20,7 +20,7 @@ function recordPoint(record, prefix, fallbackLabel) {
   return fallbackLabel ? { label: fallbackLabel } : null;
 }
 
-export default function DriverMap({ mode, city, activeTrip, requests = [] }) {
+export default function DriverMap({ mode, city, activeTrip, requests = [], onRouteInfoChange }) {
   const cityKey = String(city || "harare").toLowerCase();
   const [selfLocation, setSelfLocation] = useState(null);
   const [routeInfo, setRouteInfo] = useState(null);
@@ -39,6 +39,10 @@ export default function DriverMap({ mode, city, activeTrip, requests = [] }) {
     );
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
+
+  useEffect(() => {
+    if (routeInfo) onRouteInfoChange?.(routeInfo);
+  }, [onRouteInfoChange, routeInfo]);
 
   const pickup = activeTrip?.pickupName || requests[0]?.pickupName || "Waiting for rider requests";
   const dropoff = activeTrip?.dropoffName || requests[0]?.dropoffName || "Open request marketplace";
@@ -85,6 +89,8 @@ export default function DriverMap({ mode, city, activeTrip, requests = [] }) {
       <div className="nx-map-glow one" />
       <div className="nx-map-glow two" />
 
+      {mapStatus !== "google" ? (
+        <>
       <svg className="nx-route-svg" viewBox="0 0 400 760" preserveAspectRatio="none" aria-hidden="true">
         <defs>
           <linearGradient id="routeGradientDriver" x1="0" y1="0" x2="1" y2="1">
@@ -111,6 +117,8 @@ export default function DriverMap({ mode, city, activeTrip, requests = [] }) {
       })}
 
       <div className="nx-car-pin driver-self" style={{ left: "48%", top: "70%" }}>🚘</div>
+        </>
+      ) : null}
 
       <LiveGoogleMap
         city={cityKey}

@@ -8,12 +8,13 @@ export default function FloatingTopBar({
   right = null,
   showSettings = true,
   settingsHref = "/settings",
+  avatarUrl = "",
 }) {
   return (
     <div className="nx-topbar nx-glass-panel">
       <div className="nx-topbar-inner">
         <a href="/rider" className="nx-topbar-brand" aria-label="Open NEXRIDE home">
-          <NexrideBrand size="small" subtitle={subtitle || title} />
+          <NexrideBrand size="small" subtitle={subtitle || title} avatarUrl={avatarUrl} />
         </a>
 
         <div className="nx-topbar-actions">

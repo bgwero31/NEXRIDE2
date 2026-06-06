@@ -6,7 +6,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { get, ref, update } from "firebase/database";
-import { auth, db } from "../../lib/firebase";
+import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
+import { auth, db, storage } from "../../lib/firebase";
 
 import MobileShell from "../../components/ui/MobileShell";
 import ActionCard from "../../components/ui/ActionCard";
@@ -35,6 +36,19 @@ function dashboardFor(role) {
   return "/rider";
 }
 
+function fileExt(file) {
+  const fromName = String(file?.name || "").split(".").pop();
+  return fromName && fromName !== file?.name ? fromName.toLowerCase() : "jpg";
+}
+
+async function uploadProfilePhoto(uid, file) {
+  if (!uid || !file) return "";
+  const path = `profilePhotos/${uid}/avatar-${Date.now()}.${fileExt(file)}`;
+  const target = storageRef(storage, path);
+  await uploadBytes(target, file, { contentType: file.type || "image/jpeg" });
+  return getDownloadURL(target);
+}
+
 export default function SettingsPage() {
   const router = useRouter();
 
@@ -48,6 +62,8 @@ export default function SettingsPage() {
   const [city, setCity] = useState("harare");
   const [carName, setCarName] = useState("");
   const [plateNumber, setPlateNumber] = useState("");
+  const [photoUrl, setPhotoUrl] = useState("");
+  const [photoFile, setPhotoFile] = useState(null);
   const [defaultPickup, setDefaultPickup] = useState("");
   const [defaultDropoff, setDefaultDropoff] = useState("");
   const [preferredPayment, setPreferredPayment] = useState("cash");
@@ -100,6 +116,7 @@ export default function SettingsPage() {
         setCity(mergedProfile.city || settingsData.city || "harare");
         setCarName(mergedProfile.carName || "");
         setPlateNumber(mergedProfile.plateNumber || "");
+        setPhotoUrl(mergedProfile.photoUrl || mergedProfile.profilePhotoUrl || settingsData.photoUrl || "");
         setDefaultPickup(settingsData.defaultPickup || "");
         setDefaultDropoff(settingsData.defaultDropoff || "");
         setPreferredPayment(settingsData.preferredPayment || "cash");
@@ -142,11 +159,16 @@ export default function SettingsPage() {
     try {
       setSaving(true);
       const now = Date.now();
+      let nextPhotoUrl = photoUrl;
+      if (photoFile) {
+        nextPhotoUrl = await uploadProfilePhoto(user.uid, photoFile);
+      }
 
       await update(ref(db, `profiles/${user.uid}`), {
         fullName: cleanName,
         phone: cleanPhone,
         city: cleanCity,
+        photoUrl: nextPhotoUrl || "",
         updatedAt: now,
         ...(role === "driver"
           ? {
@@ -163,6 +185,7 @@ export default function SettingsPage() {
         preferredPayment,
         rideMode,
         notificationsEnabled,
+        photoUrl: nextPhotoUrl || "",
         updatedAt: now,
       });
 
@@ -179,6 +202,7 @@ export default function SettingsPage() {
         fullName: cleanName,
         phone: cleanPhone,
         city: cleanCity,
+        photoUrl: nextPhotoUrl || "",
         ...(role === "driver"
           ? {
               carName: cleanCarName,
@@ -195,8 +219,11 @@ export default function SettingsPage() {
         preferredPayment,
         rideMode,
         notificationsEnabled,
+        photoUrl: nextPhotoUrl || "",
       }));
 
+      setPhotoUrl(nextPhotoUrl || "");
+      setPhotoFile(null);
       setSuccess("Settings saved. Your app flow is now updated.");
     } catch (err) {
       console.error(err);
@@ -233,7 +260,7 @@ export default function SettingsPage() {
     <MobileShell>
       <div className="nx-settings-page">
         <div className="nx-settings-header">
-          <NexrideBrand subtitle={`${profile?.fullName || "Account"} • ${cityLabel(city)} • ${role.toUpperCase()}`} />
+          <NexrideBrand subtitle={`${profile?.fullName || "Account"} • ${cityLabel(city)} • ${role.toUpperCase()}`} avatarUrl={photoUrl} />
           <div className="nx-settings-title">Settings</div>
         </div>
 
@@ -272,6 +299,18 @@ export default function SettingsPage() {
                   ))}
                 </select>
               </label>
+
+              <label className="nx-file-field nx-profile-photo-field">
+                <span>Profile picture / logo photo</span>
+                <input type="file" accept="image/*" onChange={(e) => setPhotoFile(e.target.files?.[0] || null)} />
+                <small>{photoFile?.name || (photoUrl ? "Current image saved" : "Optional, but recommended")}</small>
+              </label>
+              {photoUrl ? (
+                <div className="nx-profile-photo-preview">
+                  <img src={photoUrl} alt="Profile preview" />
+                  <span>This image will show on the NEXRIDE top-left badge.</span>
+                </div>
+              ) : null}
             </div>
           </ActionCard>
 

@@ -69,6 +69,8 @@ export default function LiveGoogleMap({
   const mapNodeRef = useRef(null);
   const mapRef = useRef(null);
   const directionsRendererRef = useRef(null);
+  const routeArrowRef = useRef(null);
+  const routeMarkerRefs = useRef([]);
   const markerRefs = useRef([]);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
@@ -104,7 +106,7 @@ export default function LiveGoogleMap({
 
           directionsRendererRef.current = new google.maps.DirectionsRenderer({
             map: mapRef.current,
-            suppressMarkers: false,
+            suppressMarkers: true,
             preserveViewport: false,
             polylineOptions: {
               strokeColor: "#00d4ff",
@@ -212,7 +214,47 @@ export default function LiveGoogleMap({
 
         if (status === "OK" && result?.routes?.[0]?.legs?.[0]) {
           directionsRendererRef.current?.setDirections(result);
+
+          routeArrowRef.current?.setMap(null);
+          routeMarkerRefs.current.forEach((marker) => marker.setMap(null));
+          routeMarkerRefs.current = [];
+          routeArrowRef.current = new google.maps.Polyline({
+            path: result.routes[0].overview_path || [],
+            map: mapRef.current,
+            strokeOpacity: 0,
+            icons: [
+              {
+                icon: {
+                  path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+                  scale: 4.2,
+                  fillColor: "#00d4ff",
+                  fillOpacity: 1,
+                  strokeColor: "#eaffff",
+                  strokeWeight: 1.4,
+                },
+                offset: "10%",
+                repeat: "72px",
+              },
+            ],
+          });
+
           const leg = result.routes[0].legs[0];
+          if (leg.start_location && leg.end_location && mapRef.current) {
+            routeMarkerRefs.current = [
+              new google.maps.Marker({
+                position: leg.start_location,
+                map: mapRef.current,
+                title: "Pickup",
+                icon: markerIcon(google, "pickup"),
+              }),
+              new google.maps.Marker({
+                position: leg.end_location,
+                map: mapRef.current,
+                title: "Destination",
+                icon: markerIcon(google, "destination"),
+              }),
+            ];
+          }
           onRouteInfo?.({
             distanceText: leg.distance?.text || "",
             durationText: leg.duration_in_traffic?.text || leg.duration?.text || "",
@@ -228,6 +270,10 @@ export default function LiveGoogleMap({
         }
 
         directionsRendererRef.current?.set("directions", null);
+        routeArrowRef.current?.setMap(null);
+        routeArrowRef.current = null;
+        routeMarkerRefs.current.forEach((marker) => marker.setMap(null));
+        routeMarkerRefs.current = [];
         const estimate = fallbackRouteEstimate(originPoint, destinationPoint);
         if (estimate) onRouteInfo?.(estimate);
       }

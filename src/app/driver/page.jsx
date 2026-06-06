@@ -48,6 +48,7 @@ export default function DriverPage() {
   const [requests, setRequests] = useState([]);
   const [activeTrip, setActiveTrip] = useState(null);
   const [completedTrip, setCompletedTrip] = useState(null);
+  const [liveRouteInfo, setLiveRouteInfo] = useState(null);
 
   const [negotiatingFor, setNegotiatingFor] = useState(null);
   const [proposedPrice, setProposedPrice] = useState("");
@@ -195,6 +196,7 @@ export default function DriverPage() {
           driverPhone: profile.phone || "",
           carName: profile.carName || "",
           plateNumber: profile.plateNumber || "",
+          driverPhotoUrl: profile.photoUrl || profile.profilePhotoUrl || "",
           city: cityKey,
           viewedAt: now,
         });
@@ -263,6 +265,7 @@ export default function DriverPage() {
         phone: profile.phone || "",
         carName: profile.carName || "",
         plateNumber: profile.plateNumber || "",
+        driverPhotoUrl: profile.photoUrl || profile.profilePhotoUrl || "",
         city: cityKey,
         online: nextOnline,
         updatedAt: Date.now(),
@@ -291,9 +294,11 @@ export default function DriverPage() {
       riderId: requestItem.riderId,
       riderName: requestItem.riderName || "Rider",
       riderPhone: requestItem.riderPhone || "",
+      riderPhotoUrl: requestItem.riderPhotoUrl || "",
       driverId: user.uid,
       driverName: profile.fullName || "Driver",
       driverPhone: profile.phone || "",
+      driverPhotoUrl: profile.photoUrl || profile.profilePhotoUrl || "",
       carName: profile.carName || "",
       plateNumber: profile.plateNumber || "",
       pickupName: requestItem.pickupName || "",
@@ -393,6 +398,7 @@ export default function DriverPage() {
         driverPhone: profile.phone || "",
         carName: profile.carName || "",
         plateNumber: profile.plateNumber || "",
+        driverPhotoUrl: profile.photoUrl || profile.profilePhotoUrl || "",
         proposedPrice: priceNumber,
         originalPrice: Number(negotiatingFor.offerPrice || 0),
         message: proposedMessage.trim(),
@@ -458,15 +464,23 @@ export default function DriverPage() {
 
   return (
     <MobileShell>
-      <DriverMap mode={mode} city={cityKey} activeTrip={activeTrip} requests={visibleRequests} />
+      <DriverMap mode={mode} city={cityKey} activeTrip={activeTrip} requests={visibleRequests} onRouteInfoChange={setLiveRouteInfo} />
 
       <FloatingTopBar
         title="NEXRIDE DRIVER"
         subtitle={`${profile?.fullName || "Driver"} • ${cityLabel(cityKey)}`}
+        avatarUrl={profile?.photoUrl || profile?.profilePhotoUrl || ""}
         right={<button onClick={handleLogout} className="nx-topbar-btn">Logout</button>}
       />
 
-      <BottomSheet height={mode === "queue" ? "28vh" : "18vh"}>
+      <BottomSheet
+        height={mode === "queue" ? "32vh" : "24vh"}
+        expandedHeight={mode === "trip" ? "58vh" : "52vh"}
+        collapsedHeight={mode === "trip" ? "142px" : "132px"}
+        defaultCollapsed={mode === "trip" || mode === "queue"}
+        stateKey={mode}
+        title={mode === "trip" ? "trip controls" : "driver panel"}
+      >
         {error ? <div className="nx-alert-error">{error}</div> : null}
         {success ? <div className="nx-alert-success">{success}</div> : null}
 
@@ -553,7 +567,7 @@ export default function DriverPage() {
           </div>
         )}
 
-        {mode === "trip" && <DriverTripControls trip={activeTrip} onTripUpdated={handleTripUpdated} onTripCompleted={handleTripCompleted} />}
+        {mode === "trip" && <DriverTripControls trip={activeTrip} liveRouteInfo={liveRouteInfo} onTripUpdated={handleTripUpdated} onTripCompleted={handleTripCompleted} />}
 
         {mode === "completed" && (
           <div className="nx-stack">

@@ -19,7 +19,7 @@ function statusLabel(status) {
   return "Active trip";
 }
 
-export default function TripSheet({ tripData, onCancelTrip, onContactDriver }) {
+export default function TripSheet({ tripData, liveRouteInfo = null, onCancelTrip, onContactDriver }) {
   if (!tripData) return null;
 
   const steps = ["accepted", "arrived", "picked", "enroute", "completed"];
@@ -45,7 +45,7 @@ export default function TripSheet({ tripData, onCancelTrip, onContactDriver }) {
 
       <ActionCard className="nx-driver-card">
         <div className="nx-offer-top">
-          <div className="nx-driver-avatar">🚘</div>
+          <div className="nx-driver-avatar">{tripData.driverPhotoUrl ? <img src={tripData.driverPhotoUrl} alt="" /> : "🚘"}</div>
           <div>
             <h3 className="nx-card-title">{tripData.driverName || "NEXRIDE Driver"}</h3>
             <p className="nx-sheet-copy">{tripData.carName || "Verified car"}{tripData.plateNumber ? ` • ${tripData.plateNumber}` : ""}</p>
@@ -72,8 +72,8 @@ export default function TripSheet({ tripData, onCancelTrip, onContactDriver }) {
         <div className="nx-route-mini-row"><span className="nx-dot nx-dot-pickup" />{tripData.pickupName || "Pickup"}</div>
         <div className="nx-route-mini-row"><span className="nx-dot nx-dot-destination" />{tripData.dropoffName || "Destination"}</div>
         <div className="nx-map-metrics nx-request-metrics">
-          <span>{tripData.distanceText || "Distance loading"}</span>
-          <span>{tripData.durationText || "ETA loading"}</span>
+          <span>{liveRouteInfo?.distanceText || tripData.distanceText || "Distance loading"}</span>
+          <span>{liveRouteInfo?.durationText || tripData.durationText || "ETA loading"}</span>
           <span>{navigatingToPickup ? "Driver to pickup" : "To destination"}</span>
         </div>
         <div className="nx-soft-text">Payment: {(tripData.preferredPayment || "cash").toUpperCase()} • Ride: {tripData.rideMode || "standard"}</div>

@@ -217,6 +217,7 @@ export default function RequestSheet({ user, profile, appSettings = {}, initialC
         riderId: user.uid,
         riderName: profile?.fullName || user.email || "Rider",
         riderPhone: profile?.phone || "",
+        riderPhotoUrl: profile?.photoUrl || profile?.profilePhotoUrl || "",
         pickupName: googleRoute?.startAddress || cleanPickup,
         pickupLat: resolvedPickup?.lat ?? null,
         pickupLng: resolvedPickup?.lng ?? null,

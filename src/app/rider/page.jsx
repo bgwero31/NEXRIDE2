@@ -58,6 +58,7 @@ export default function RiderPage() {
   const [tripId, setTripId] = useState("");
   const [tripData, setTripData] = useState(null);
   const [completedTrip, setCompletedTrip] = useState(null);
+  const [liveRouteInfo, setLiveRouteInfo] = useState(null);
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -224,6 +225,11 @@ export default function RiderPage() {
     return () => navigator.geolocation.clearWatch(watchId);
   }, [tripData, tripId, user]);
 
+  const latestViewer = useMemo(() => {
+    if (!viewers.length) return null;
+    return [...viewers].sort((a, b) => Number(b.viewedAt || 0) - Number(a.viewedAt || 0))[0];
+  }, [viewers]);
+
   const handleRequestCreated = (request) => {
     setError("");
     setSuccess("Request posted. Drivers can view and negotiate now.");
@@ -265,9 +271,11 @@ export default function RiderPage() {
         riderId: user.uid,
         riderName: profile.fullName || "Rider",
         riderPhone: profile.phone || "",
+        riderPhotoUrl: profile.photoUrl || profile.profilePhotoUrl || "",
         driverId: offer.driverId,
         driverName: offer.driverName || "Driver",
         driverPhone: offer.driverPhone || "",
+        driverPhotoUrl: offer.driverPhotoUrl || offer.profilePhotoUrl || "",
         carName: offer.carName || "",
         plateNumber: offer.plateNumber || "",
         pickupName: requestData.pickupName || "",
@@ -431,15 +439,36 @@ export default function RiderPage() {
         viewCount={viewCount}
         offersCount={offers.length}
         onDriversCountChange={setNearbyDriversCount}
+        onRouteInfoChange={setLiveRouteInfo}
       />
 
       <FloatingTopBar
         title="NEXRIDE"
         subtitle={`${profile?.fullName || "Rider"} • ${cityLabel(city)}`}
+        avatarUrl={profile?.photoUrl || profile?.profilePhotoUrl || ""}
         right={<button onClick={handleLogout} className="nx-topbar-btn">Logout</button>}
       />
 
-      <BottomSheet height={mode === "request" ? "32vh" : "22vh"}>
+      {latestViewer && requestData && !tripData ? (
+        <div className="nx-view-toast">
+          <div className="nx-view-avatar">
+            {latestViewer.driverPhotoUrl ? <img src={latestViewer.driverPhotoUrl} alt="" /> : "🚘"}
+          </div>
+          <div>
+            <strong>{latestViewer.driverName || "A driver"}</strong>
+            <span>viewed your ride request</span>
+          </div>
+        </div>
+      ) : null}
+
+      <BottomSheet
+        height={mode === "request" ? "38vh" : "24vh"}
+        expandedHeight={mode === "request" ? "50vh" : "58vh"}
+        collapsedHeight={mode === "request" ? "178px" : "142px"}
+        defaultCollapsed={mode !== "request"}
+        stateKey={mode}
+        title={mode === "request" ? "request form" : "ride details"}
+      >
         {error ? <div className="nx-alert-error">{error}</div> : null}
         {success ? <div className="nx-alert-success">{success}</div> : null}
 
@@ -462,7 +491,7 @@ export default function RiderPage() {
           <OffersSheet requestData={requestData} offers={offers} viewCount={viewCount} onAcceptOffer={handleAcceptOffer} onCancelRequest={handleCancelRequest} />
         )}
 
-        {mode === "trip" && <TripSheet tripData={tripData} onCancelTrip={handleCancelTrip} onContactDriver={handleContactDriver} />}
+        {mode === "trip" && <TripSheet tripData={tripData} liveRouteInfo={liveRouteInfo} onCancelTrip={handleCancelTrip} onContactDriver={handleContactDriver} />}
         {mode === "completed" && <CompletedSheet completedTrip={completedTrip} onRequestAgain={handleRequestAgain} />}
       </BottomSheet>
     </MobileShell>

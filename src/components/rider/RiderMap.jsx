@@ -23,7 +23,7 @@ function recordPoint(record, prefix, fallbackLabel) {
   return fallbackLabel ? { label: fallbackLabel } : null;
 }
 
-export default function RiderMap({ mode, city, requestData, tripData, viewCount = 0, offersCount = 0, onDriversCountChange }) {
+export default function RiderMap({ mode, city, requestData, tripData, viewCount = 0, offersCount = 0, onDriversCountChange, onRouteInfoChange }) {
   const cityKey = String(city || "harare").toLowerCase();
   const [drivers, setDrivers] = useState([]);
   const [routeInfo, setRouteInfo] = useState(null);
@@ -42,6 +42,10 @@ export default function RiderMap({ mode, city, requestData, tripData, viewCount 
     });
     return () => unsub();
   }, [cityKey, onDriversCountChange]);
+
+  useEffect(() => {
+    if (routeInfo) onRouteInfoChange?.(routeInfo);
+  }, [onRouteInfoChange, routeInfo]);
 
   const pickup = requestData?.pickupName || tripData?.pickupName || "Pickup location";
   const dropoff = requestData?.dropoffName || tripData?.dropoffName || "Destination";
@@ -92,6 +96,8 @@ export default function RiderMap({ mode, city, requestData, tripData, viewCount 
       <div className="nx-map-glow one" />
       <div className="nx-map-glow two" />
 
+      {mapStatus !== "google" ? (
+        <>
       <svg className="nx-route-svg" viewBox="0 0 400 760" preserveAspectRatio="none" aria-hidden="true">
         <defs>
           <linearGradient id="routeGradientRider" x1="0" y1="0" x2="1" y2="1">
@@ -110,6 +116,8 @@ export default function RiderMap({ mode, city, requestData, tripData, viewCount 
       {carPins.map((pin, index) => (
         <div key={index} className="nx-car-pin" style={{ ...pin, animationDelay: `${index * 220}ms` }}>🚘</div>
       ))}
+        </>
+      ) : null}
 
       <LiveGoogleMap
         city={cityKey}
