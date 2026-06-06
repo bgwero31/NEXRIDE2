@@ -593,3 +593,173 @@ select option { background: #071421; color: #fff; }
     max-width: 210px;
   }
 }
+
+/* NEXRIDE always-visible route + live GPS follow polish */
+.nx-google-map-layer::after {
+  background:
+    radial-gradient(circle at 50% 28%, transparent 0%, rgba(2, 8, 20, 0.04) 55%, rgba(2, 8, 20, 0.22) 100%),
+    linear-gradient(180deg, rgba(2,8,20,0.16), transparent 26%, rgba(2,8,20,0.22));
+}
+.nx-live-follow-badge {
+  position: absolute;
+  right: 14px;
+  top: 132px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 7px 11px;
+  border-radius: 999px;
+  color: #e9fbff;
+  font-size: 10px;
+  font-weight: 1000;
+  letter-spacing: 0.35px;
+  text-transform: uppercase;
+  background: rgba(3, 13, 30, 0.72);
+  border: 1px solid rgba(0,212,255,0.24);
+  box-shadow: 0 12px 34px rgba(0,0,0,0.26), 0 0 18px rgba(0,102,255,0.14);
+  backdrop-filter: blur(14px) saturate(145%);
+  -webkit-backdrop-filter: blur(14px) saturate(145%);
+  pointer-events: none;
+}
+.nx-map-route-card {
+  border-color: rgba(0,212,255,0.18);
+}
+.nx-map-metrics span:first-child,
+.nx-map-metrics span:nth-child(2) {
+  color: #eaffff;
+  border-color: rgba(0,212,255,0.18);
+  background: rgba(0,212,255,0.10);
+}
+
+/* NEXRIDE premium camera mode + marker system */
+.nx-google-map-canvas .gm-style {
+  font-family: inherit;
+}
+.nx-gmap-car-marker,
+.nx-gmap-rider-marker,
+.nx-gmap-destination-marker {
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(0 18px 30px rgba(0,0,0,0.45));
+}
+.nx-gmap-car-marker-inner {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  transform-origin: 50% 50%;
+  transition: transform 280ms ease;
+}
+.nx-gmap-car-svg {
+  width: 48px;
+  height: 48px;
+  overflow: visible;
+}
+.nx-gmap-car-svg path:first-child {
+  fill: url(#unused);
+  fill: #00aaff;
+  filter: drop-shadow(0 0 16px rgba(0, 212, 255, 0.78));
+}
+.nx-gmap-car-svg circle {
+  fill: #031024;
+  stroke: rgba(255,255,255,0.72);
+  stroke-width: 1.5;
+}
+.nx-gmap-car-window {
+  fill: rgba(233, 251, 255, 0.88);
+}
+.nx-gmap-car-nose {
+  fill: #13d9ff;
+  filter: drop-shadow(0 0 10px rgba(0,212,255,0.82));
+}
+.nx-gmap-car-photo {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  object-fit: cover;
+  border: 2px solid rgba(255,255,255,0.86);
+  box-shadow: 0 0 14px rgba(0,212,255,0.55);
+}
+.nx-gmap-car-marker.is-nearby .nx-gmap-car-marker-inner {
+  width: 38px;
+  height: 38px;
+  opacity: 0.92;
+}
+.nx-gmap-car-marker.is-nearby .nx-gmap-car-svg {
+  width: 38px;
+  height: 38px;
+}
+.nx-gmap-photo-frame {
+  width: 44px;
+  height: 44px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 1000;
+  background: linear-gradient(135deg, #ffb020, #0066ff 58%, #031024);
+  border: 2px solid rgba(255,255,255,0.84);
+  box-shadow: 0 0 0 8px rgba(255,176,32,0.14), 0 0 30px rgba(255,176,32,0.40);
+}
+.nx-gmap-photo-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.nx-gmap-destination-glow {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  background: rgba(32, 226, 138, 0.16);
+  box-shadow: 0 0 0 8px rgba(32,226,138,0.11), 0 0 38px rgba(32,226,138,0.68);
+  animation: nxDestinationPulse 1.8s ease-in-out infinite;
+}
+.nx-gmap-destination-glow span {
+  position: absolute;
+  inset: 9px;
+  border-radius: 999px;
+  background: #20e28a;
+  border: 2px solid rgba(255,255,255,0.85);
+  box-shadow: 0 0 20px rgba(32,226,138,0.95);
+}
+.nx-gmap-marker-label {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 4px 8px;
+  border-radius: 999px;
+  color: #eaffff;
+  font-size: 9px;
+  font-weight: 1000;
+  background: rgba(2, 9, 22, 0.84);
+  border: 1px solid rgba(0,212,255,0.24);
+  backdrop-filter: blur(10px);
+}
+.nx-offer-toast {
+  top: calc(144px + env(safe-area-inset-top));
+  border-color: rgba(255,176,32,0.32);
+  background: linear-gradient(145deg, rgba(1, 9, 24, 0.82), rgba(255,176,32,0.16), rgba(0,102,255,0.18));
+}
+.nx-final-summary-card {
+  border-color: rgba(32,226,138,0.24);
+  background: linear-gradient(145deg, rgba(32,226,138,0.12), rgba(0,102,255,0.11), rgba(255,255,255,0.06));
+}
+.nx-final-route-card {
+  border-color: rgba(0,212,255,0.20);
+  background: rgba(255,255,255,0.06);
+}
+@keyframes nxDestinationPulse {
+  0%, 100% { transform: scale(0.96); opacity: 0.95; }
+  50% { transform: scale(1.12); opacity: 1; }
+}

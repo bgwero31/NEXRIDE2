@@ -105,10 +105,19 @@ export default function DriverTripControls({ trip, liveRouteInfo = null, onTripU
         type: nexrideNotificationTypes.OTP_VERIFIED,
         city: trip.city || "",
         targetUid: trip.riderId,
-        title: "Trip started",
-        message: `${trip.driverName || "Your driver"} verified the OTP. Your ride is now active.`,
+        title: "OTP verified",
+        message: `${trip.driverName || "Your driver"} verified the pickup code.`,
         url: "/rider",
-        data: { tripId: trip.tripId, status: "picked" },
+        data: { tripId: trip.tripId, status: "picked", step: "otp_verified" },
+      });
+      await queueNexrideEvent({
+        type: nexrideNotificationTypes.TRIP_STARTED,
+        city: trip.city || "",
+        targetUid: trip.riderId,
+        title: "Trip started",
+        message: `Your NEXRIDE trip has started. Live route is now following the destination.`,
+        url: "/rider",
+        data: { tripId: trip.tripId, status: "picked", step: "trip_started" },
       });
       onTripUpdated?.({ ...trip, ...payload });
       setOtpInput("");
@@ -126,7 +135,17 @@ export default function DriverTripControls({ trip, liveRouteInfo = null, onTripU
     setError("");
     setSuccess("");
     try {
-      const completed = { ...trip, status: "completed", completedAt: Date.now(), updatedAt: Date.now() };
+      const completed = {
+        ...trip,
+        status: "completed",
+        distanceText: liveRouteInfo?.distanceText || trip.distanceText || "",
+        distanceMeters: liveRouteInfo?.distanceMeters || trip.distanceMeters || null,
+        durationText: liveRouteInfo?.durationText || trip.durationText || "",
+        durationSeconds: liveRouteInfo?.durationSeconds || trip.durationSeconds || null,
+        routeSource: liveRouteInfo?.source || trip.routeSource || "google",
+        completedAt: Date.now(),
+        updatedAt: Date.now(),
+      };
       await set(ref(db, `completedTrips/${trip.tripId}`), completed);
       await queueNexrideEvent({
         type: nexrideNotificationTypes.TRIP_COMPLETED,

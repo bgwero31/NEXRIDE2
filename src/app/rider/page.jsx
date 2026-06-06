@@ -230,6 +230,11 @@ export default function RiderPage() {
     return [...viewers].sort((a, b) => Number(b.viewedAt || 0) - Number(a.viewedAt || 0))[0];
   }, [viewers]);
 
+  const latestOffer = useMemo(() => {
+    if (!offers.length) return null;
+    return [...offers].sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))[0];
+  }, [offers]);
+
   const handleRequestCreated = (request) => {
     setError("");
     setSuccess("Request posted. Drivers can view and negotiate now.");
@@ -262,6 +267,20 @@ export default function RiderPage() {
       const now = Date.now();
       const otp = String(Math.floor(100000 + Math.random() * 900000));
       const agreedPrice = Number(offer.proposedPrice || requestData.offerPrice || 0);
+
+      let liveDriver = { lat: null, lng: null, heading: null, updatedAt: now };
+      try {
+        const onlineSnap = await get(ref(db, `driversOnline/${city}/${offer.driverId}`));
+        const onlineData = onlineSnap.val() || {};
+        if (Number.isFinite(Number(onlineData.lat)) && Number.isFinite(Number(onlineData.lng))) {
+          liveDriver = {
+            lat: Number(onlineData.lat),
+            lng: Number(onlineData.lng),
+            heading: typeof onlineData.heading === "number" ? onlineData.heading : null,
+            updatedAt: onlineData.lastSeen || now,
+          };
+        }
+      } catch {}
 
       const payload = {
         tripId: newTripId,
@@ -299,7 +318,7 @@ export default function RiderPage() {
         status: "accepted",
         createdAt: now,
         updatedAt: now,
-        driverLive: { lat: null, lng: null, heading: null, updatedAt: now },
+        driverLive: liveDriver,
       };
 
       await set(tripRef, payload);
@@ -436,6 +455,7 @@ export default function RiderPage() {
         city={city}
         requestData={requestData}
         tripData={tripData}
+        completedTrip={completedTrip}
         viewCount={viewCount}
         offersCount={offers.length}
         onDriversCountChange={setNearbyDriversCount}
@@ -457,6 +477,18 @@ export default function RiderPage() {
           <div>
             <strong>{latestViewer.driverName || "A driver"}</strong>
             <span>viewed your ride request</span>
+          </div>
+        </div>
+      ) : null}
+
+      {latestOffer && requestData && !tripData ? (
+        <div className="nx-view-toast nx-offer-toast">
+          <div className="nx-view-avatar">
+            {latestOffer.driverPhotoUrl ? <img src={latestOffer.driverPhotoUrl} alt="" /> : "$"}
+          </div>
+          <div>
+            <strong>{latestOffer.driverName || "A driver"} offered ${Number(latestOffer.proposedPrice || 0).toFixed(2)}</strong>
+            <span>Tap ride details to choose your driver</span>
           </div>
         </div>
       ) : null}

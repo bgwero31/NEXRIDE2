@@ -259,6 +259,24 @@ export default function DriverPage() {
 
     try {
       const nextOnline = !online;
+      let firstGps = {};
+      if (nextOnline && typeof navigator !== "undefined" && navigator.geolocation) {
+        try {
+          const pos = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true,
+              maximumAge: 8000,
+              timeout: 10000,
+            });
+          });
+          firstGps = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            heading: typeof pos.coords.heading === "number" ? pos.coords.heading : null,
+          };
+        } catch {}
+      }
+
       await update(ref(db, `driversOnline/${cityKey}/${user.uid}`), {
         driverId: user.uid,
         name: profile.fullName || "Driver",
@@ -268,6 +286,7 @@ export default function DriverPage() {
         driverPhotoUrl: profile.photoUrl || profile.profilePhotoUrl || "",
         city: cityKey,
         online: nextOnline,
+        ...firstGps,
         updatedAt: Date.now(),
         lastSeen: Date.now(),
       });
@@ -286,6 +305,20 @@ export default function DriverPage() {
     const tripId = tripRef.key;
     const now = Date.now();
     const otp = String(Math.floor(100000 + Math.random() * 900000));
+
+    let liveDriver = { lat: null, lng: null, heading: null, updatedAt: now };
+    try {
+      const onlineSnap = await get(ref(db, `driversOnline/${cityKey}/${user.uid}`));
+      const onlineData = onlineSnap.val() || {};
+      if (Number.isFinite(Number(onlineData.lat)) && Number.isFinite(Number(onlineData.lng))) {
+        liveDriver = {
+          lat: Number(onlineData.lat),
+          lng: Number(onlineData.lng),
+          heading: typeof onlineData.heading === "number" ? onlineData.heading : null,
+          updatedAt: onlineData.lastSeen || now,
+        };
+      }
+    } catch {}
 
     const payload = {
       tripId,
@@ -322,7 +355,7 @@ export default function DriverPage() {
       status: "accepted",
       createdAt: now,
       updatedAt: now,
-      driverLive: { lat: null, lng: null, heading: null, updatedAt: now },
+      driverLive: liveDriver,
     };
 
     await set(tripRef, payload);
@@ -464,7 +497,15 @@ export default function DriverPage() {
 
   return (
     <MobileShell>
-      <DriverMap mode={mode} city={cityKey} activeTrip={activeTrip} requests={visibleRequests} onRouteInfoChange={setLiveRouteInfo} />
+      <DriverMap
+        mode={mode}
+        city={cityKey}
+        activeTrip={activeTrip}
+        completedTrip={completedTrip}
+        requests={visibleRequests}
+        driverPhotoUrl={profile?.photoUrl || profile?.profilePhotoUrl || ""}
+        onRouteInfoChange={setLiveRouteInfo}
+      />
 
       <FloatingTopBar
         title="NEXRIDE DRIVER"

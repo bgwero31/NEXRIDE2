@@ -23,7 +23,7 @@ function recordPoint(record, prefix, fallbackLabel) {
   return fallbackLabel ? { label: fallbackLabel } : null;
 }
 
-export default function RiderMap({ mode, city, requestData, tripData, viewCount = 0, offersCount = 0, onDriversCountChange, onRouteInfoChange }) {
+export default function RiderMap({ mode, city, requestData, tripData, completedTrip, viewCount = 0, offersCount = 0, onDriversCountChange, onRouteInfoChange }) {
   const cityKey = String(city || "harare").toLowerCase();
   const [drivers, setDrivers] = useState([]);
   const [routeInfo, setRouteInfo] = useState(null);
@@ -47,24 +47,31 @@ export default function RiderMap({ mode, city, requestData, tripData, viewCount 
     if (routeInfo) onRouteInfoChange?.(routeInfo);
   }, [onRouteInfoChange, routeInfo]);
 
-  const pickup = requestData?.pickupName || tripData?.pickupName || "Pickup location";
-  const dropoff = requestData?.dropoffName || tripData?.dropoffName || "Destination";
-  const activeDriver = tripData?.driverName || "Nearby drivers";
-  const driverLive = toLatLng(tripData?.driverLive);
+  const routeRecord = tripData || requestData || completedTrip || null;
+  const pickup = routeRecord?.pickupName || "Pickup location";
+  const dropoff = routeRecord?.dropoffName || "Destination";
+  const activeDriver = tripData?.driverName || completedTrip?.driverName || "Nearby drivers";
+  const tripDriverLive = toLatLng(tripData?.driverLive);
+  const matchedOnlineDriver = tripData?.driverId ? drivers.find((driver) => driver.id === tripData.driverId || driver.driverId === tripData.driverId) : null;
+  const driverLive = tripDriverLive || toLatLng(matchedOnlineDriver);
+  const riderLive = toLatLng(tripData?.riderLive);
 
   const routeTargetMode = tripData?.status === "accepted" || tripData?.status === "arrived" ? "pickup" : "destination";
+  const isCompletedMap = !tripData && completedTrip;
 
   const mapOrigin = useMemo(() => {
     if (tripData && driverLive) return { ...driverLive, label: "Driver live location" };
     if (tripData) return recordPoint(tripData, "pickup", tripData.pickupName || pickup);
+    if (completedTrip) return recordPoint(completedTrip, "pickup", completedTrip.pickupName || pickup);
     return recordPoint(requestData, "pickup", requestData?.pickupName || pickup);
-  }, [driverLive, pickup, requestData, tripData]);
+  }, [completedTrip, driverLive, pickup, requestData, tripData]);
 
   const mapDestination = useMemo(() => {
     if (tripData && routeTargetMode === "pickup") return recordPoint(tripData, "pickup", tripData.pickupName || pickup);
     if (tripData) return recordPoint(tripData, "dropoff", tripData.dropoffName || dropoff);
+    if (completedTrip) return recordPoint(completedTrip, "dropoff", completedTrip.dropoffName || dropoff);
     return recordPoint(requestData, "dropoff", requestData?.dropoffName || dropoff);
-  }, [dropoff, pickup, requestData, routeTargetMode, tripData]);
+  }, [completedTrip, dropoff, pickup, requestData, routeTargetMode, tripData]);
 
   const driverMarkers = useMemo(
     () => drivers
@@ -125,8 +132,13 @@ export default function RiderMap({ mode, city, requestData, tripData, viewCount 
         origin={mapOrigin}
         destination={mapDestination}
         driverLocation={driverLive}
-        markers={driverMarkers}
-        showRoute={Boolean(mapOrigin && mapDestination && (requestData || tripData))}
+        riderLocation={riderLive}
+        driverPhotoUrl={tripData?.driverPhotoUrl || completedTrip?.driverPhotoUrl || matchedOnlineDriver?.driverPhotoUrl || ""}
+        riderPhotoUrl={tripData?.riderPhotoUrl || completedTrip?.riderPhotoUrl || requestData?.riderPhotoUrl || ""}
+        markers={tripData || completedTrip ? [] : driverMarkers}
+        showRoute={Boolean(mapOrigin && mapDestination && (requestData || tripData || completedTrip))}
+        followTarget={tripData ? "driver" : "route"}
+        routePhase={isCompletedMap ? "completed" : tripData ? (routeTargetMode === "pickup" ? "pickup" : "destination") : "request"}
         onRouteInfo={setRouteInfo}
         onMapStatus={setMapStatus}
       />
@@ -140,14 +152,14 @@ export default function RiderMap({ mode, city, requestData, tripData, viewCount 
         <div className="nx-map-chip">{mapStatus === "google" ? "Google live" : `${drivers.length} online`}</div>
       </div>
 
-      {(requestData || tripData) ? (
+      {(requestData || tripData || completedTrip) ? (
         <div className="nx-map-card nx-map-route-card">
           <div className="nx-route-mini-row"><span className="nx-dot nx-dot-pickup" />{pickup}</div>
           <div className="nx-route-mini-row"><span className="nx-dot nx-dot-destination" />{dropoff}</div>
           <div className="nx-map-metrics">
-            <span>{routeInfo?.distanceText || requestData?.distanceText || tripData?.distanceText || "Distance loading"}</span>
-            <span>{routeInfo?.durationText || requestData?.durationText || tripData?.durationText || "ETA loading"}</span>
-            <span>{tripData ? (routeTargetMode === "pickup" ? "Driver to pickup" : "To destination") : `${viewCount} viewed`}</span>
+            <span>{routeInfo?.distanceText || routeRecord?.distanceText || "Distance loading"}</span>
+            <span>{routeInfo?.durationText || routeRecord?.durationText || "ETA loading"}</span>
+            <span>{completedTrip ? "Final route" : tripData ? (routeTargetMode === "pickup" ? "Driver to pickup" : "To destination") : `${viewCount} viewed`}</span>
             {!tripData ? <span>{offersCount} offers</span> : null}
           </div>
           {openMapsUrl ? (
