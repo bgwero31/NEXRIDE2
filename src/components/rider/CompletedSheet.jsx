@@ -2,14 +2,26 @@
 
 "use client";
 
+import { useEffect, useRef } from "react";
 import ActionCard from "../ui/ActionCard";
 import PremiumButton from "../ui/PremiumButton";
+import { speakNexrideStage } from "../../lib/nexrideVoice";
 
 function money(value) {
   return Number(value || 0).toFixed(2);
 }
 
 export default function CompletedSheet({ completedTrip, onRequestAgain }) {
+  const spokenRef = useRef("");
+
+  useEffect(() => {
+    if (!completedTrip) return;
+    const key = completedTrip.tripId || completedTrip.id || "completed";
+    if (spokenRef.current === key) return;
+    spokenRef.current = key;
+    speakNexrideStage("completed", "rider", completedTrip, { force: true });
+  }, [completedTrip]);
+
   if (!completedTrip) return null;
 
   return (

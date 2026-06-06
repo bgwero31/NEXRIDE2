@@ -408,10 +408,23 @@ export default function LiveGoogleMap({
 
     if (!target) return;
 
-    mapRef.current.panTo(target);
     const currentZoom = mapRef.current.getZoom?.() || 14;
-    const desiredZoom = routePhase === "pickup" || routePhase === "destination" ? 17 : 16;
-    if (currentZoom < desiredZoom) mapRef.current.setZoom(desiredZoom);
+    const desiredZoom = routePhase === "pickup" || routePhase === "destination" ? 18 : 16;
+    const heading = cleanNumber(driverLocation?.heading, 0);
+
+    if (typeof mapRef.current.moveCamera === "function") {
+      mapRef.current.moveCamera({
+        center: target,
+        zoom: Math.max(currentZoom, desiredZoom),
+        heading: Number.isFinite(heading) ? heading : 0,
+        tilt: routePhase === "pickup" || routePhase === "destination" ? 45 : 0,
+      });
+    } else {
+      mapRef.current.panTo(target);
+      if (currentZoom < desiredZoom) mapRef.current.setZoom(desiredZoom);
+      if (Number.isFinite(heading) && typeof mapRef.current.setHeading === "function") mapRef.current.setHeading(heading);
+      if (typeof mapRef.current.setTilt === "function") mapRef.current.setTilt(routePhase === "pickup" || routePhase === "destination" ? 45 : 0);
+    }
   }, [cameraFollow, destinationPoint, driverPoint, followTarget, originPoint, ready, riderPoint, routePhase]);
 
   useEffect(() => {

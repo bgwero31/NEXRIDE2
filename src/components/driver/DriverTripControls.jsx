@@ -7,6 +7,7 @@ import { ref, remove, set, update } from "firebase/database";
 import { db } from "../../lib/firebase";
 import { googleMapsDirectionsUrl, toLatLng } from "../../lib/googleMaps";
 import { nexrideNotificationTypes, queueNexrideEvent } from "../../lib/nexrideNotifications";
+import { isNexrideVoiceEnabled, muteNexrideVoice, speakNexrideStage, unlockNexrideVoice } from "../../lib/nexrideVoice";
 import ActionCard from "../ui/ActionCard";
 import PremiumButton from "../ui/PremiumButton";
 
@@ -37,6 +38,7 @@ export default function DriverTripControls({ trip, liveRouteInfo = null, onTripU
   const [loadingAction, setLoadingAction] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [voiceOn, setVoiceOn] = useState(() => (typeof window !== "undefined" ? isNexrideVoiceEnabled() : true));
 
   const canVerifyOtp = useMemo(() => trip?.status === "accepted" || trip?.status === "arrived", [trip?.status]);
 
@@ -74,7 +76,9 @@ export default function DriverTripControls({ trip, liveRouteInfo = null, onTripU
           data: { tripId: trip.tripId, status: nextStatus },
         });
       }
-      onTripUpdated?.({ ...trip, ...payload });
+      const updatedTrip = { ...trip, ...payload };
+      speakNexrideStage(nextStatus, "driver", updatedTrip, { force: voiceOn });
+      onTripUpdated?.(updatedTrip);
       setSuccess(`Trip marked: ${nextStatus}`);
     } catch (err) {
       console.error(err);
@@ -119,7 +123,9 @@ export default function DriverTripControls({ trip, liveRouteInfo = null, onTripU
         url: "/rider",
         data: { tripId: trip.tripId, status: "picked", step: "trip_started" },
       });
-      onTripUpdated?.({ ...trip, ...payload });
+      const updatedTrip = { ...trip, ...payload };
+      speakNexrideStage("picked", "driver", updatedTrip, { force: voiceOn });
+      onTripUpdated?.(updatedTrip);
       setOtpInput("");
       setSuccess("OTP verified. Trip started.");
     } catch (err) {
@@ -156,6 +162,7 @@ export default function DriverTripControls({ trip, liveRouteInfo = null, onTripU
         url: "/rider",
         data: { tripId: trip.tripId, status: "completed" },
       });
+      speakNexrideStage("completed", "driver", completed, { force: voiceOn });
       await remove(ref(db, `activeTrips/${trip.tripId}`));
       onTripCompleted?.(completed);
     } catch (err) {
@@ -178,6 +185,28 @@ export default function DriverTripControls({ trip, liveRouteInfo = null, onTripU
     <div className="nx-stack">
       {error ? <div className="nx-alert-error">{error}</div> : null}
       {success ? <div className="nx-alert-success">{success}</div> : null}
+
+      <ActionCard className="nx-voice-card">
+        <div>
+          <div className="nx-eyebrow">Voice guidance</div>
+          <p className="nx-soft-text">NEXRIDE will speak trip stages like accepted, arrived, OTP verified, enroute and completed.</p>
+        </div>
+        <button
+          type="button"
+          className={`nx-voice-toggle ${voiceOn ? "active" : ""}`}
+          onClick={() => {
+            if (voiceOn) {
+              muteNexrideVoice();
+              setVoiceOn(false);
+            } else {
+              unlockNexrideVoice("driver");
+              setVoiceOn(true);
+            }
+          }}
+        >
+          {voiceOn ? "Voice on" : "Voice off"}
+        </button>
+      </ActionCard>
 
       <ActionCard className="nx-driver-card">
         <div className="nx-offer-top">

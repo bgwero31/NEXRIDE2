@@ -9,6 +9,7 @@ import { get, onValue, ref, remove, set, update, push } from "firebase/database"
 import { auth, db } from "../../lib/firebase";
 import { googleMapsDirectionsUrl } from "../../lib/googleMaps";
 import { nexrideNotificationTypes, queueNexrideEvent } from "../../lib/nexrideNotifications";
+import { speakNexrideStage } from "../../lib/nexrideVoice";
 
 import MobileShell from "../../components/ui/MobileShell";
 import FloatingTopBar from "../../components/ui/FloatingTopBar";
@@ -70,6 +71,8 @@ export default function RiderPage() {
   const viewsUnsubRef = useRef(null);
   const tripUnsubRef = useRef(null);
   const completedTripUnsubRef = useRef(null);
+  const lastViewAnnouncedRef = useRef(0);
+  const lastOfferAnnouncedRef = useRef(0);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (currentUser) => {
@@ -235,7 +238,24 @@ export default function RiderPage() {
     return [...offers].sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))[0];
   }, [offers]);
 
+  useEffect(() => {
+    if (!latestViewer?.viewedAt || !requestData) return;
+    const viewedAt = Number(latestViewer.viewedAt || 0);
+    if (viewedAt <= lastViewAnnouncedRef.current) return;
+    lastViewAnnouncedRef.current = viewedAt;
+    speakNexrideStage("request_viewed", "rider", { ...requestData, driverName: latestViewer.driverName || latestViewer.name || "A driver" }, { force: true });
+  }, [latestViewer, requestData]);
+
+  useEffect(() => {
+    if (!latestOffer?.createdAt || !requestData) return;
+    const createdAt = Number(latestOffer.createdAt || 0);
+    if (createdAt <= lastOfferAnnouncedRef.current) return;
+    lastOfferAnnouncedRef.current = createdAt;
+    speakNexrideStage("offer_received", "rider", { ...requestData, driverName: latestOffer.driverName || "A driver" }, { force: true });
+  }, [latestOffer, requestData]);
+
   const handleRequestCreated = (request) => {
+    speakNexrideStage("request_created", "rider", request, { force: true });
     setError("");
     setSuccess("Request posted. Drivers can view and negotiate now.");
     setCompletedTrip(null);
@@ -348,6 +368,7 @@ export default function RiderPage() {
         updatedAt: now,
       });
 
+      speakNexrideStage("accepted", "rider", payload, { force: true });
       setTripId(newTripId);
       setTripData(payload);
       setSuccess("Driver selected. Trip is now live.");

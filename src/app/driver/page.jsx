@@ -17,6 +17,7 @@ import DriverMap from "../../components/driver/DriverMap";
 import DriverTripControls from "../../components/driver/DriverTripControls";
 import { googleMapsDirectionsUrl } from "../../lib/googleMaps";
 import { nexrideNotificationTypes, queueNexrideEvent } from "../../lib/nexrideNotifications";
+import { speakNexrideStage } from "../../lib/nexrideVoice";
 
 function cityLabel(city) {
   if (!city) return "City";
@@ -389,7 +390,8 @@ export default function DriverPage() {
     setSuccess("");
 
     try {
-      await createTripFromRequest(requestItem, requestItem.offerPrice);
+      const trip = await createTripFromRequest(requestItem, requestItem.offerPrice);
+      speakNexrideStage("accepted", "driver", trip, { force: true });
       setSuccess("Ride accepted. Head to pickup and verify OTP.");
     } catch (err) {
       console.error(err);
@@ -451,6 +453,7 @@ export default function DriverPage() {
         offersCount: Number(negotiatingFor.offersCount || 0) + 1,
         updatedAt: Date.now(),
       });
+      speakNexrideStage("offer_sent", "driver", { ...negotiatingFor, driverName: profile.fullName || "Driver" }, { force: true });
       setSuccess("Offer sent to rider.");
       setNegotiatingFor(null);
       setProposedPrice("");
