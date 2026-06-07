@@ -31,7 +31,7 @@ function price(value) {
   return Number.isFinite(n) ? n.toFixed(2) : "0.00";
 }
 
-export default function RequestSheet({ user, profile, appSettings = {}, initialCity = "harare", onRequestCreated }) {
+export default function RequestSheet({ user, profile, appSettings = {}, initialCity = "harare", onRequestCreated, onDraftRouteChange }) {
   const [city, setCity] = useState(String(initialCity || profile?.city || "harare").toLowerCase());
   const [pickupName, setPickupName] = useState("");
   const [dropoffName, setDropoffName] = useState("");
@@ -41,6 +41,7 @@ export default function RequestSheet({ user, profile, appSettings = {}, initialC
   const [people, setPeople] = useState("1");
   const [notes, setNotes] = useState("");
   const [pickupCoords, setPickupCoords] = useState(null);
+  const [dropoffCoords, setDropoffCoords] = useState(null);
   const [routePreview, setRoutePreview] = useState(null);
   const [saving, setSaving] = useState(false);
   const [locating, setLocating] = useState(false);
@@ -57,12 +58,12 @@ export default function RequestSheet({ user, profile, appSettings = {}, initialC
       const savedCity = localStorage.getItem("nexride-last-place") || initialCity || profile?.city || "harare";
 
       setCity(String(savedCity).toLowerCase());
-      setPickupName(savedPickup);
+      setPickupName(savedPickup || "Current GPS pickup");
       setDropoffName(savedDropoff);
       setPreferredPayment(savedPayment);
       setRideMode(savedRideMode);
     } catch {
-      setPickupName(appSettings.defaultPickup || "");
+      setPickupName(appSettings.defaultPickup || "Current GPS pickup");
       setDropoffName(appSettings.defaultDropoff || "");
       setPreferredPayment(appSettings.preferredPayment || "cash");
       setRideMode(appSettings.rideMode || "standard");
@@ -100,7 +101,9 @@ export default function RequestSheet({ user, profile, appSettings = {}, initialC
         dropoffListener = dropoffAutocomplete.addListener("place_changed", () => {
           const place = dropoffAutocomplete.getPlace();
           const formatted = place.formatted_address || place.name || dropoffInputRef.current?.value || "";
+          const location = place.geometry?.location;
           if (formatted) setDropoffName(formatted);
+          if (location) setDropoffCoords({ lat: location.lat(), lng: location.lng() });
         });
       })
       .catch(() => {});
@@ -122,7 +125,7 @@ export default function RequestSheet({ user, profile, appSettings = {}, initialC
       try {
         const route = await getGoogleRouteDetails({
           origin: pickupCoords || cleanPickup,
-          destination: cleanDropoff,
+          destination: dropoffCoords || cleanDropoff,
           city,
         });
         if (route) setRoutePreview(route);
@@ -132,13 +135,14 @@ export default function RequestSheet({ user, profile, appSettings = {}, initialC
     }, 650);
 
     return () => clearTimeout(timer);
-  }, [city, dropoffName, pickupCoords, pickupName]);
+  }, [city, dropoffCoords, dropoffName, pickupCoords, pickupName]);
 
   const cleanCity = useMemo(() => String(city || "harare").trim().toLowerCase(), [city]);
   const canSubmit = Boolean(
     user?.uid &&
       cleanCity &&
       pickupName.trim() &&
+      (pickupCoords || pickupName.trim() !== "Current GPS pickup") &&
       dropoffName.trim() &&
       Number(offerPrice) > 0 &&
       Number(people) > 0
@@ -156,7 +160,7 @@ export default function RequestSheet({ user, profile, appSettings = {}, initialC
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setPickupCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        if (!pickupName.trim()) setPickupName("My current location");
+        setPickupName((current) => current?.trim() && current !== "Current GPS pickup" ? current : "Current GPS pickup");
         setLocating(false);
       },
       () => {
@@ -166,6 +170,27 @@ export default function RequestSheet({ user, profile, appSettings = {}, initialC
       { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 }
     );
   };
+
+
+  useEffect(() => {
+    if (pickupCoords) return;
+    const timer = setTimeout(() => useCurrentLocation(), 350);
+    return () => clearTimeout(timer);
+    // Auto GPS is intentional: riders only need to choose where they are going.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    onDraftRouteChange?.({
+      city: cleanCity,
+      pickupName: pickupName.trim() || "Current GPS pickup",
+      pickupCoords,
+      dropoffName: dropoffName.trim(),
+      dropoffCoords,
+      routePreview,
+      offerPrice: Number(offerPrice || 0),
+    });
+  }, [cleanCity, dropoffCoords, dropoffName, offerPrice, onDraftRouteChange, pickupCoords, pickupName, routePreview]);
 
   const submitRequest = async (e) => {
     e.preventDefault();
@@ -186,6 +211,12 @@ export default function RequestSheet({ user, profile, appSettings = {}, initialC
       return;
     }
 
+    if (cleanPickup === "Current GPS pickup" && !pickupCoords) {
+      setError("Allow GPS first, or type your pickup manually.");
+      useCurrentLocation();
+      return;
+    }
+
     if (!Number.isFinite(priceNumber) || priceNumber <= 0) {
       setError("Add a valid offer price.");
       return;
@@ -199,7 +230,7 @@ export default function RequestSheet({ user, profile, appSettings = {}, initialC
         try {
           googleRoute = await getGoogleRouteDetails({
             origin: pickupCoords || cleanPickup,
-            destination: cleanDropoff,
+            destination: dropoffCoords || cleanDropoff,
             city: cleanCity,
           });
         } catch {
@@ -208,7 +239,7 @@ export default function RequestSheet({ user, profile, appSettings = {}, initialC
       }
 
       const resolvedPickup = googleRoute?.pickupCoords || pickupCoords || null;
-      const resolvedDropoff = googleRoute?.dropoffCoords || null;
+      const resolvedDropoff = googleRoute?.dropoffCoords || dropoffCoords || null;
       const requestRef = push(ref(db, `rideRequests/${cleanCity}`));
       const now = Date.now();
       const payload = {
@@ -274,9 +305,9 @@ export default function RequestSheet({ user, profile, appSettings = {}, initialC
     <form onSubmit={submitRequest} className="nx-request-sheet">
       <div className="nx-sheet-head">
         <div>
-          <div className="nx-eyebrow">Smart fare offers</div>
-          <h2 className="nx-sheet-title">Set your fare</h2>
-          <p className="nx-sheet-copy">Drivers can accept your price or send better offers.</p>
+          <div className="nx-eyebrow">Live ride request</div>
+          <h2 className="nx-sheet-title">Where to & how much?</h2>
+          <p className="nx-sheet-copy">Your pickup uses phone GPS automatically. Add your destination and fare.</p>
         </div>
         <div className="nx-price-badge">${price(offerPrice)}</div>
       </div>
@@ -290,9 +321,9 @@ export default function RequestSheet({ user, profile, appSettings = {}, initialC
             ref={pickupInputRef}
             className="nx-route-input"
             type="text"
-            placeholder="Pickup location"
+            placeholder="Current GPS pickup"
             value={pickupName}
-            onChange={(e) => setPickupName(e.target.value)}
+            onChange={(e) => { setPickupName(e.target.value); if (!e.target.value.trim()) setPickupCoords(null); }}
           />
           <button type="button" className="nx-mini-btn" onClick={useCurrentLocation} disabled={locating}>
             {locating ? "GPS" : "📍"}
@@ -307,7 +338,7 @@ export default function RequestSheet({ user, profile, appSettings = {}, initialC
             type="text"
             placeholder="Where to?"
             value={dropoffName}
-            onChange={(e) => setDropoffName(e.target.value)}
+            onChange={(e) => { setDropoffName(e.target.value); setDropoffCoords(null); }}
           />
         </div>
       </ActionCard>

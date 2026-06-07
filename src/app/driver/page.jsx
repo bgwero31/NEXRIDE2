@@ -511,10 +511,11 @@ export default function DriverPage() {
       />
 
       <FloatingTopBar
-        title="NEXRIDE DRIVER"
-        subtitle={`${profile?.fullName || "Driver"} • ${cityLabel(cityKey)}`}
+        title="NEXRIDE"
+        subtitle={`${profile?.fullName || "Driver"} • Driver • ${cityLabel(cityKey)}`}
         avatarUrl={profile?.photoUrl || profile?.profilePhotoUrl || ""}
-        right={<button onClick={handleLogout} className="nx-topbar-btn">Logout</button>}
+        role="driver"
+        onLogout={handleLogout}
       />
 
       <BottomSheet

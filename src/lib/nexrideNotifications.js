@@ -66,4 +66,5 @@ export const nexrideNotificationTypes = {
   TRIP_ENROUTE: "trip_enroute",
   TRIP_COMPLETED: "trip_completed",
   REQUEST_CANCELLED: "ride_request_cancelled",
+  TRIP_CANCELLED: "trip_cancelled",
 };

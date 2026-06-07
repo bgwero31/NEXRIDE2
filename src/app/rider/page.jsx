@@ -60,6 +60,7 @@ export default function RiderPage() {
   const [tripData, setTripData] = useState(null);
   const [completedTrip, setCompletedTrip] = useState(null);
   const [liveRouteInfo, setLiveRouteInfo] = useState(null);
+  const [draftRoute, setDraftRoute] = useState(null);
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -419,7 +420,52 @@ export default function RiderPage() {
     }
   };
 
-  const handleCancelTrip = () => setError("Trip cancellation can be added next: cancel reason, driver alert, and admin log.");
+  const handleCancelTrip = async () => {
+    if (!tripId || !tripData) {
+      setError("No active trip to cancel.");
+      return;
+    }
+
+    setError("");
+    setSuccess("");
+
+    try {
+      const now = Date.now();
+      await set(ref(db, `cancelledTrips/${tripId}`), {
+        ...tripData,
+        tripId,
+        status: "cancelled",
+        cancelledBy: "rider",
+        cancelledAt: now,
+        updatedAt: now,
+      });
+      await remove(ref(db, `activeTrips/${tripId}`));
+      await queueNexrideEvent({
+        type: nexrideNotificationTypes.TRIP_CANCELLED,
+        city: tripData.city || city,
+        targetUid: tripData.driverId,
+        title: "Trip cancelled",
+        message: `${profile?.fullName || "The rider"} cancelled the NEXRIDE trip.`,
+        url: "/driver",
+        data: { tripId, requestId: tripData.requestId || requestId, city: tripData.city || city },
+      });
+      setTripData(null);
+      setTripId("");
+      setRequestData(null);
+      setRequestId("");
+      setOffers([]);
+      setViewers([]);
+      setViewCount(0);
+      setSuccess("Trip cancelled.");
+      try {
+        localStorage.removeItem("nexride-active-trip-id");
+        localStorage.removeItem("nexride-last-request-id");
+      } catch {}
+    } catch (err) {
+      console.error(err);
+      setError("Failed to cancel trip.");
+    }
+  };
 
   const handleContactDriver = () => {
     if (!tripData?.driverPhone) {
@@ -477,6 +523,7 @@ export default function RiderPage() {
         requestData={requestData}
         tripData={tripData}
         completedTrip={completedTrip}
+        draftRoute={draftRoute}
         viewCount={viewCount}
         offersCount={offers.length}
         onDriversCountChange={setNearbyDriversCount}
@@ -487,7 +534,8 @@ export default function RiderPage() {
         title="NEXRIDE"
         subtitle={`${profile?.fullName || "Rider"} • ${cityLabel(city)}`}
         avatarUrl={profile?.photoUrl || profile?.profilePhotoUrl || ""}
-        right={<button onClick={handleLogout} className="nx-topbar-btn">Logout</button>}
+        role="rider"
+        onLogout={handleLogout}
       />
 
       {latestViewer && requestData && !tripData ? (
@@ -526,7 +574,7 @@ export default function RiderPage() {
         {success ? <div className="nx-alert-success">{success}</div> : null}
 
         {mode === "request" && (
-          <RequestSheet user={user} profile={profile} appSettings={appSettings} initialCity={city} onRequestCreated={handleRequestCreated} />
+          <RequestSheet user={user} profile={profile} appSettings={appSettings} initialCity={city} onRequestCreated={handleRequestCreated} onDraftRouteChange={setDraftRoute} />
         )}
 
         {mode === "waiting" && (
@@ -534,6 +582,7 @@ export default function RiderPage() {
             requestData={requestData}
             driversNearby={nearbyDriversCount}
             viewCount={viewCount}
+            viewers={viewers}
             offersCount={offers.length}
             onCancel={handleCancelRequest}
             onOpenOffers={() => (offers.length > 0 ? setSuccess("Offers refreshed.") : setError("No offers yet. Drivers are still viewing your request."))}

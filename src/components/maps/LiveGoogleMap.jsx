@@ -13,20 +13,24 @@ import {
 } from "../../lib/googleMaps";
 
 const mapStyles = [
-  { elementType: "geometry", stylers: [{ color: "#01050d" }] },
-  { elementType: "labels.icon", stylers: [{ visibility: "off" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#c5d7ea" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#01050d" }] },
-  { featureType: "administrative", elementType: "geometry.stroke", stylers: [{ color: "#0c213e" }] },
-  { featureType: "landscape", elementType: "geometry", stylers: [{ color: "#020916" }] },
-  { featureType: "poi", stylers: [{ visibility: "off" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#0b172a" }] },
-  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#163158" }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#123d78" }] },
-  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#00d4ff" }, { weight: 0.45 }] },
-  { featureType: "road.local", elementType: "geometry", stylers: [{ color: "#10213a" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#000814" }] },
+  { elementType: "geometry", stylers: [{ color: "#edf2f7" }] },
+  { elementType: "labels.icon", stylers: [{ visibility: "on" }, { saturation: -45 }, { lightness: 18 }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#667085" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }, { weight: 3 }] },
+  { featureType: "administrative", elementType: "geometry.stroke", stylers: [{ color: "#d7dee8" }] },
+  { featureType: "landscape", elementType: "geometry", stylers: [{ color: "#eef3f8" }] },
+  { featureType: "landscape.natural", elementType: "geometry", stylers: [{ color: "#e6edf5" }] },
+  { featureType: "poi", elementType: "geometry", stylers: [{ color: "#e8edf3" }] },
+  { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#7b8794" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#dbe5f0" }, { weight: 1.1 }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#bcd3ff" }] },
+  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#7da7ff" }, { weight: 1.6 }] },
+  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#f8fbff" }] },
+  { featureType: "road.local", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
   { featureType: "transit", stylers: [{ visibility: "off" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#d9e9ff" }] },
+  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#7a93ad" }] },
 ];
 
 function cleanNumber(value, fallback = 0) {
@@ -205,6 +209,8 @@ export default function LiveGoogleMap({
   const mapNodeRef = useRef(null);
   const mapRef = useRef(null);
   const directionsRendererRef = useRef(null);
+  const routeHaloRef = useRef(null);
+  const routeLineRef = useRef(null);
   const routeArrowRef = useRef(null);
   const routeMarkerRefs = useRef([]);
   const markerRefs = useRef([]);
@@ -243,7 +249,7 @@ export default function LiveGoogleMap({
             clickableIcons: false,
             gestureHandling: "greedy",
             styles: mapStyles,
-            backgroundColor: "#01050d",
+            backgroundColor: "#edf2f7",
             heading: 0,
             tilt: 0,
           });
@@ -253,9 +259,9 @@ export default function LiveGoogleMap({
             suppressMarkers: true,
             preserveViewport: true,
             polylineOptions: {
-              strokeColor: "#12cfff",
-              strokeOpacity: 0.98,
-              strokeWeight: 8,
+              strokeColor: "#006dff",
+              strokeOpacity: 0,
+              strokeWeight: 0,
               zIndex: 50,
             },
           });
@@ -409,7 +415,7 @@ export default function LiveGoogleMap({
     if (!target) return;
 
     const currentZoom = mapRef.current.getZoom?.() || 14;
-    const desiredZoom = routePhase === "pickup" || routePhase === "destination" ? 18 : 16;
+    const desiredZoom = routePhase === "pickup" || routePhase === "destination" ? 16 : 15;
     const heading = cleanNumber(driverLocation?.heading, 0);
 
     if (typeof mapRef.current.moveCamera === "function") {
@@ -417,15 +423,26 @@ export default function LiveGoogleMap({
         center: target,
         zoom: Math.max(currentZoom, desiredZoom),
         heading: Number.isFinite(heading) ? heading : 0,
-        tilt: routePhase === "pickup" || routePhase === "destination" ? 45 : 0,
+        tilt: routePhase === "pickup" || routePhase === "destination" ? 35 : 0,
       });
     } else {
       mapRef.current.panTo(target);
       if (currentZoom < desiredZoom) mapRef.current.setZoom(desiredZoom);
       if (Number.isFinite(heading) && typeof mapRef.current.setHeading === "function") mapRef.current.setHeading(heading);
-      if (typeof mapRef.current.setTilt === "function") mapRef.current.setTilt(routePhase === "pickup" || routePhase === "destination" ? 45 : 0);
+      if (typeof mapRef.current.setTilt === "function") mapRef.current.setTilt(routePhase === "pickup" || routePhase === "destination" ? 35 : 0);
     }
   }, [cameraFollow, destinationPoint, driverPoint, followTarget, originPoint, ready, riderPoint, routePhase]);
+
+  useEffect(() => {
+    if (!ready || showRoute) return;
+    directionsRendererRef.current?.set("directions", null);
+    routeHaloRef.current?.setMap(null);
+    routeHaloRef.current = null;
+    routeLineRef.current?.setMap(null);
+    routeLineRef.current = null;
+    routeArrowRef.current?.setMap(null);
+    routeArrowRef.current = null;
+  }, [ready, showRoute]);
 
   useEffect(() => {
     if (!ready || !showRoute || !originPoint || !destinationPoint || typeof window === "undefined" || !window.google?.maps) {
@@ -435,7 +452,7 @@ export default function LiveGoogleMap({
     let cancelled = false;
     const google = window.google;
     const service = new google.maps.DirectionsService();
-    const routeFitKey = `${routePhase}:${pointKey(destinationPoint)}`;
+    const routeFitKey = `${routePhase}:${pointKey(originPoint)}:${pointKey(destinationPoint)}`;
 
     service.route(
       {
@@ -452,6 +469,10 @@ export default function LiveGoogleMap({
       (result, status) => {
         if (cancelled) return;
 
+        routeHaloRef.current?.setMap(null);
+        routeHaloRef.current = null;
+        routeLineRef.current?.setMap(null);
+        routeLineRef.current = null;
         routeArrowRef.current?.setMap(null);
         routeArrowRef.current = null;
         routeMarkerRefs.current.forEach((marker) => marker.setMap(null));
@@ -461,23 +482,39 @@ export default function LiveGoogleMap({
           directionsRendererRef.current?.setDirections(result);
 
           const overviewPath = result.routes[0].overview_path || [];
+          routeHaloRef.current = new google.maps.Polyline({
+            path: overviewPath,
+            map: mapRef.current,
+            strokeColor: "#ffffff",
+            strokeOpacity: 0.98,
+            strokeWeight: 14,
+            zIndex: 70,
+          });
+          routeLineRef.current = new google.maps.Polyline({
+            path: overviewPath,
+            map: mapRef.current,
+            strokeColor: "#0b72ff",
+            strokeOpacity: 0.98,
+            strokeWeight: 8,
+            zIndex: 82,
+          });
           routeArrowRef.current = new google.maps.Polyline({
             path: overviewPath,
             map: mapRef.current,
             strokeOpacity: 0,
-            zIndex: 90,
+            zIndex: 96,
             icons: [
               {
                 icon: {
                   path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
                   scale: 5,
-                  fillColor: "#13d9ff",
+                  fillColor: "#00152f",
                   fillOpacity: 1,
-                  strokeColor: "#eaffff",
-                  strokeWeight: 1.6,
+                  strokeColor: "#ffffff",
+                  strokeWeight: 1.8,
                 },
-                offset: "10%",
-                repeat: "58px",
+                offset: "8%",
+                repeat: "66px",
               },
             ],
           });
@@ -509,7 +546,7 @@ export default function LiveGoogleMap({
                   top: 112,
                   left: 48,
                   right: 48,
-                  bottom: routePhase === "completed" ? 190 : 232,
+                  bottom: routePhase === "completed" ? 190 : 315,
                 });
               }
               lastBoundsAtRef.current = now;
