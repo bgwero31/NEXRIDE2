@@ -39,7 +39,7 @@ export default function OffersSheet({ requestData, offers = [], viewCount = 0, o
         pending.map((offer, index) => (
           <ActionCard key={offer.id} className="nx-offer-card">
             <div className="nx-offer-top">
-              <div className="nx-driver-avatar">{offer.driverPhotoUrl ? <img src={offer.driverPhotoUrl} alt="" /> : index + 1}</div>
+              <div className="nx-driver-avatar">{index + 1}</div>
               <div>
                 <h3 className="nx-card-title">{offer.driverName || "NEXRIDE Driver"}</h3>
                 <p className="nx-sheet-copy">{offer.carName || "Verified driver"}{offer.plateNumber ? ` • ${offer.plateNumber}` : ""}</p>

@@ -61,10 +61,8 @@ export const nexrideNotificationTypes = {
   REQUEST_ACCEPTED: "ride_request_accepted",
   OFFER_ACCEPTED: "ride_offer_accepted",
   DRIVER_ARRIVED: "driver_arrived",
-  OTP_VERIFIED: "otp_verified",
-  TRIP_STARTED: "trip_started",
+  OTP_VERIFIED: "otp_verified_trip_started",
   TRIP_ENROUTE: "trip_enroute",
   TRIP_COMPLETED: "trip_completed",
   REQUEST_CANCELLED: "ride_request_cancelled",
-  TRIP_CANCELLED: "trip_cancelled",
 };

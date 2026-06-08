@@ -185,20 +185,6 @@ export default function RiderOffersPage() {
       const now = Date.now();
       const otp = String(Math.floor(100000 + Math.random() * 900000));
 
-      let liveDriver = { lat: null, lng: null, heading: null, updatedAt: now };
-      try {
-        const onlineSnap = await get(ref(db, `driversOnline/${city}/${offer.driverId}`));
-        const onlineData = onlineSnap.val() || {};
-        if (Number.isFinite(Number(onlineData.lat)) && Number.isFinite(Number(onlineData.lng))) {
-          liveDriver = {
-            lat: Number(onlineData.lat),
-            lng: Number(onlineData.lng),
-            heading: typeof onlineData.heading === "number" ? onlineData.heading : null,
-            updatedAt: onlineData.lastSeen || now,
-          };
-        }
-      } catch {}
-
       const payload = {
         tripId,
         requestId: latestRequestId,
@@ -222,7 +208,12 @@ export default function RiderOffersPage() {
         otp,
         status: "accepted",
         createdAt: now,
-        driverLive: liveDriver,
+        driverLive: {
+          lat: null,
+          lng: null,
+          heading: null,
+          updatedAt: now,
+        },
       };
 
       await set(tripRef, payload);

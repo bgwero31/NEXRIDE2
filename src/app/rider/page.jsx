@@ -9,7 +9,6 @@ import { get, onValue, ref, remove, set, update, push } from "firebase/database"
 import { auth, db } from "../../lib/firebase";
 import { googleMapsDirectionsUrl } from "../../lib/googleMaps";
 import { nexrideNotificationTypes, queueNexrideEvent } from "../../lib/nexrideNotifications";
-import { speakNexrideStage } from "../../lib/nexrideVoice";
 
 import MobileShell from "../../components/ui/MobileShell";
 import FloatingTopBar from "../../components/ui/FloatingTopBar";
@@ -59,8 +58,6 @@ export default function RiderPage() {
   const [tripId, setTripId] = useState("");
   const [tripData, setTripData] = useState(null);
   const [completedTrip, setCompletedTrip] = useState(null);
-  const [liveRouteInfo, setLiveRouteInfo] = useState(null);
-  const [draftRoute, setDraftRoute] = useState(null);
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -72,8 +69,6 @@ export default function RiderPage() {
   const viewsUnsubRef = useRef(null);
   const tripUnsubRef = useRef(null);
   const completedTripUnsubRef = useRef(null);
-  const lastViewAnnouncedRef = useRef(0);
-  const lastOfferAnnouncedRef = useRef(0);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (currentUser) => {
@@ -229,34 +224,7 @@ export default function RiderPage() {
     return () => navigator.geolocation.clearWatch(watchId);
   }, [tripData, tripId, user]);
 
-  const latestViewer = useMemo(() => {
-    if (!viewers.length) return null;
-    return [...viewers].sort((a, b) => Number(b.viewedAt || 0) - Number(a.viewedAt || 0))[0];
-  }, [viewers]);
-
-  const latestOffer = useMemo(() => {
-    if (!offers.length) return null;
-    return [...offers].sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))[0];
-  }, [offers]);
-
-  useEffect(() => {
-    if (!latestViewer?.viewedAt || !requestData) return;
-    const viewedAt = Number(latestViewer.viewedAt || 0);
-    if (viewedAt <= lastViewAnnouncedRef.current) return;
-    lastViewAnnouncedRef.current = viewedAt;
-    speakNexrideStage("request_viewed", "rider", { ...requestData, driverName: latestViewer.driverName || latestViewer.name || "A driver" }, { force: true });
-  }, [latestViewer, requestData]);
-
-  useEffect(() => {
-    if (!latestOffer?.createdAt || !requestData) return;
-    const createdAt = Number(latestOffer.createdAt || 0);
-    if (createdAt <= lastOfferAnnouncedRef.current) return;
-    lastOfferAnnouncedRef.current = createdAt;
-    speakNexrideStage("offer_received", "rider", { ...requestData, driverName: latestOffer.driverName || "A driver" }, { force: true });
-  }, [latestOffer, requestData]);
-
   const handleRequestCreated = (request) => {
-    speakNexrideStage("request_created", "rider", request, { force: true });
     setError("");
     setSuccess("Request posted. Drivers can view and negotiate now.");
     setCompletedTrip(null);
@@ -289,20 +257,6 @@ export default function RiderPage() {
       const otp = String(Math.floor(100000 + Math.random() * 900000));
       const agreedPrice = Number(offer.proposedPrice || requestData.offerPrice || 0);
 
-      let liveDriver = { lat: null, lng: null, heading: null, updatedAt: now };
-      try {
-        const onlineSnap = await get(ref(db, `driversOnline/${city}/${offer.driverId}`));
-        const onlineData = onlineSnap.val() || {};
-        if (Number.isFinite(Number(onlineData.lat)) && Number.isFinite(Number(onlineData.lng))) {
-          liveDriver = {
-            lat: Number(onlineData.lat),
-            lng: Number(onlineData.lng),
-            heading: typeof onlineData.heading === "number" ? onlineData.heading : null,
-            updatedAt: onlineData.lastSeen || now,
-          };
-        }
-      } catch {}
-
       const payload = {
         tripId: newTripId,
         requestId,
@@ -311,11 +265,9 @@ export default function RiderPage() {
         riderId: user.uid,
         riderName: profile.fullName || "Rider",
         riderPhone: profile.phone || "",
-        riderPhotoUrl: profile.photoUrl || profile.profilePhotoUrl || "",
         driverId: offer.driverId,
         driverName: offer.driverName || "Driver",
         driverPhone: offer.driverPhone || "",
-        driverPhotoUrl: offer.driverPhotoUrl || offer.profilePhotoUrl || "",
         carName: offer.carName || "",
         plateNumber: offer.plateNumber || "",
         pickupName: requestData.pickupName || "",
@@ -339,7 +291,7 @@ export default function RiderPage() {
         status: "accepted",
         createdAt: now,
         updatedAt: now,
-        driverLive: liveDriver,
+        driverLive: { lat: null, lng: null, heading: null, updatedAt: now },
       };
 
       await set(tripRef, payload);
@@ -369,7 +321,6 @@ export default function RiderPage() {
         updatedAt: now,
       });
 
-      speakNexrideStage("accepted", "rider", payload, { force: true });
       setTripId(newTripId);
       setTripData(payload);
       setSuccess("Driver selected. Trip is now live.");
@@ -420,52 +371,7 @@ export default function RiderPage() {
     }
   };
 
-  const handleCancelTrip = async () => {
-    if (!tripId || !tripData) {
-      setError("No active trip to cancel.");
-      return;
-    }
-
-    setError("");
-    setSuccess("");
-
-    try {
-      const now = Date.now();
-      await set(ref(db, `cancelledTrips/${tripId}`), {
-        ...tripData,
-        tripId,
-        status: "cancelled",
-        cancelledBy: "rider",
-        cancelledAt: now,
-        updatedAt: now,
-      });
-      await remove(ref(db, `activeTrips/${tripId}`));
-      await queueNexrideEvent({
-        type: nexrideNotificationTypes.TRIP_CANCELLED,
-        city: tripData.city || city,
-        targetUid: tripData.driverId,
-        title: "Trip cancelled",
-        message: `${profile?.fullName || "The rider"} cancelled the NEXRIDE trip.`,
-        url: "/driver",
-        data: { tripId, requestId: tripData.requestId || requestId, city: tripData.city || city },
-      });
-      setTripData(null);
-      setTripId("");
-      setRequestData(null);
-      setRequestId("");
-      setOffers([]);
-      setViewers([]);
-      setViewCount(0);
-      setSuccess("Trip cancelled.");
-      try {
-        localStorage.removeItem("nexride-active-trip-id");
-        localStorage.removeItem("nexride-last-request-id");
-      } catch {}
-    } catch (err) {
-      console.error(err);
-      setError("Failed to cancel trip.");
-    }
-  };
+  const handleCancelTrip = () => setError("Trip cancellation can be added next: cancel reason, driver alert, and admin log.");
 
   const handleContactDriver = () => {
     if (!tripData?.driverPhone) {
@@ -522,59 +428,23 @@ export default function RiderPage() {
         city={city}
         requestData={requestData}
         tripData={tripData}
-        completedTrip={completedTrip}
-        draftRoute={draftRoute}
         viewCount={viewCount}
         offersCount={offers.length}
         onDriversCountChange={setNearbyDriversCount}
-        onRouteInfoChange={setLiveRouteInfo}
       />
 
       <FloatingTopBar
         title="NEXRIDE"
         subtitle={`${profile?.fullName || "Rider"} • ${cityLabel(city)}`}
-        avatarUrl={profile?.photoUrl || profile?.profilePhotoUrl || ""}
-        role="rider"
-        onLogout={handleLogout}
+        right={<button onClick={handleLogout} className="nx-topbar-btn">Logout</button>}
       />
 
-      {latestViewer && requestData && !tripData ? (
-        <div className="nx-view-toast">
-          <div className="nx-view-avatar">
-            {latestViewer.driverPhotoUrl ? <img src={latestViewer.driverPhotoUrl} alt="" /> : "🚘"}
-          </div>
-          <div>
-            <strong>{latestViewer.driverName || "A driver"}</strong>
-            <span>viewed your ride request</span>
-          </div>
-        </div>
-      ) : null}
-
-      {latestOffer && requestData && !tripData ? (
-        <div className="nx-view-toast nx-offer-toast">
-          <div className="nx-view-avatar">
-            {latestOffer.driverPhotoUrl ? <img src={latestOffer.driverPhotoUrl} alt="" /> : "$"}
-          </div>
-          <div>
-            <strong>{latestOffer.driverName || "A driver"} offered ${Number(latestOffer.proposedPrice || 0).toFixed(2)}</strong>
-            <span>Tap ride details to choose your driver</span>
-          </div>
-        </div>
-      ) : null}
-
-      <BottomSheet
-        height={mode === "request" ? "38vh" : "24vh"}
-        expandedHeight={mode === "request" ? "50vh" : "58vh"}
-        collapsedHeight={mode === "request" ? "178px" : "142px"}
-        defaultCollapsed={mode !== "request"}
-        stateKey={mode}
-        title={mode === "request" ? "request form" : "ride details"}
-      >
+      <BottomSheet height={mode === "request" ? "32vh" : "22vh"}>
         {error ? <div className="nx-alert-error">{error}</div> : null}
         {success ? <div className="nx-alert-success">{success}</div> : null}
 
         {mode === "request" && (
-          <RequestSheet user={user} profile={profile} appSettings={appSettings} initialCity={city} onRequestCreated={handleRequestCreated} onDraftRouteChange={setDraftRoute} />
+          <RequestSheet user={user} profile={profile} appSettings={appSettings} initialCity={city} onRequestCreated={handleRequestCreated} />
         )}
 
         {mode === "waiting" && (
@@ -582,7 +452,6 @@ export default function RiderPage() {
             requestData={requestData}
             driversNearby={nearbyDriversCount}
             viewCount={viewCount}
-            viewers={viewers}
             offersCount={offers.length}
             onCancel={handleCancelRequest}
             onOpenOffers={() => (offers.length > 0 ? setSuccess("Offers refreshed.") : setError("No offers yet. Drivers are still viewing your request."))}
@@ -593,7 +462,7 @@ export default function RiderPage() {
           <OffersSheet requestData={requestData} offers={offers} viewCount={viewCount} onAcceptOffer={handleAcceptOffer} onCancelRequest={handleCancelRequest} />
         )}
 
-        {mode === "trip" && <TripSheet tripData={tripData} liveRouteInfo={liveRouteInfo} onCancelTrip={handleCancelTrip} onContactDriver={handleContactDriver} />}
+        {mode === "trip" && <TripSheet tripData={tripData} onCancelTrip={handleCancelTrip} onContactDriver={handleContactDriver} />}
         {mode === "completed" && <CompletedSheet completedTrip={completedTrip} onRequestAgain={handleRequestAgain} />}
       </BottomSheet>
     </MobileShell>

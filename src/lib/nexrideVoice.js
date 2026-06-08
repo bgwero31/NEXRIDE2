@@ -10,7 +10,8 @@ function isBrowser() {
 }
 
 export function voiceAvailable() {
-  return isBrowser() && "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
+  if (!isBrowser()) return false;
+  return typeof window.nexrideSpeak === "function" || ("speechSynthesis" in window && "SpeechSynthesisUtterance" in window);
 }
 
 export function isNexrideVoiceEnabled() {
@@ -37,6 +38,15 @@ function preferredVoice() {
 export function speakNexride(message, { interrupt = true, force = false } = {}) {
   if (!message || !voiceAvailable()) return false;
   if (!force && !isNexrideVoiceEnabled()) return false;
+
+  try {
+    if (typeof window.nexrideSpeak === "function") {
+      window.nexrideSpeak(message);
+      return true;
+    }
+  } catch (error) {
+    console.warn("NEXRIDE native voice helper failed", error);
+  }
 
   try {
     if (interrupt) window.speechSynthesis.cancel();

@@ -239,10 +239,7 @@ export default function TripPage() {
           origin={routeOrigin}
           destination={routeDestination}
           driverLocation={driverPoint}
-          riderLocation={toLatLng(trip?.riderLive)}
           showRoute={Boolean(trip && routeOrigin && routeDestination)}
-          followTarget="driver"
-          routePhase={navigatingToPickup ? "pickup" : "destination"}
           onRouteInfo={setRouteInfo}
         />
         <div className="nx-map-card nx-map-status-card">

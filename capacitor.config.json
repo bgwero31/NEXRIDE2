@@ -1,5 +1,10 @@
 {
   "appId": "com.nexride.app",
   "appName": "NEXRIDE",
-  "webDir": "www"
+  "webDir": "www",
+  "server": {
+    "url": "https://nexride-2.vercel.app",
+    "cleartext": false,
+    "errorPath": "offline.html"
+  }
 }

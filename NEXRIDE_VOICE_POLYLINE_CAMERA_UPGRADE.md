@@ -9,6 +9,6 @@ This upgrade adds the next ride-hailing polish layer:
 - Camera follows the driver/car marker during pickup and destination phases.
 - Route keeps the Google Directions polyline with blue arrow indicators.
 - Driver marker keeps rotating from GPS heading.
-- No visible Uber or inDrive wording remains in app files.
+- No visible other ride apps wording remains in app files.
 
 Important: browsers may require the user to tap the Voice button once before automatic voice playback is allowed.

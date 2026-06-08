@@ -20,7 +20,7 @@ function recordPoint(record, prefix, fallbackLabel) {
   return fallbackLabel ? { label: fallbackLabel } : null;
 }
 
-export default function DriverMap({ mode, city, activeTrip, completedTrip, requests = [], driverPhotoUrl = "", onRouteInfoChange }) {
+export default function DriverMap({ mode, city, activeTrip, requests = [] }) {
   const cityKey = String(city || "harare").toLowerCase();
   const [selfLocation, setSelfLocation] = useState(null);
   const [routeInfo, setRouteInfo] = useState(null);
@@ -40,32 +40,25 @@ export default function DriverMap({ mode, city, activeTrip, completedTrip, reque
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
-  useEffect(() => {
-    if (routeInfo) onRouteInfoChange?.(routeInfo);
-  }, [onRouteInfoChange, routeInfo]);
-
-  const routeRecord = activeTrip || completedTrip || requests[0] || null;
-  const pickup = routeRecord?.pickupName || "Waiting for rider requests";
-  const dropoff = routeRecord?.dropoffName || "Open request marketplace";
+  const pickup = activeTrip?.pickupName || requests[0]?.pickupName || "Waiting for rider requests";
+  const dropoff = activeTrip?.dropoffName || requests[0]?.dropoffName || "Open request marketplace";
   const driverLive = toLatLng(activeTrip?.driverLive) || selfLocation;
   const riderLive = toLatLng(activeTrip?.riderLive);
   const routeTargetMode = activeTrip?.status === "accepted" || activeTrip?.status === "arrived" ? "pickup" : "destination";
 
   const routeOrigin = useMemo(() => {
-    if (driverLive && activeTrip) return { ...driverLive, label: "My live location" };
+    if (driverLive) return { ...driverLive, label: "My live location" };
     if (activeTrip) return recordPoint(activeTrip, "pickup", activeTrip.pickupName || pickup);
-    if (completedTrip) return recordPoint(completedTrip, "pickup", completedTrip.pickupName || pickup);
     return null;
-  }, [activeTrip, completedTrip, driverLive, pickup]);
+  }, [activeTrip, driverLive, pickup]);
 
   const routeDestination = useMemo(() => {
     if (activeTrip && routeTargetMode === "pickup" && riderLive) return { ...riderLive, label: "Rider live location" };
     if (activeTrip && routeTargetMode === "pickup") return recordPoint(activeTrip, "pickup", activeTrip.pickupName || pickup);
     if (activeTrip) return recordPoint(activeTrip, "dropoff", activeTrip.dropoffName || dropoff);
-    if (completedTrip) return recordPoint(completedTrip, "dropoff", completedTrip.dropoffName || dropoff);
     const first = requests[0];
     return first ? recordPoint(first, "pickup", first.pickupName || "Pickup") : null;
-  }, [activeTrip, completedTrip, dropoff, pickup, requests, riderLive, routeTargetMode]);
+  }, [activeTrip, dropoff, pickup, requests, riderLive, routeTargetMode]);
 
   const requestMarkers = useMemo(
     () => requests
@@ -92,8 +85,6 @@ export default function DriverMap({ mode, city, activeTrip, completedTrip, reque
       <div className="nx-map-glow one" />
       <div className="nx-map-glow two" />
 
-      {mapStatus !== "google" ? (
-        <>
       <svg className="nx-route-svg" viewBox="0 0 400 760" preserveAspectRatio="none" aria-hidden="true">
         <defs>
           <linearGradient id="routeGradientDriver" x1="0" y1="0" x2="1" y2="1">
@@ -120,8 +111,6 @@ export default function DriverMap({ mode, city, activeTrip, completedTrip, reque
       })}
 
       <div className="nx-car-pin driver-self" style={{ left: "48%", top: "70%" }}>🚘</div>
-        </>
-      ) : null}
 
       <LiveGoogleMap
         city={cityKey}
@@ -129,13 +118,8 @@ export default function DriverMap({ mode, city, activeTrip, completedTrip, reque
         origin={routeOrigin}
         destination={routeDestination}
         driverLocation={driverLive}
-        riderLocation={riderLive}
-        driverPhotoUrl={driverPhotoUrl || activeTrip?.driverPhotoUrl || completedTrip?.driverPhotoUrl || ""}
-        riderPhotoUrl={activeTrip?.riderPhotoUrl || completedTrip?.riderPhotoUrl || ""}
-        markers={activeTrip || completedTrip ? [] : requestMarkers}
-        showRoute={Boolean((activeTrip || completedTrip) && routeOrigin && routeDestination)}
-        followTarget={completedTrip ? "route" : "driver"}
-        routePhase={completedTrip ? "completed" : activeTrip ? (routeTargetMode === "pickup" ? "pickup" : "destination") : "request"}
+        markers={requestMarkers}
+        showRoute={Boolean(activeTrip && routeOrigin && routeDestination)}
         onRouteInfo={setRouteInfo}
         onMapStatus={setMapStatus}
       />
@@ -153,9 +137,9 @@ export default function DriverMap({ mode, city, activeTrip, completedTrip, reque
         <div className="nx-route-mini-row"><span className="nx-dot nx-dot-pickup" />{pickup}</div>
         <div className="nx-route-mini-row"><span className="nx-dot nx-dot-destination" />{dropoff}</div>
         <div className="nx-map-metrics">
-          <span>{routeInfo?.distanceText || routeRecord?.distanceText || (mode === "trip" ? "Distance loading" : "Marketplace")}</span>
-          <span>{routeInfo?.durationText || routeRecord?.durationText || `${requests.length} requests`}</span>
-          <span>{completedTrip ? "Final route" : mode === "trip" ? (routeTargetMode === "pickup" ? "Navigate to pickup" : "Navigate to destination") : "Live requests"}</span>
+          <span>{routeInfo?.distanceText || activeTrip?.distanceText || (mode === "trip" ? "Distance loading" : "Marketplace")}</span>
+          <span>{routeInfo?.durationText || activeTrip?.durationText || `${requests.length} requests`}</span>
+          <span>{mode === "trip" ? (routeTargetMode === "pickup" ? "Navigate to pickup" : "Navigate to destination") : "Live requests"}</span>
         </div>
         {openMapsUrl ? (
           <a className="nx-map-open-link" href={openMapsUrl} target="_blank" rel="noreferrer">

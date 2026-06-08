@@ -7,7 +7,6 @@ import { ref, remove, set, update } from "firebase/database";
 import { db } from "../../lib/firebase";
 import { googleMapsDirectionsUrl, toLatLng } from "../../lib/googleMaps";
 import { nexrideNotificationTypes, queueNexrideEvent } from "../../lib/nexrideNotifications";
-import { isNexrideVoiceEnabled, muteNexrideVoice, speakNexrideStage, unlockNexrideVoice } from "../../lib/nexrideVoice";
 import ActionCard from "../ui/ActionCard";
 import PremiumButton from "../ui/PremiumButton";
 
@@ -33,12 +32,11 @@ export async function pushDriverLivePosition(tripId, { lat, lng, heading }) {
   });
 }
 
-export default function DriverTripControls({ trip, liveRouteInfo = null, onTripUpdated, onTripCompleted }) {
+export default function DriverTripControls({ trip, onTripUpdated, onTripCompleted }) {
   const [otpInput, setOtpInput] = useState("");
   const [loadingAction, setLoadingAction] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [voiceOn, setVoiceOn] = useState(() => (typeof window !== "undefined" ? isNexrideVoiceEnabled() : true));
 
   const canVerifyOtp = useMemo(() => trip?.status === "accepted" || trip?.status === "arrived", [trip?.status]);
 
@@ -76,9 +74,7 @@ export default function DriverTripControls({ trip, liveRouteInfo = null, onTripU
           data: { tripId: trip.tripId, status: nextStatus },
         });
       }
-      const updatedTrip = { ...trip, ...payload };
-      speakNexrideStage(nextStatus, "driver", updatedTrip, { force: voiceOn });
-      onTripUpdated?.(updatedTrip);
+      onTripUpdated?.({ ...trip, ...payload });
       setSuccess(`Trip marked: ${nextStatus}`);
     } catch (err) {
       console.error(err);
@@ -109,23 +105,12 @@ export default function DriverTripControls({ trip, liveRouteInfo = null, onTripU
         type: nexrideNotificationTypes.OTP_VERIFIED,
         city: trip.city || "",
         targetUid: trip.riderId,
-        title: "OTP verified",
-        message: `${trip.driverName || "Your driver"} verified the pickup code.`,
-        url: "/rider",
-        data: { tripId: trip.tripId, status: "picked", step: "otp_verified" },
-      });
-      await queueNexrideEvent({
-        type: nexrideNotificationTypes.TRIP_STARTED,
-        city: trip.city || "",
-        targetUid: trip.riderId,
         title: "Trip started",
-        message: `Your NEXRIDE trip has started. Live route is now following the destination.`,
+        message: `${trip.driverName || "Your driver"} verified the OTP. Your ride is now active.`,
         url: "/rider",
-        data: { tripId: trip.tripId, status: "picked", step: "trip_started" },
+        data: { tripId: trip.tripId, status: "picked" },
       });
-      const updatedTrip = { ...trip, ...payload };
-      speakNexrideStage("picked", "driver", updatedTrip, { force: voiceOn });
-      onTripUpdated?.(updatedTrip);
+      onTripUpdated?.({ ...trip, ...payload });
       setOtpInput("");
       setSuccess("OTP verified. Trip started.");
     } catch (err) {
@@ -141,17 +126,7 @@ export default function DriverTripControls({ trip, liveRouteInfo = null, onTripU
     setError("");
     setSuccess("");
     try {
-      const completed = {
-        ...trip,
-        status: "completed",
-        distanceText: liveRouteInfo?.distanceText || trip.distanceText || "",
-        distanceMeters: liveRouteInfo?.distanceMeters || trip.distanceMeters || null,
-        durationText: liveRouteInfo?.durationText || trip.durationText || "",
-        durationSeconds: liveRouteInfo?.durationSeconds || trip.durationSeconds || null,
-        routeSource: liveRouteInfo?.source || trip.routeSource || "google",
-        completedAt: Date.now(),
-        updatedAt: Date.now(),
-      };
+      const completed = { ...trip, status: "completed", completedAt: Date.now(), updatedAt: Date.now() };
       await set(ref(db, `completedTrips/${trip.tripId}`), completed);
       await queueNexrideEvent({
         type: nexrideNotificationTypes.TRIP_COMPLETED,
@@ -162,7 +137,6 @@ export default function DriverTripControls({ trip, liveRouteInfo = null, onTripU
         url: "/rider",
         data: { tripId: trip.tripId, status: "completed" },
       });
-      speakNexrideStage("completed", "driver", completed, { force: voiceOn });
       await remove(ref(db, `activeTrips/${trip.tripId}`));
       onTripCompleted?.(completed);
     } catch (err) {
@@ -186,28 +160,6 @@ export default function DriverTripControls({ trip, liveRouteInfo = null, onTripU
       {error ? <div className="nx-alert-error">{error}</div> : null}
       {success ? <div className="nx-alert-success">{success}</div> : null}
 
-      <ActionCard className="nx-voice-card">
-        <div>
-          <div className="nx-eyebrow">Voice guidance</div>
-          <p className="nx-soft-text">NEXRIDE will speak trip stages like accepted, arrived, OTP verified, enroute and completed.</p>
-        </div>
-        <button
-          type="button"
-          className={`nx-voice-toggle ${voiceOn ? "active" : ""}`}
-          onClick={() => {
-            if (voiceOn) {
-              muteNexrideVoice();
-              setVoiceOn(false);
-            } else {
-              unlockNexrideVoice("driver");
-              setVoiceOn(true);
-            }
-          }}
-        >
-          {voiceOn ? "Voice on" : "Voice off"}
-        </button>
-      </ActionCard>
-
       <ActionCard className="nx-driver-card">
         <div className="nx-offer-top">
           <div className="nx-driver-avatar">OTP</div>
@@ -223,8 +175,8 @@ export default function DriverTripControls({ trip, liveRouteInfo = null, onTripU
           <div className="nx-route-mini-row"><span className="nx-dot nx-dot-destination" />{trip.dropoffName || "Destination"}</div>
         </div>
         <div className="nx-map-metrics nx-request-metrics">
-          <span>{liveRouteInfo?.distanceText || trip.distanceText || "Distance loading"}</span>
-          <span>{liveRouteInfo?.durationText || trip.durationText || "ETA loading"}</span>
+          <span>{trip.distanceText || "Distance loading"}</span>
+          <span>{trip.durationText || "ETA loading"}</span>
           <span>{navigatingToPickup ? "To pickup" : "To destination"}</span>
         </div>
       </ActionCard>
