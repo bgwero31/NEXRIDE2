@@ -150,7 +150,7 @@ export default function RequestSheet({ user, profile, appSettings = {}, initialC
 
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
+      async (pos) => {
         const gpsPoint = buildGpsPointFromPosition(pos);
         const accuracy = Number(gpsPoint?.accuracy || 9999);
         if (!gpsPoint || accuracy > 250) {
