@@ -3,23 +3,15 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { push, ref, set } from "firebase/database";
+import { push, ref, set, update } from "firebase/database";
 import { db } from "../../lib/firebase";
 import { getGoogleRouteDetails, googleMapsDirectionsUrl, hasGoogleMapsApiKey, loadGoogleMapsApi } from "../../lib/googleMaps";
+import { buildGpsPointFromPosition, getNearestCityFromPoint, normalizeCity, saveDetectedCity, saveDetectedCityLocal, SERVICE_CITY_KEYS } from "../../lib/nexrideCity";
 import { nexrideNotificationTypes, queueNexrideEvent } from "../../lib/nexrideNotifications";
 import ActionCard from "../ui/ActionCard";
 import PremiumButton from "../ui/PremiumButton";
 
-const cityOptions = [
-  "harare",
-  "bulawayo",
-  "gweru",
-  "mutare",
-  "masvingo",
-  "zvishavane",
-  "kwekwe",
-  "kadoma",
-];
+const cityOptions = SERVICE_CITY_KEYS;
 
 function cityLabel(city) {
   if (!city) return "City";
@@ -31,8 +23,8 @@ function price(value) {
   return Number.isFinite(n) ? n.toFixed(2) : "0.00";
 }
 
-export default function RequestSheet({ user, profile, appSettings = {}, initialCity = "harare", onRequestCreated, onDraftRouteChange }) {
-  const [city, setCity] = useState(String(initialCity || profile?.city || "harare").toLowerCase());
+export default function RequestSheet({ user, profile, appSettings = {}, initialCity = "zvishavane", onRequestCreated, onDraftRouteChange }) {
+  const [city, setCity] = useState(normalizeCity(initialCity || profile?.city || "zvishavane"));
   const [pickupName, setPickupName] = useState("");
   const [dropoffName, setDropoffName] = useState("");
   const [offerPrice, setOfferPrice] = useState("3");
@@ -55,9 +47,9 @@ export default function RequestSheet({ user, profile, appSettings = {}, initialC
       const savedDropoff = localStorage.getItem("nexride-default-dropoff") || appSettings.defaultDropoff || "";
       const savedPayment = localStorage.getItem("nexride-preferred-payment") || appSettings.preferredPayment || "cash";
       const savedRideMode = localStorage.getItem("nexride-ride-mode") || appSettings.rideMode || "standard";
-      const savedCity = localStorage.getItem("nexride-last-place") || initialCity || profile?.city || "harare";
+      const savedCity = localStorage.getItem("nexride-gps-detected-city") || localStorage.getItem("nexride-last-place") || initialCity || profile?.city || "zvishavane";
 
-      setCity(String(savedCity).toLowerCase());
+      setCity(normalizeCity(savedCity));
       setPickupName(savedPickup || "Current GPS pickup");
       setDropoffName(savedDropoff);
       setPreferredPayment(savedPayment);
@@ -137,7 +129,7 @@ export default function RequestSheet({ user, profile, appSettings = {}, initialC
     return () => clearTimeout(timer);
   }, [city, dropoffCoords, dropoffName, pickupCoords, pickupName]);
 
-  const cleanCity = useMemo(() => String(city || "harare").trim().toLowerCase(), [city]);
+  const cleanCity = useMemo(() => normalizeCity(city || "zvishavane"), [city]);
   const canSubmit = Boolean(
     user?.uid &&
       cleanCity &&
@@ -159,13 +151,22 @@ export default function RequestSheet({ user, profile, appSettings = {}, initialC
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const accuracy = Number(pos.coords.accuracy || 9999);
-        if (accuracy > 250) {
+        const gpsPoint = buildGpsPointFromPosition(pos);
+        const accuracy = Number(gpsPoint?.accuracy || 9999);
+        if (!gpsPoint || accuracy > 250) {
           setError("GPS is too weak right now. Move outside or type pickup manually.");
           setLocating(false);
           return;
         }
-        setPickupCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy });
+
+        const detected = getNearestCityFromPoint(gpsPoint);
+        const detectedCity = detected?.cityKey || cleanCity;
+
+        setCity(detectedCity);
+        saveDetectedCityLocal(detectedCity);
+        await saveDetectedCity({ db, ref, update, uid: user?.uid, cityKey: detectedCity });
+
+        setPickupCoords({ lat: gpsPoint.lat, lng: gpsPoint.lng, accuracy, source: "phone-gps" });
         setPickupName((current) => current?.trim() && current !== "Current GPS pickup" ? current : "Current GPS pickup");
         setLocating(false);
       },
@@ -246,11 +247,16 @@ export default function RequestSheet({ user, profile, appSettings = {}, initialC
 
       const resolvedPickup = googleRoute?.pickupCoords || pickupCoords || null;
       const resolvedDropoff = googleRoute?.dropoffCoords || dropoffCoords || null;
-      const requestRef = push(ref(db, `rideRequests/${cleanCity}`));
+      const detectedFromPickup = getNearestCityFromPoint(resolvedPickup || pickupCoords);
+      const requestCity = detectedFromPickup?.cityKey || cleanCity;
+      setCity(requestCity);
+      saveDetectedCityLocal(requestCity);
+      await saveDetectedCity({ db, ref, update, uid: user?.uid, cityKey: requestCity });
+      const requestRef = push(ref(db, `rideRequests/${requestCity}`));
       const now = Date.now();
       const payload = {
         id: requestRef.key,
-        city: cleanCity,
+        city: requestCity,
         riderId: user.uid,
         riderName: profile?.fullName || user.email || "Rider",
         riderPhone: profile?.phone || "",
@@ -266,7 +272,7 @@ export default function RequestSheet({ user, profile, appSettings = {}, initialC
         durationText: googleRoute?.durationText || "",
         durationSeconds: googleRoute?.durationSeconds || null,
         routeSource: googleRoute?.source || "manual",
-        mapsUrl: googleMapsDirectionsUrl({ origin: resolvedPickup || cleanPickup, destination: resolvedDropoff || cleanDropoff, city: cleanCity }),
+        mapsUrl: googleMapsDirectionsUrl({ origin: resolvedPickup || cleanPickup, destination: resolvedDropoff || cleanDropoff, city: requestCity }),
         offerPrice: priceNumber,
         people: peopleNumber,
         notes: notes.trim(),
@@ -283,17 +289,17 @@ export default function RequestSheet({ user, profile, appSettings = {}, initialC
 
       await queueNexrideEvent({
         type: nexrideNotificationTypes.REQUEST_CREATED,
-        city: cleanCity,
+        city: requestCity,
         targetRole: "driver",
         title: "New NEXRIDE request",
         message: `${profile?.fullName || "A rider"} is offering $${price(priceNumber)} from ${payload.pickupName || "pickup"}.`,
         url: "/driver",
-        data: { requestId: requestRef.key, city: cleanCity, offerPrice: priceNumber },
+        data: { requestId: requestRef.key, city: requestCity, offerPrice: priceNumber },
       });
 
       try {
         localStorage.setItem("nexride-last-request-id", requestRef.key);
-        localStorage.setItem("nexride-last-place", cleanCity);
+        localStorage.setItem("nexride-last-place", requestCity);
         localStorage.setItem("nexride-default-pickup", cleanPickup);
         localStorage.setItem("nexride-default-dropoff", cleanDropoff);
       } catch {}

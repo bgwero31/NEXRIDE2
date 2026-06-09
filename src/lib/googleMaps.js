@@ -11,6 +11,9 @@ export const ZIMBABWE_CITY_CENTERS = {
   zvishavane: { lat: -20.3267, lng: 30.0665, label: "Zvishavane" },
   kwekwe: { lat: -18.9281, lng: 29.8149, label: "Kwekwe" },
   kadoma: { lat: -18.3333, lng: 29.9167, label: "Kadoma" },
+  chitungwiza: { lat: -18.0127, lng: 31.0756, label: "Chitungwiza" },
+  chinhoyi: { lat: -17.3667, lng: 30.2, label: "Chinhoyi" },
+  marondera: { lat: -18.1853, lng: 31.5519, label: "Marondera" },
 };
 
 export function getGoogleMapsApiKey() {

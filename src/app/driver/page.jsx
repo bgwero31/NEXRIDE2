@@ -16,6 +16,7 @@ import PremiumButton from "../../components/ui/PremiumButton";
 import DriverMap from "../../components/driver/DriverMap";
 import DriverTripControls from "../../components/driver/DriverTripControls";
 import { googleMapsDirectionsUrl } from "../../lib/googleMaps";
+import { buildGpsPointFromPosition, getNearestCityFromPoint, normalizeCity, saveDetectedCity, saveDetectedCityLocal } from "../../lib/nexrideCity";
 import { nexrideNotificationTypes, queueNexrideEvent } from "../../lib/nexrideNotifications";
 import { speakNexrideStage } from "../../lib/nexrideVoice";
 
@@ -42,8 +43,8 @@ export default function DriverPage() {
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
-  const [city, setCity] = useState("harare");
-  const cityKey = useMemo(() => String(city || "harare").trim().toLowerCase(), [city]);
+  const [city, setCity] = useState("zvishavane");
+  const cityKey = useMemo(() => normalizeCity(city || "zvishavane"), [city]);
 
   const [online, setOnline] = useState(false);
   const [requests, setRequests] = useState([]);
@@ -99,12 +100,12 @@ export default function DriverPage() {
           return;
         }
 
-        const savedCity = settingsData.city || profileData.city || "harare";
+        const savedCity = settingsData.city || profileData.city || (typeof window !== "undefined" ? localStorage.getItem("nexride-gps-detected-city") : null) || "zvishavane";
         setProfile({ ...profileData, role: "driver" });
-        setCity(String(savedCity).toLowerCase());
+        setCity(normalizeCity(savedCity));
 
         try {
-          localStorage.setItem("nexride-last-place", String(savedCity).toLowerCase());
+          localStorage.setItem("nexride-last-place", normalizeCity(savedCity));
         } catch {}
       } catch (err) {
         console.error(err);
@@ -198,7 +199,7 @@ export default function DriverPage() {
           carName: profile.carName || "",
           plateNumber: profile.plateNumber || "",
           driverPhotoUrl: profile.photoUrl || profile.profilePhotoUrl || "",
-          city: cityKey,
+          city: onlineCity,
           viewedAt: now,
         });
 
@@ -219,18 +220,39 @@ export default function DriverPage() {
     if (!user || !cityKey || !online) return;
     if (typeof navigator === "undefined" || !navigator.geolocation) return;
 
-    const onlineRef = ref(db, `driversOnline/${cityKey}/${user.uid}`);
-
     const pushLocation = async (pos) => {
+      const gpsPoint = buildGpsPointFromPosition(pos);
+      if (!gpsPoint) return;
+
+      const detected = getNearestCityFromPoint(gpsPoint);
+      const liveCity = detected?.cityKey || cityKey;
+
+      if (liveCity !== cityKey) {
+        const onlineCity = firstGps.city || cityKey;
+      if (onlineCity !== cityKey) {
+        await update(ref(db, `driversOnline/${cityKey}/${user.uid}`), { online: false, movedToCity: onlineCity, lastSeen: Date.now() });
+      }
+
+      await update(ref(db, `driversOnline/${onlineCity}/${user.uid}`), {
+          online: false,
+          movedToCity: liveCity,
+          lastSeen: Date.now(),
+        });
+        setCity(liveCity);
+        saveDetectedCityLocal(liveCity);
+        await saveDetectedCity({ db, ref, update, uid: user.uid, cityKey: liveCity });
+      }
+
       const live = {
-        lat: pos.coords.latitude,
-        lng: pos.coords.longitude,
-        heading: typeof pos.coords.heading === "number" ? pos.coords.heading : null,
+        lat: gpsPoint.lat,
+        lng: gpsPoint.lng,
+        heading: gpsPoint.heading,
+        city: liveCity,
         lastSeen: Date.now(),
       };
 
       try {
-        await update(onlineRef, live);
+        await update(ref(db, `driversOnline/${liveCity}/${user.uid}`), live);
         if (activeTrip?.tripId) {
           await update(ref(db, `activeTrips/${activeTrip.tripId}/driverLive`), {
             lat: live.lat,
@@ -270,11 +292,21 @@ export default function DriverPage() {
               timeout: 10000,
             });
           });
-          firstGps = {
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-            heading: typeof pos.coords.heading === "number" ? pos.coords.heading : null,
-          };
+          const gpsPoint = buildGpsPointFromPosition(pos);
+          const detected = getNearestCityFromPoint(gpsPoint);
+          if (detected?.cityKey) {
+            setCity(detected.cityKey);
+            saveDetectedCityLocal(detected.cityKey);
+            await saveDetectedCity({ db, ref, update, uid: user.uid, cityKey: detected.cityKey });
+          }
+          firstGps = gpsPoint
+            ? {
+                lat: gpsPoint.lat,
+                lng: gpsPoint.lng,
+                heading: gpsPoint.heading,
+                city: detected?.cityKey || cityKey,
+              }
+            : {};
         } catch {}
       }
 
@@ -292,7 +324,7 @@ export default function DriverPage() {
         lastSeen: Date.now(),
       });
       setOnline(nextOnline);
-      setSuccess(nextOnline ? "You are online. Requests will appear on your map." : "You are offline.");
+      setSuccess(nextOnline ? `You are online in ${cityLabel(onlineCity)}. Requests will appear from that city.` : "You are offline.");
     } catch (err) {
       console.error(err);
       setError("Failed to update online status.");

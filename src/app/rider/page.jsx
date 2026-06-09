@@ -8,6 +8,7 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import { get, onValue, ref, remove, set, update, push } from "firebase/database";
 import { auth, db } from "../../lib/firebase";
 import { googleMapsDirectionsUrl } from "../../lib/googleMaps";
+import { buildGpsPointFromPosition, getNearestCityFromPoint, normalizeCity, saveDetectedCity, saveDetectedCityLocal } from "../../lib/nexrideCity";
 import { nexrideNotificationTypes, queueNexrideEvent } from "../../lib/nexrideNotifications";
 import { speakNexrideStage } from "../../lib/nexrideVoice";
 
@@ -47,7 +48,7 @@ export default function RiderPage() {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [appSettings, setAppSettings] = useState({});
-  const [city, setCity] = useState("harare");
+  const [city, setCity] = useState("zvishavane");
 
   const [requestId, setRequestId] = useState("");
   const [requestData, setRequestData] = useState(null);
@@ -74,6 +75,22 @@ export default function RiderPage() {
   const completedTripUnsubRef = useRef(null);
   const lastViewAnnouncedRef = useRef(0);
   const lastOfferAnnouncedRef = useRef(0);
+
+  const handleDetectedCity = async (detectedCity) => {
+    const nextCity = normalizeCity(detectedCity || city);
+    if (!nextCity) return;
+
+    if (nextCity !== city) {
+      setCity(nextCity);
+      setRequestData(null);
+      setOffers([]);
+      setViewers([]);
+      setViewCount(0);
+    }
+
+    saveDetectedCityLocal(nextCity);
+    await saveDetectedCity({ db, ref, update, uid: user?.uid, cityKey: nextCity });
+  };
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (currentUser) => {
@@ -107,14 +124,14 @@ export default function RiderPage() {
           settingsData.city ||
           profileData.city ||
           (typeof window !== "undefined" ? localStorage.getItem("nexride-last-place") : null) ||
-          "harare";
+          "zvishavane";
 
         setProfile({ ...profileData, role: profileData.role || "rider" });
         setAppSettings(settingsData);
-        setCity(String(savedCity).toLowerCase());
+        setCity(normalizeCity(savedCity));
 
         try {
-          localStorage.setItem("nexride-last-place", String(savedCity).toLowerCase());
+          localStorage.setItem("nexride-last-place", normalizeCity(savedCity));
           if (settingsData.defaultPickup) localStorage.setItem("nexride-default-pickup", settingsData.defaultPickup);
           if (settingsData.defaultDropoff) localStorage.setItem("nexride-default-dropoff", settingsData.defaultDropoff);
           if (settingsData.preferredPayment) localStorage.setItem("nexride-preferred-payment", settingsData.preferredPayment);
@@ -214,10 +231,17 @@ export default function RiderPage() {
     const watchId = navigator.geolocation.watchPosition(
       async (pos) => {
         try {
+          const gpsPoint = buildGpsPointFromPosition(pos);
+          if (!gpsPoint) return;
+          const detected = getNearestCityFromPoint(gpsPoint);
+          const liveCity = detected?.cityKey || city;
+          if (detected?.cityKey) await handleDetectedCity(detected.cityKey);
+
           await update(ref(db, `activeTrips/${tripId}/riderLive`), {
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-            heading: typeof pos.coords.heading === "number" ? pos.coords.heading : null,
+            lat: gpsPoint.lat,
+            lng: gpsPoint.lng,
+            heading: gpsPoint.heading,
+            city: liveCity,
             updatedAt: Date.now(),
           });
         } catch {}
@@ -528,6 +552,7 @@ export default function RiderPage() {
         offersCount={offers.length}
         onDriversCountChange={setNearbyDriversCount}
         onRouteInfoChange={setLiveRouteInfo}
+        onCityDetected={handleDetectedCity}
       />
 
       <FloatingTopBar

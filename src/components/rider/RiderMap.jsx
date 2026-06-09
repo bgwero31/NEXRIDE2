@@ -7,6 +7,7 @@ import { onValue, ref } from "firebase/database";
 import { db } from "../../lib/firebase";
 import LiveGoogleMap from "../maps/LiveGoogleMap";
 import { cityLabel, googleMapsDirectionsUrl, pointFromRecord, toLatLng } from "../../lib/googleMaps";
+import { buildGpsPointFromPosition, getNearestCityFromPoint, normalizeCity } from "../../lib/nexrideCity";
 
 function modeCopy(mode) {
   if (mode === "request") return "Where to?";
@@ -23,8 +24,8 @@ function recordPoint(record, prefix, fallbackLabel) {
   return fallbackLabel ? { label: fallbackLabel } : null;
 }
 
-export default function RiderMap({ mode, city, requestData, tripData, completedTrip, draftRoute = null, viewCount = 0, offersCount = 0, onDriversCountChange, onRouteInfoChange }) {
-  const cityKey = String(city || "harare").toLowerCase();
+export default function RiderMap({ mode, city, requestData, tripData, completedTrip, draftRoute = null, viewCount = 0, offersCount = 0, onDriversCountChange, onRouteInfoChange, onCityDetected }) {
+  const cityKey = normalizeCity(city || "zvishavane");
   const [drivers, setDrivers] = useState([]);
   const [riderCurrentLocation, setRiderCurrentLocation] = useState(null);
   const [routeInfo, setRouteInfo] = useState(null);
@@ -51,11 +52,17 @@ export default function RiderMap({ mode, city, requestData, tripData, completedT
       (pos) => {
         const accuracy = Number(pos.coords.accuracy || 9999);
         if (accuracy > 250) return;
+        const gpsPoint = buildGpsPointFromPosition(pos);
+        if (!gpsPoint) return;
+        const detected = getNearestCityFromPoint(gpsPoint);
+        if (detected?.cityKey) onCityDetected?.(detected.cityKey, detected);
+
         setRiderCurrentLocation({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          heading: typeof pos.coords.heading === "number" ? pos.coords.heading : null,
+          lat: gpsPoint.lat,
+          lng: gpsPoint.lng,
+          heading: gpsPoint.heading,
           accuracy,
+          city: detected?.cityKey || cityKey,
           label: "My live location",
         });
       },
@@ -63,7 +70,7 @@ export default function RiderMap({ mode, city, requestData, tripData, completedT
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
     );
     return () => navigator.geolocation.clearWatch(watchId);
-  }, []);
+  }, [cityKey, onCityDetected]);
 
   useEffect(() => {
     if (routeInfo) onRouteInfoChange?.(routeInfo);
