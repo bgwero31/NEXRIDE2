@@ -17,7 +17,7 @@ function elapsed(seconds) {
   return `${min}m ${String(sec).padStart(2, "0")}s`;
 }
 
-export default function WaitingSheet({ requestData, driversNearby = 0, viewCount = 0, offersCount = 0, onCancel, onOpenOffers }) {
+export default function WaitingSheet({ requestData, driversNearby = 0, viewCount = 0, viewers = [], offersCount = 0, onCancel, onOpenOffers }) {
   const [seconds, setSeconds] = useState(0);
 
   useEffect(() => {
@@ -42,6 +42,22 @@ export default function WaitingSheet({ requestData, driversNearby = 0, viewCount
           <p className="nx-sheet-copy">Drivers around {requestData.city} can view and negotiate your ride.</p>
         </div>
       </ActionCard>
+
+      {viewers.length ? (
+        <ActionCard className="nx-viewers-card">
+          <div>
+            <div className="nx-eyebrow">Drivers viewing</div>
+            <div className="nx-card-title">{viewCount} driver{viewCount === 1 ? "" : "s"} viewed your request</div>
+          </div>
+          <div className="nx-viewer-avatars">
+            {viewers.slice(0, 5).map((viewer, index) => (
+              <div key={viewer.driverId || index} className="nx-view-avatar mini" title={viewer.driverName || "Driver"}>
+                {viewer.driverPhotoUrl ? <img src={viewer.driverPhotoUrl} alt="" /> : "🚘"}
+              </div>
+            ))}
+          </div>
+        </ActionCard>
+      ) : null}
 
       <div className="nx-stat-row">
         <div className="nx-stat-card">

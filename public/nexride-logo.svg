@@ -1,21 +1,57 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="512" height="512" rx="132" fill="url(#bg)"/>
-  <path d="M120 314C171 214 247 164 392 147" stroke="url(#road)" stroke-width="44" stroke-linecap="round"/>
-  <path d="M122 314C171 214 247 164 392 147" stroke="#F7FBFF" stroke-opacity="0.22" stroke-width="8" stroke-linecap="round" stroke-dasharray="28 30"/>
-  <path d="M139 349L205 157H262L330 349H276L264 309H202L190 349H139ZM216 263H250L233 207L216 263Z" fill="#F7FBFF"/>
-  <path d="M319 349V178H371C412 178 438 201 438 235C438 258 426 276 407 286L450 349H389L354 292H369C379 292 386 289 392 283C398 277 401 269 401 258C401 247 398 239 391 233C385 227 376 224 365 224H370V349H319Z" fill="#00D4FF"/>
-  <circle cx="161" cy="373" r="31" fill="#020817" stroke="#00D4FF" stroke-width="12"/>
-  <circle cx="362" cy="373" r="31" fill="#020817" stroke="#0066FF" stroke-width="12"/>
+  <rect width="512" height="512" rx="128" fill="url(#bg)"/>
+  <g filter="url(#softGlow)">
+    <path d="M111 326C166 247 223 196 318 169C352 159 381 153 407 151" stroke="url(#roadBlue)" stroke-width="42" stroke-linecap="round"/>
+    <path d="M111 326C166 247 223 196 318 169C352 159 381 153 407 151" stroke="#F7FBFF" stroke-opacity="0.95" stroke-width="7" stroke-linecap="round" stroke-dasharray="24 24"/>
+    <path d="M105 340L176 145C184 122 216 119 229 140L283 229L343 136C356 116 389 122 393 146L421 342H357L344 239L306 304C294 325 263 325 250 304L212 240L175 340H105Z" fill="url(#nFace)"/>
+    <path d="M86 350H199L183 394H60L86 350Z" fill="url(#speed1)" opacity="0.96"/>
+    <path d="M101 294H168L154 326H70L101 294Z" fill="url(#speed2)" opacity="0.75"/>
+    <path d="M321 348H451L464 394H297L321 348Z" fill="url(#speed3)" opacity="0.7"/>
+  </g>
+  <path d="M92 412H420" stroke="url(#floor)" stroke-width="10" stroke-linecap="round" opacity="0.45"/>
   <defs>
-    <linearGradient id="bg" x1="63" y1="30" x2="453" y2="482" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#00D4FF"/>
-      <stop offset="0.45" stop-color="#0066FF"/>
+    <linearGradient id="bg" x1="50" y1="32" x2="462" y2="487" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#06152B"/>
+      <stop offset="0.35" stop-color="#0066FF"/>
+      <stop offset="0.62" stop-color="#00D4FF"/>
       <stop offset="1" stop-color="#020817"/>
     </linearGradient>
-    <linearGradient id="road" x1="120" y1="314" x2="392" y2="147" gradientUnits="userSpaceOnUse">
+    <linearGradient id="roadBlue" x1="97" y1="334" x2="413" y2="144" gradientUnits="userSpaceOnUse">
       <stop stop-color="#020817"/>
-      <stop offset="0.45" stop-color="#0066FF"/>
+      <stop offset="0.42" stop-color="#0066FF"/>
+      <stop offset="1" stop-color="#33E2FF"/>
+    </linearGradient>
+    <linearGradient id="nFace" x1="98" y1="151" x2="428" y2="355" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F7FBFF"/>
+      <stop offset="0.16" stop-color="#20DFFF"/>
+      <stop offset="0.55" stop-color="#0066FF"/>
+      <stop offset="1" stop-color="#020817"/>
+    </linearGradient>
+    <linearGradient id="speed1" x1="60" y1="372" x2="199" y2="372" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#003BFF"/>
       <stop offset="1" stop-color="#00D4FF"/>
     </linearGradient>
+    <linearGradient id="speed2" x1="70" y1="310" x2="168" y2="310" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0066FF"/>
+      <stop offset="1" stop-color="#33E2FF"/>
+    </linearGradient>
+    <linearGradient id="speed3" x1="297" y1="371" x2="464" y2="371" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#00D4FF"/>
+      <stop offset="1" stop-color="#0066FF"/>
+    </linearGradient>
+    <linearGradient id="floor" x1="92" y1="412" x2="420" y2="412" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0066FF" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#00D4FF"/>
+      <stop offset="1" stop-color="#0066FF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="softGlow" x="29" y="77" width="464" height="358" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feGaussianBlur in="SourceAlpha" stdDeviation="10" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0 0 0 0 0 0.42 0 0 0 0 1 0 0 0 0.72 0" result="glow"/>
+      <feMerge>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
   </defs>
 </svg>

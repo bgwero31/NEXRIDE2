@@ -2,6 +2,7 @@
 
 import { push, ref, set } from "firebase/database";
 import { db } from "./firebase";
+import { nexrideDeviceNotify } from "./nexrideNative";
 
 function cleanPayload(value) {
   return JSON.parse(JSON.stringify(value || {}, (_key, item) => (item === undefined ? null : item)));
@@ -51,6 +52,12 @@ export async function queueNexrideEvent(event = {}) {
     }
   }
 
+  // Native APK fallback: this shows an immediate device notification on the phone.
+  // Real remote OneSignal push still needs the Render endpoint + REST key.
+  try {
+    await nexrideDeviceNotify(payload.title, payload.message, payload.data);
+  } catch {}
+
   return payload;
 }
 
@@ -61,8 +68,16 @@ export const nexrideNotificationTypes = {
   REQUEST_ACCEPTED: "ride_request_accepted",
   OFFER_ACCEPTED: "ride_offer_accepted",
   DRIVER_ARRIVED: "driver_arrived",
-  OTP_VERIFIED: "otp_verified_trip_started",
+  OTP_VERIFIED: "otp_verified",
+  TRIP_STARTED: "trip_started",
   TRIP_ENROUTE: "trip_enroute",
   TRIP_COMPLETED: "trip_completed",
   REQUEST_CANCELLED: "ride_request_cancelled",
+  TRIP_CANCELLED: "trip_cancelled",
+  SCHOOL_REGISTERED: "school_registered",
+  SCHOOL_ROUTE_STARTED: "school_route_started",
+  SCHOOL_CHILD_BOARDED: "school_child_boarded",
+  SCHOOL_CHILD_DROPPED: "school_child_dropped",
+  SCHOOL_ROUTE_COMPLETED: "school_route_completed",
+  SCHOOL_EMERGENCY: "school_emergency",
 };

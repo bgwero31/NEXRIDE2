@@ -2,9 +2,11 @@
 
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import ActionCard from "../ui/ActionCard";
 import PremiumButton from "../ui/PremiumButton";
 import { googleMapsDirectionsUrl, toLatLng } from "../../lib/googleMaps";
+import { isNexrideVoiceEnabled, muteNexrideVoice, speakNexrideStage, unlockNexrideVoice } from "../../lib/nexrideVoice";
 
 function money(value) {
   return Number(value || 0).toFixed(2);
@@ -19,7 +21,18 @@ function statusLabel(status) {
   return "Active trip";
 }
 
-export default function TripSheet({ tripData, onCancelTrip, onContactDriver }) {
+export default function TripSheet({ tripData, liveRouteInfo = null, onCancelTrip, onContactDriver }) {
+  const [voiceOn, setVoiceOn] = useState(() => (typeof window !== "undefined" ? isNexrideVoiceEnabled() : true));
+  const lastSpokenRef = useRef("");
+
+  useEffect(() => {
+    if (!tripData?.status || !voiceOn) return;
+    const key = `${tripData.tripId || tripData.id || "trip"}:${tripData.status}`;
+    if (lastSpokenRef.current === key) return;
+    lastSpokenRef.current = key;
+    speakNexrideStage(tripData.status, "rider", tripData, { force: true });
+  }, [tripData, tripData?.status, voiceOn]);
+
   if (!tripData) return null;
 
   const steps = ["accepted", "arrived", "picked", "enroute", "completed"];
@@ -43,9 +56,31 @@ export default function TripSheet({ tripData, onCancelTrip, onContactDriver }) {
         <div className="nx-price-badge">${money(tripData.agreedPrice)}</div>
       </div>
 
+      <ActionCard className="nx-voice-card">
+        <div>
+          <div className="nx-eyebrow">Voice guidance</div>
+          <p className="nx-soft-text">NEXRIDE will speak when the driver accepts, arrives, starts the trip, begins route and completes.</p>
+        </div>
+        <button
+          type="button"
+          className={`nx-voice-toggle ${voiceOn ? "active" : ""}`}
+          onClick={() => {
+            if (voiceOn) {
+              muteNexrideVoice();
+              setVoiceOn(false);
+            } else {
+              unlockNexrideVoice("rider");
+              setVoiceOn(true);
+            }
+          }}
+        >
+          {voiceOn ? "Voice on" : "Voice off"}
+        </button>
+      </ActionCard>
+
       <ActionCard className="nx-driver-card">
         <div className="nx-offer-top">
-          <div className="nx-driver-avatar">🚘</div>
+          <div className="nx-driver-avatar">{tripData.driverPhotoUrl ? <img src={tripData.driverPhotoUrl} alt="" /> : "🚘"}</div>
           <div>
             <h3 className="nx-card-title">{tripData.driverName || "NEXRIDE Driver"}</h3>
             <p className="nx-sheet-copy">{tripData.carName || "Verified car"}{tripData.plateNumber ? ` • ${tripData.plateNumber}` : ""}</p>
@@ -72,8 +107,8 @@ export default function TripSheet({ tripData, onCancelTrip, onContactDriver }) {
         <div className="nx-route-mini-row"><span className="nx-dot nx-dot-pickup" />{tripData.pickupName || "Pickup"}</div>
         <div className="nx-route-mini-row"><span className="nx-dot nx-dot-destination" />{tripData.dropoffName || "Destination"}</div>
         <div className="nx-map-metrics nx-request-metrics">
-          <span>{tripData.distanceText || "Distance loading"}</span>
-          <span>{tripData.durationText || "ETA loading"}</span>
+          <span>{liveRouteInfo?.distanceText || tripData.distanceText || "Distance loading"}</span>
+          <span>{liveRouteInfo?.durationText || tripData.durationText || "ETA loading"}</span>
           <span>{navigatingToPickup ? "Driver to pickup" : "To destination"}</span>
         </div>
         <div className="nx-soft-text">Payment: {(tripData.preferredPayment || "cash").toUpperCase()} • Ride: {tripData.rideMode || "standard"}</div>
@@ -81,7 +116,8 @@ export default function TripSheet({ tripData, onCancelTrip, onContactDriver }) {
 
       <div className="nx-button-grid two">
         <PremiumButton variant="secondary" onClick={onContactDriver}>Call driver</PremiumButton>
-        <a className="nx-btn nx-btn-secondary" href={mapsHref} target="_blank" rel="noreferrer">Open map</a>
+        <a className="nx-btn" href={`/trip/${tripData.tripId || tripData.id}/navigate`}>NEXRIDE nav</a>
+        <a className="nx-btn nx-btn-secondary" href={mapsHref} target="_blank" rel="noreferrer">Open Google</a>
         <PremiumButton variant="ghost" onClick={onCancelTrip}>Cancel trip</PremiumButton>
       </div>
     </div>

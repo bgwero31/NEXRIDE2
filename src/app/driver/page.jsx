@@ -17,6 +17,7 @@ import DriverMap from "../../components/driver/DriverMap";
 import DriverTripControls from "../../components/driver/DriverTripControls";
 import { googleMapsDirectionsUrl } from "../../lib/googleMaps";
 import { nexrideNotificationTypes, queueNexrideEvent } from "../../lib/nexrideNotifications";
+import { speakNexrideStage } from "../../lib/nexrideVoice";
 
 function cityLabel(city) {
   if (!city) return "City";
@@ -48,6 +49,7 @@ export default function DriverPage() {
   const [requests, setRequests] = useState([]);
   const [activeTrip, setActiveTrip] = useState(null);
   const [completedTrip, setCompletedTrip] = useState(null);
+  const [liveRouteInfo, setLiveRouteInfo] = useState(null);
 
   const [negotiatingFor, setNegotiatingFor] = useState(null);
   const [proposedPrice, setProposedPrice] = useState("");
@@ -195,6 +197,7 @@ export default function DriverPage() {
           driverPhone: profile.phone || "",
           carName: profile.carName || "",
           plateNumber: profile.plateNumber || "",
+          driverPhotoUrl: profile.photoUrl || profile.profilePhotoUrl || "",
           city: cityKey,
           viewedAt: now,
         });
@@ -257,14 +260,34 @@ export default function DriverPage() {
 
     try {
       const nextOnline = !online;
+      let firstGps = {};
+      if (nextOnline && typeof navigator !== "undefined" && navigator.geolocation) {
+        try {
+          const pos = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true,
+              maximumAge: 8000,
+              timeout: 10000,
+            });
+          });
+          firstGps = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            heading: typeof pos.coords.heading === "number" ? pos.coords.heading : null,
+          };
+        } catch {}
+      }
+
       await update(ref(db, `driversOnline/${cityKey}/${user.uid}`), {
         driverId: user.uid,
         name: profile.fullName || "Driver",
         phone: profile.phone || "",
         carName: profile.carName || "",
         plateNumber: profile.plateNumber || "",
+        driverPhotoUrl: profile.photoUrl || profile.profilePhotoUrl || "",
         city: cityKey,
         online: nextOnline,
+        ...firstGps,
         updatedAt: Date.now(),
         lastSeen: Date.now(),
       });
@@ -284,6 +307,20 @@ export default function DriverPage() {
     const now = Date.now();
     const otp = String(Math.floor(100000 + Math.random() * 900000));
 
+    let liveDriver = { lat: null, lng: null, heading: null, updatedAt: now };
+    try {
+      const onlineSnap = await get(ref(db, `driversOnline/${cityKey}/${user.uid}`));
+      const onlineData = onlineSnap.val() || {};
+      if (Number.isFinite(Number(onlineData.lat)) && Number.isFinite(Number(onlineData.lng))) {
+        liveDriver = {
+          lat: Number(onlineData.lat),
+          lng: Number(onlineData.lng),
+          heading: typeof onlineData.heading === "number" ? onlineData.heading : null,
+          updatedAt: onlineData.lastSeen || now,
+        };
+      }
+    } catch {}
+
     const payload = {
       tripId,
       requestId: requestItem.id,
@@ -291,9 +328,11 @@ export default function DriverPage() {
       riderId: requestItem.riderId,
       riderName: requestItem.riderName || "Rider",
       riderPhone: requestItem.riderPhone || "",
+      riderPhotoUrl: requestItem.riderPhotoUrl || "",
       driverId: user.uid,
       driverName: profile.fullName || "Driver",
       driverPhone: profile.phone || "",
+      driverPhotoUrl: profile.photoUrl || profile.profilePhotoUrl || "",
       carName: profile.carName || "",
       plateNumber: profile.plateNumber || "",
       pickupName: requestItem.pickupName || "",
@@ -317,7 +356,7 @@ export default function DriverPage() {
       status: "accepted",
       createdAt: now,
       updatedAt: now,
-      driverLive: { lat: null, lng: null, heading: null, updatedAt: now },
+      driverLive: liveDriver,
     };
 
     await set(tripRef, payload);
@@ -351,7 +390,8 @@ export default function DriverPage() {
     setSuccess("");
 
     try {
-      await createTripFromRequest(requestItem, requestItem.offerPrice);
+      const trip = await createTripFromRequest(requestItem, requestItem.offerPrice);
+      speakNexrideStage("accepted", "driver", trip, { force: true });
       setSuccess("Ride accepted. Head to pickup and verify OTP.");
     } catch (err) {
       console.error(err);
@@ -393,6 +433,7 @@ export default function DriverPage() {
         driverPhone: profile.phone || "",
         carName: profile.carName || "",
         plateNumber: profile.plateNumber || "",
+        driverPhotoUrl: profile.photoUrl || profile.profilePhotoUrl || "",
         proposedPrice: priceNumber,
         originalPrice: Number(negotiatingFor.offerPrice || 0),
         message: proposedMessage.trim(),
@@ -412,6 +453,7 @@ export default function DriverPage() {
         offersCount: Number(negotiatingFor.offersCount || 0) + 1,
         updatedAt: Date.now(),
       });
+      speakNexrideStage("offer_sent", "driver", { ...negotiatingFor, driverName: profile.fullName || "Driver" }, { force: true });
       setSuccess("Offer sent to rider.");
       setNegotiatingFor(null);
       setProposedPrice("");
@@ -458,15 +500,32 @@ export default function DriverPage() {
 
   return (
     <MobileShell>
-      <DriverMap mode={mode} city={cityKey} activeTrip={activeTrip} requests={visibleRequests} />
-
-      <FloatingTopBar
-        title="NEXRIDE DRIVER"
-        subtitle={`${profile?.fullName || "Driver"} • ${cityLabel(cityKey)}`}
-        right={<button onClick={handleLogout} className="nx-topbar-btn">Logout</button>}
+      <DriverMap
+        mode={mode}
+        city={cityKey}
+        activeTrip={activeTrip}
+        completedTrip={completedTrip}
+        requests={visibleRequests}
+        driverPhotoUrl={profile?.photoUrl || profile?.profilePhotoUrl || ""}
+        onRouteInfoChange={setLiveRouteInfo}
       />
 
-      <BottomSheet height={mode === "queue" ? "28vh" : "18vh"}>
+      <FloatingTopBar
+        title="NEXRIDE"
+        subtitle={`${profile?.fullName || "Driver"} • Driver • ${cityLabel(cityKey)}`}
+        avatarUrl={profile?.photoUrl || profile?.profilePhotoUrl || ""}
+        role="driver"
+        onLogout={handleLogout}
+      />
+
+      <BottomSheet
+        height={mode === "queue" ? "32vh" : "24vh"}
+        expandedHeight={mode === "trip" ? "58vh" : "52vh"}
+        collapsedHeight={mode === "trip" ? "142px" : "132px"}
+        defaultCollapsed={mode === "trip" || mode === "queue"}
+        stateKey={mode}
+        title={mode === "trip" ? "trip controls" : "driver panel"}
+      >
         {error ? <div className="nx-alert-error">{error}</div> : null}
         {success ? <div className="nx-alert-success">{success}</div> : null}
 
@@ -553,7 +612,7 @@ export default function DriverPage() {
           </div>
         )}
 
-        {mode === "trip" && <DriverTripControls trip={activeTrip} onTripUpdated={handleTripUpdated} onTripCompleted={handleTripCompleted} />}
+        {mode === "trip" && <DriverTripControls trip={activeTrip} liveRouteInfo={liveRouteInfo} onTripUpdated={handleTripUpdated} onTripCompleted={handleTripCompleted} />}
 
         {mode === "completed" && (
           <div className="nx-stack">

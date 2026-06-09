@@ -9,7 +9,6 @@ import { get, onValue, ref, update } from "firebase/database";
 import { auth, db } from "../../../../lib/firebase";
 import { googleMapsDirectionsUrl, pointFromRecord, toLatLng } from "../../../../lib/googleMaps";
 import { speakNexrideStage } from "../../../../lib/nexrideVoice";
-import { watchNexrideLocation } from "../../../../lib/nexrideNative";
 import LiveGoogleMap from "../../../../components/maps/LiveGoogleMap";
 
 function titleFor(status, role) {
@@ -95,18 +94,11 @@ export default function TripNavigatePage() {
   const city = liveTrip?.city || profile?.city || "harare";
 
   useEffect(() => {
-    if (!user || !trip) return;
-    const stopWatch = watchNexrideLocation(
-      async (loc) => {
-        if (!loc?.lat || !loc?.lng) return;
-        const point = {
-          lat: loc.lat,
-          lng: loc.lng,
-          heading: typeof loc.heading === "number" ? loc.heading : null,
-          accuracy: loc.accuracy || null,
-          source: loc.source || "gps",
-          updatedAt: Date.now(),
-        };
+    if (!user || !trip || typeof navigator === "undefined" || !navigator.geolocation) return;
+    const watchId = navigator.geolocation.watchPosition(
+      async (pos) => {
+        const point = safeLocation(pos);
+        if (!point) return;
         setSelfLocation(point);
         try {
           if (role === "driver") await update(ref(db, `activeTrips/${trip.tripId}/driverLive`), point);
@@ -114,9 +106,9 @@ export default function TripNavigatePage() {
         } catch {}
       },
       () => {},
-      { maximumAge: 3000, timeout: 20000 }
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
     );
-    return () => stopWatch?.();
+    return () => navigator.geolocation.clearWatch(watchId);
   }, [role, trip, user]);
 
   useEffect(() => {
