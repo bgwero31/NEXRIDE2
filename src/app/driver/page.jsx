@@ -199,7 +199,7 @@ export default function DriverPage() {
           carName: profile.carName || "",
           plateNumber: profile.plateNumber || "",
           driverPhotoUrl: profile.photoUrl || profile.profilePhotoUrl || "",
-          city: onlineCity,
+          city: cityKey,
           viewedAt: now,
         });
 
@@ -228,16 +228,12 @@ export default function DriverPage() {
       const liveCity = detected?.cityKey || cityKey;
 
       if (liveCity !== cityKey) {
-        const onlineCity = firstGps.city || cityKey;
-      if (onlineCity !== cityKey) {
-        await update(ref(db, `driversOnline/${cityKey}/${user.uid}`), { online: false, movedToCity: onlineCity, lastSeen: Date.now() });
-      }
-
-      await update(ref(db, `driversOnline/${onlineCity}/${user.uid}`), {
+        await update(ref(db, `driversOnline/${cityKey}/${user.uid}`), {
           online: false,
           movedToCity: liveCity,
           lastSeen: Date.now(),
         });
+
         setCity(liveCity);
         saveDetectedCityLocal(liveCity);
         await saveDetectedCity({ db, ref, update, uid: user.uid, cityKey: liveCity });
@@ -283,6 +279,7 @@ export default function DriverPage() {
     try {
       const nextOnline = !online;
       let firstGps = {};
+      
       if (nextOnline && typeof navigator !== "undefined" && navigator.geolocation) {
         try {
           const pos = await new Promise((resolve, reject) => {
@@ -323,8 +320,11 @@ export default function DriverPage() {
         updatedAt: Date.now(),
         lastSeen: Date.now(),
       });
+      
       setOnline(nextOnline);
-      setSuccess(nextOnline ? `You are online in ${cityLabel(onlineCity)}. Requests will appear from that city.` : "You are offline.");
+      
+      const displayCity = firstGps.city || cityKey;
+      setSuccess(nextOnline ? `You are online in ${cityLabel(displayCity)}. Requests will appear from that city.` : "You are offline.");
     } catch (err) {
       console.error(err);
       setError("Failed to update online status.");
