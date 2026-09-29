@@ -1311,3 +1311,30 @@ select option { background: #071421; color: #fff; }
   font-weight: 1000;
 }
 .nx-school-log { margin: 0; color: #dcecff; font-size: 12px; padding: 10px; border-radius: 14px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08); }
+
+/* ---------- PremiumButton extras ---------- */
+.nx-btn-block { width: 100%; }
+
+.nx-btn-loading { opacity: 0.9; pointer-events: none; }
+
+.nx-btn-spinner {
+  width: 14px;
+  height: 14px;
+  margin-right: 8px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  display: inline-block;
+  animation: nx-spin 0.7s linear infinite;
+  vertical-align: -2px;
+}
+
+@keyframes nx-spin {
+  to { transform: rotate(360deg); }
+}
+
+.nx-btn-danger {
+  background: linear-gradient(135deg, #ff4d4f, #d9363e);
+  color: #fff;
+  border: none;
+}
