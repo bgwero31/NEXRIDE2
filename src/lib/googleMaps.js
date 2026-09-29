@@ -75,28 +75,48 @@ export function loadGoogleMapsApi() {
     return Promise.reject(new Error("Google Maps can only load in the browser."));
   }
 
-  if (window.google?.maps) return Promise.resolve(window.google);
+  if (window.google?.maps?.places && window.google?.maps?.geometry) {
+    return Promise.resolve(window.google);
+  }
 
   const apiKey = getGoogleMapsApiKey();
   if (!apiKey) return Promise.reject(new Error("Missing NEXT_PUBLIC_GOOGLE_MAPS_API_KEY."));
 
-  const existing = document.getElementById(GOOGLE_MAPS_SCRIPT_ID);
-  if (existing?.dataset.loaded === "true" && window.google?.maps) return Promise.resolve(window.google);
-
   if (window.__nexrideGoogleMapsPromise) return window.__nexrideGoogleMapsPromise;
 
   window.__nexrideGoogleMapsPromise = new Promise((resolve, reject) => {
-    const script = existing || document.createElement("script");
-    script.id = GOOGLE_MAPS_SCRIPT_ID;
-    script.async = true;
-    script.defer = true;
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places&v=weekly`;
+    let script = document.getElementById(GOOGLE_MAPS_SCRIPT_ID);
+    if (!script) {
+      script = document.createElement("script");
+      script.id = GOOGLE_MAPS_SCRIPT_ID;
+      script.async = true;
+      script.defer = true;
+      // geometry: for spherical math + polyline utilities (Phase 2)
+      // places:   for autocomplete + place details
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places,geometry&v=weekly`;
+      document.head.appendChild(script);
+    }
+
+    const cleanup = () => {
+      script.onload = null;
+      script.onerror = null;
+    };
+
     script.onload = () => {
-      script.dataset.loaded = "true";
+      cleanup();
+      if (!window.google?.maps) {
+        window.__nexrideGoogleMapsPromise = null;
+        reject(new Error("Google Maps loaded but window.google.maps missing."));
+        return;
+      }
       resolve(window.google);
     };
-    script.onerror = () => reject(new Error("Failed to load Google Maps."));
-    if (!existing) document.head.appendChild(script);
+
+    script.onerror = () => {
+      cleanup();
+      window.__nexrideGoogleMapsPromise = null; // allow retry
+      reject(new Error("Failed to load Google Maps."));
+    };
   });
 
   return window.__nexrideGoogleMapsPromise;
@@ -121,7 +141,6 @@ export async function geocodeAddress(address, city = "harare") {
         resolve(null);
         return;
       }
-
       const loc = results[0].geometry.location;
       resolve({
         lat: loc.lat(),
@@ -133,44 +152,57 @@ export async function geocodeAddress(address, city = "harare") {
   });
 }
 
-export async function getGoogleRouteDetails({ origin, destination, city = "harare" }) {
+// opts.withTraffic = false by default (saves cost). Set true if you really need live traffic.
+export async function getGoogleRouteDetails({ origin, destination, city = "harare", withTraffic = false }) {
   if (!origin || !destination || !hasGoogleMapsApiKey()) return null;
   const google = await loadGoogleMapsApi();
   const service = new google.maps.DirectionsService();
 
-  return new Promise((resolve) => {
-    service.route(
-      {
-        origin: buildGoogleDirectionsPoint(google, origin, city),
-        destination: buildGoogleDirectionsPoint(google, destination, city),
-        travelMode: google.maps.TravelMode.DRIVING,
-        drivingOptions: {
-          departureTime: new Date(),
-          trafficModel: google.maps.TrafficModel.BEST_GUESS,
-        },
-        provideRouteAlternatives: false,
-        region: "ZW",
-      },
-      (result, status) => {
-        if (status !== "OK" || !result?.routes?.[0]?.legs?.[0]) {
-          resolve(null);
-          return;
-        }
+  const request = {
+    origin: buildGoogleDirectionsPoint(google, origin, city),
+    destination: buildGoogleDirectionsPoint(google, destination, city),
+    travelMode: google.maps.TravelMode.DRIVING,
+    provideRouteAlternatives: false,
+    region: "ZW",
+  };
 
-        const leg = result.routes[0].legs[0];
-        resolve({
-          distanceText: leg.distance?.text || "",
-          durationText: leg.duration_in_traffic?.text || leg.duration?.text || "",
-          distanceMeters: leg.distance?.value || null,
-          durationSeconds: leg.duration_in_traffic?.value || leg.duration?.value || null,
-          startAddress: leg.start_address || "",
-          endAddress: leg.end_address || "",
-          pickupCoords: leg.start_location ? { lat: leg.start_location.lat(), lng: leg.start_location.lng() } : null,
-          dropoffCoords: leg.end_location ? { lat: leg.end_location.lat(), lng: leg.end_location.lng() } : null,
-          source: "google",
-        });
+  if (withTraffic) {
+    request.drivingOptions = {
+      departureTime: new Date(),
+      trafficModel: google.maps.TrafficModel.BEST_GUESS,
+    };
+  }
+
+  return new Promise((resolve) => {
+    service.route(request, (result, status) => {
+      if (status !== "OK" || !result?.routes?.[0]?.legs?.[0]) {
+        resolve(null);
+        return;
       }
-    );
+      const route = result.routes[0];
+      const leg = route.legs[0];
+      resolve({
+        distanceText: leg.distance?.text || "",
+        durationText: leg.duration_in_traffic?.text || leg.duration?.text || "",
+        distanceMeters: leg.distance?.value || null,
+        durationSeconds: leg.duration_in_traffic?.value || leg.duration?.value || null,
+        startAddress: leg.start_address || "",
+        endAddress: leg.end_address || "",
+        pickupCoords: leg.start_location ? { lat: leg.start_location.lat(), lng: leg.start_location.lng() } : null,
+        dropoffCoords: leg.end_location ? { lat: leg.end_location.lat(), lng: leg.end_location.lng() } : null,
+        // For map drawing in Phase 2. Encoded polyline string.
+        polyline: route.overview_polyline?.points || null,
+        bounds: route.bounds
+          ? {
+              north: route.bounds.getNorthEast().lat(),
+              east: route.bounds.getNorthEast().lng(),
+              south: route.bounds.getSouthWest().lat(),
+              west: route.bounds.getSouthWest().lng(),
+            }
+          : null,
+        source: "google",
+      });
+    });
   });
 }
 
