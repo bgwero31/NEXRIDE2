@@ -892,6 +892,7 @@ export default function RiderPage() {
             viewCount={viewCount}
             onAcceptOffer={handleAcceptOffer}
             onCancelRequest={handleCancelRequest}
+            onBoostFare={handleBoostFare}
           />
         )}
 
