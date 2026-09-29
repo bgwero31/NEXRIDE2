@@ -2,20 +2,39 @@
 
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { onValue, ref } from "firebase/database";
 import { db } from "../../lib/firebase";
 import LiveGoogleMap from "../maps/LiveGoogleMap";
-import { cityLabel, googleMapsDirectionsUrl, pointFromRecord, toLatLng } from "../../lib/googleMaps";
-import { buildGpsPointFromPosition, getNearestCityFromPoint, normalizeCity } from "../../lib/nexrideCity";
+import {
+  cityLabel,
+  googleMapsDirectionsUrl,
+  pointFromRecord,
+  toLatLng,
+} from "../../lib/googleMaps";
+import {
+  buildGpsPointFromPosition,
+  getNearestCityFromPoint,
+  normalizeCity,
+} from "../../lib/nexrideCity";
+
+/* ------------------------------ Constants ----------------------------- */
+
+/** Drivers are considered stale if no heartbeat within this window. */
+const DRIVER_STALE_MS = 90_000;
+
+/** Minimum GPS accuracy (meters) to trust for city detection. */
+const GPS_ACCURACY_LIMIT_M = 250;
 
 function modeCopy(mode) {
-  if (mode === "request") return "Where to?";
-  if (mode === "waiting") return "Searching";
-  if (mode === "offers") return "Offers ready";
-  if (mode === "trip") return "Trip live";
-  if (mode === "completed") return "Completed";
-  return "Live";
+  switch (mode) {
+    case "request": return "Where to?";
+    case "waiting": return "Searching";
+    case "offers": return "Offers ready";
+    case "trip": return "Trip live";
+    case "completed": return "Completed";
+    default: return "Live";
+  }
 }
 
 function recordPoint(record, prefix, fallbackLabel) {
@@ -24,190 +43,407 @@ function recordPoint(record, prefix, fallbackLabel) {
   return fallbackLabel ? { label: fallbackLabel } : null;
 }
 
-export default function RiderMap({ mode, city, requestData, tripData, completedTrip, draftRoute = null, viewCount = 0, offersCount = 0, onDriversCountChange, onRouteInfoChange, onCityDetected }) {
+/* ---------------------------- Component ------------------------------- */
+
+export default function RiderMap({
+  mode,
+  city,
+  requestData,
+  tripData,
+  completedTrip,
+  draftRoute = null,
+  viewCount = 0,
+  offersCount = 0,
+  onDriversCountChange,
+  onRouteInfoChange,
+  onCityDetected,
+}) {
   const cityKey = normalizeCity(city || "zvishavane");
+
   const [drivers, setDrivers] = useState([]);
   const [riderCurrentLocation, setRiderCurrentLocation] = useState(null);
   const [routeInfo, setRouteInfo] = useState(null);
-  const [mapStatus, setMapStatus] = useState("fallback");
+  const [mapStatus, setMapStatus] = useState("loading");
 
+  /* -------- Stable callback refs (no re-subscribes on parent rerender) --- */
+  const onDriversCountChangeRef = useRef(onDriversCountChange);
+  const onRouteInfoChangeRef = useRef(onRouteInfoChange);
+  const onCityDetectedRef = useRef(onCityDetected);
+
+  useEffect(() => { onDriversCountChangeRef.current = onDriversCountChange; }, [onDriversCountChange]);
+  useEffect(() => { onRouteInfoChangeRef.current = onRouteInfoChange; }, [onRouteInfoChange]);
+  useEffect(() => { onCityDetectedRef.current = onCityDetected; }, [onCityDetected]);
+
+  /** Remember the last city we told the parent about — avoids spamming writes. */
+  const lastAnnouncedCityRef = useRef("");
+
+  /** Optional ref for map control commands (zoom/recenter). */
+  const mapApiRef = useRef(null);
+
+  /* -------------------- Online drivers subscription ------------------- */
   useEffect(() => {
     if (!cityKey) return;
     const node = ref(db, `driversOnline/${cityKey}`);
+
     const unsub = onValue(node, (snap) => {
+      const now = Date.now();
       const data = snap.val() || {};
-      const list = Object.entries(data)
+
+      const fresh = Object.entries(data)
         .map(([id, value]) => ({ id, ...value }))
-        .filter((item) => item.online);
-      setDrivers(list);
-      onDriversCountChange?.(list.length);
+        .filter((item) => {
+          if (!item.online) return false;
+          if (!Number.isFinite(Number(item.lat))) return false;
+          if (!Number.isFinite(Number(item.lng))) return false;
+          // Freshness check — ignore stale heartbeats
+          const seen = Number(item.lastSeen || item.updatedAt || 0);
+          if (!seen) return true; // no timestamp → assume fresh
+          return now - seen <= DRIVER_STALE_MS;
+        });
+
+      setDrivers(fresh);
+      onDriversCountChangeRef.current?.(fresh.length);
     });
+
     return () => unsub();
-  }, [cityKey, onDriversCountChange]);
+  }, [cityKey]);
 
-
+  /* ------------- Rider GPS watch (with city-change guard) ------------- */
   useEffect(() => {
     if (typeof navigator === "undefined" || !navigator.geolocation) return;
+
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
         const accuracy = Number(pos.coords.accuracy || 9999);
-        if (accuracy > 250) return;
+        if (accuracy > GPS_ACCURACY_LIMIT_M) return;
+
         const gpsPoint = buildGpsPointFromPosition(pos);
         if (!gpsPoint) return;
+
         const detected = getNearestCityFromPoint(gpsPoint);
-        if (detected?.cityKey) onCityDetected?.(detected.cityKey, detected);
+        const detectedKey = detected?.cityKey || "";
+
+        // Only notify parent when the city ACTUALLY changes.
+        if (detectedKey && detectedKey !== lastAnnouncedCityRef.current) {
+          lastAnnouncedCityRef.current = detectedKey;
+          onCityDetectedRef.current?.(detectedKey, detected);
+        }
 
         setRiderCurrentLocation({
           lat: gpsPoint.lat,
           lng: gpsPoint.lng,
           heading: gpsPoint.heading,
           accuracy,
-          city: detected?.cityKey || cityKey,
+          city: detectedKey || cityKey,
           label: "My live location",
         });
       },
       () => {},
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
     );
+
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [cityKey, onCityDetected]);
+  }, [cityKey]);
 
+  /* ------------------- Report route info to parent -------------------- */
   useEffect(() => {
-    if (routeInfo) onRouteInfoChange?.(routeInfo);
-  }, [onRouteInfoChange, routeInfo]);
+    if (routeInfo) onRouteInfoChangeRef.current?.(routeInfo);
+  }, [routeInfo]);
 
-  const routeRecord = tripData || requestData || completedTrip || draftRoute || null;
+  /* -------------------------- Derived data ---------------------------- */
+  const routeRecord =
+    tripData || requestData || completedTrip || draftRoute || null;
+
   const pickup = routeRecord?.pickupName || "My live location";
   const dropoff = routeRecord?.dropoffName || "Choose destination";
-  const activeDriver = tripData?.driverName || completedTrip?.driverName || "Nearby drivers";
+  const activeDriver =
+    tripData?.driverName || completedTrip?.driverName || "Nearby drivers";
+
   const tripDriverLive = toLatLng(tripData?.driverLive);
-  const matchedOnlineDriver = tripData?.driverId ? drivers.find((driver) => driver.id === tripData.driverId || driver.driverId === tripData.driverId) : null;
+  const matchedOnlineDriver = tripData?.driverId
+    ? drivers.find(
+        (driver) =>
+          driver.id === tripData.driverId ||
+          driver.driverId === tripData.driverId
+      )
+    : null;
   const driverLive = tripDriverLive || toLatLng(matchedOnlineDriver);
   const riderLive = toLatLng(tripData?.riderLive) || riderCurrentLocation;
 
-  const routeTargetMode = tripData?.status === "accepted" || tripData?.status === "arrived" ? "pickup" : "destination";
+  const routeTargetMode =
+    tripData?.status === "accepted" || tripData?.status === "arrived"
+      ? "pickup"
+      : "destination";
   const isCompletedMap = !tripData && completedTrip;
 
   const mapOrigin = useMemo(() => {
-    if (tripData && driverLive) return { ...driverLive, label: "Driver live location" };
-    if (tripData) return riderLive || recordPoint(tripData, "pickup", tripData.pickupName || pickup);
-    if (completedTrip) return recordPoint(completedTrip, "pickup", completedTrip.pickupName || pickup);
-    if (requestData) return recordPoint(requestData, "pickup", requestData?.pickupName || pickup) || riderLive;
-    if (draftRoute?.pickupCoords) return { ...draftRoute.pickupCoords, label: draftRoute.pickupName || "My live location" };
-    return riderLive || recordPoint(draftRoute, "pickup", draftRoute?.pickupName || pickup);
+    if (tripData && driverLive)
+      return { ...driverLive, label: "Driver live location" };
+    if (tripData)
+      return (
+        riderLive ||
+        recordPoint(tripData, "pickup", tripData.pickupName || pickup)
+      );
+    if (completedTrip)
+      return recordPoint(completedTrip, "pickup", completedTrip.pickupName || pickup);
+    if (requestData)
+      return (
+        recordPoint(requestData, "pickup", requestData?.pickupName || pickup) ||
+        riderLive
+      );
+    if (draftRoute?.pickupCoords)
+      return {
+        ...draftRoute.pickupCoords,
+        label: draftRoute.pickupName || "My live location",
+      };
+    return (
+      riderLive ||
+      recordPoint(draftRoute, "pickup", draftRoute?.pickupName || pickup)
+    );
   }, [completedTrip, draftRoute, driverLive, pickup, requestData, riderLive, tripData]);
 
   const mapDestination = useMemo(() => {
-    if (tripData && routeTargetMode === "pickup") return recordPoint(tripData, "pickup", tripData.pickupName || pickup);
-    if (tripData) return recordPoint(tripData, "dropoff", tripData.dropoffName || dropoff);
-    if (completedTrip) return recordPoint(completedTrip, "dropoff", completedTrip.dropoffName || dropoff);
-    if (requestData) return recordPoint(requestData, "dropoff", requestData?.dropoffName || dropoff);
-    if (draftRoute?.dropoffCoords) return { ...draftRoute.dropoffCoords, label: draftRoute.dropoffName || dropoff };
+    if (tripData && routeTargetMode === "pickup")
+      return recordPoint(tripData, "pickup", tripData.pickupName || pickup);
+    if (tripData)
+      return recordPoint(tripData, "dropoff", tripData.dropoffName || dropoff);
+    if (completedTrip)
+      return recordPoint(completedTrip, "dropoff", completedTrip.dropoffName || dropoff);
+    if (requestData)
+      return recordPoint(requestData, "dropoff", requestData?.dropoffName || dropoff);
+    if (draftRoute?.dropoffCoords)
+      return {
+        ...draftRoute.dropoffCoords,
+        label: draftRoute.dropoffName || dropoff,
+      };
     if (draftRoute?.dropoffName) return { label: draftRoute.dropoffName };
     return null;
   }, [completedTrip, draftRoute, dropoff, pickup, requestData, routeTargetMode, tripData]);
 
   const driverMarkers = useMemo(
-    () => drivers
-      .map((driver) => ({ ...driver, type: "driver", title: driver.name || "Driver", label: "" }))
-      .filter((driver) => Number.isFinite(Number(driver.lat)) && Number.isFinite(Number(driver.lng))),
+    () =>
+      drivers
+        .map((driver) => ({
+          ...driver,
+          type: "driver",
+          title: driver.name || "Driver",
+          label: "",
+        }))
+        .filter(
+          (driver) =>
+            Number.isFinite(Number(driver.lat)) &&
+            Number.isFinite(Number(driver.lng))
+        ),
     [drivers]
   );
 
   const openMapsUrl = useMemo(() => {
     if (!mapOrigin || !mapDestination) return "";
-    return googleMapsDirectionsUrl({ origin: mapOrigin, destination: mapDestination, city: cityKey });
+    return googleMapsDirectionsUrl({
+      origin: mapOrigin,
+      destination: mapDestination,
+      city: cityKey,
+    });
   }, [cityKey, mapDestination, mapOrigin]);
 
-  const carPins = useMemo(
-    () => [
-      { left: "18%", top: "30%" },
-      { left: "72%", top: "34%" },
-      { left: "54%", top: "48%" },
-      { left: "28%", top: "64%" },
-      { left: "78%", top: "61%" },
-      { left: "44%", top: "23%" },
-    ],
-    []
+  const isSearching = mode === "waiting";
+  const showRouteCard = Boolean(
+    requestData || tripData || completedTrip || draftRoute?.dropoffName
   );
+  const showFallbackSkeleton = mapStatus !== "google" && !tripData;
 
+  /* ------------------------- Map control wiring ----------------------- */
+  // These call mapApiRef.current if LiveGoogleMap exposes an API.
+  // Safe no-ops otherwise.
+  const zoomIn = () => mapApiRef.current?.zoomIn?.();
+  const zoomOut = () => mapApiRef.current?.zoomOut?.();
+  const recenter = () => mapApiRef.current?.recenter?.();
+
+  /* ---------------------------- Render ---------------------------- */
   return (
     <section className="nx-live-map rider-map">
       <div className="nx-map-grid" />
       <div className="nx-map-glow one" />
       <div className="nx-map-glow two" />
 
-      {mapStatus !== "google" ? (
+      {/* Fallback skeleton ONLY while Google loads and no trip is active */}
+      {showFallbackSkeleton ? (
         <>
-      <svg className="nx-route-svg" viewBox="0 0 400 760" preserveAspectRatio="none" aria-hidden="true">
-        <defs>
-          <linearGradient id="routeGradientRider" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#00d4ff" />
-            <stop offset="45%" stopColor="#0066ff" />
-            <stop offset="100%" stopColor="#06152b" />
-          </linearGradient>
-        </defs>
-        <path className="nx-route-shadow" d="M76 590 C176 520 94 430 207 355 C316 283 236 205 328 128" />
-        <path className="nx-route-path" d="M76 590 C176 520 94 430 207 355 C316 283 236 205 328 128" stroke="url(#routeGradientRider)" />
-      </svg>
+          <svg
+            className="nx-route-svg"
+            viewBox="0 0 400 760"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <defs>
+              <linearGradient id="routeGradientRider" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#00d4ff" />
+                <stop offset="45%" stopColor="#0066ff" />
+                <stop offset="100%" stopColor="#06152b" />
+              </linearGradient>
+            </defs>
+            <path
+              className="nx-route-shadow"
+              d="M76 590 C176 520 94 430 207 355 C316 283 236 205 328 128"
+            />
+            <path
+              className="nx-route-path"
+              d="M76 590 C176 520 94 430 207 355 C316 283 236 205 328 128"
+              stroke="url(#routeGradientRider)"
+            />
+          </svg>
 
-      <div className="nx-map-pin pickup" style={{ left: "18%", top: "76%" }}>●</div>
-      <div className="nx-map-pin destination" style={{ left: "80%", top: "16%" }}>●</div>
-
-      {carPins.map((pin, index) => (
-        <div key={index} className="nx-car-pin" style={{ ...pin, animationDelay: `${index * 220}ms` }}>🚘</div>
-      ))}
+          <div
+            className="nx-map-pin pickup"
+            style={{ left: "18%", top: "76%" }}
+          >
+            ●
+          </div>
+          <div
+            className="nx-map-pin destination"
+            style={{ left: "80%", top: "16%" }}
+          >
+            ●
+          </div>
         </>
       ) : null}
 
       <LiveGoogleMap
+        ref={mapApiRef}
         city={cityKey}
         role="rider"
         origin={mapOrigin}
         destination={mapDestination}
         driverLocation={driverLive}
         riderLocation={riderLive}
-        driverPhotoUrl={tripData?.driverPhotoUrl || completedTrip?.driverPhotoUrl || matchedOnlineDriver?.driverPhotoUrl || ""}
-        riderPhotoUrl={tripData?.riderPhotoUrl || completedTrip?.riderPhotoUrl || requestData?.riderPhotoUrl || ""}
+        driverPhotoUrl={
+          tripData?.driverPhotoUrl ||
+          completedTrip?.driverPhotoUrl ||
+          matchedOnlineDriver?.driverPhotoUrl ||
+          ""
+        }
+        riderPhotoUrl={
+          tripData?.riderPhotoUrl ||
+          completedTrip?.riderPhotoUrl ||
+          requestData?.riderPhotoUrl ||
+          ""
+        }
         markers={tripData || completedTrip ? [] : driverMarkers}
-        showRoute={Boolean(mapOrigin && mapDestination && (requestData || tripData || completedTrip || draftRoute?.dropoffName))}
-        followTarget={tripData ? "driver" : (mapDestination ? "route" : "rider")}
-        routePhase={isCompletedMap ? "completed" : tripData ? (routeTargetMode === "pickup" ? "pickup" : "destination") : "request"}
+        showRoute={Boolean(
+          mapOrigin &&
+            mapDestination &&
+            (requestData || tripData || completedTrip || draftRoute?.dropoffName)
+        )}
+        followTarget={
+          tripData ? "driver" : mapDestination ? "route" : "rider"
+        }
+        routePhase={
+          isCompletedMap
+            ? "completed"
+            : tripData
+            ? routeTargetMode === "pickup"
+              ? "pickup"
+              : "destination"
+            : "request"
+        }
         onRouteInfo={setRouteInfo}
         onMapStatus={setMapStatus}
       />
 
-      <div className="nx-map-card nx-map-status-card">
+      {/* Status card */}
+      <div
+        className={`nx-map-card nx-map-status-card ${
+          isSearching ? "is-searching" : ""
+        }`}
+      >
         <div>
           <span className="nx-eyebrow">{cityLabel(cityKey)} live map</span>
           <h3>{modeCopy(mode)}</h3>
           <p>{activeDriver}</p>
         </div>
-        <div className="nx-map-chip">{mapStatus === "google" ? "Google live" : `${drivers.length} online`}</div>
+        <div className="nx-map-chip">
+          {mapStatus === "google"
+            ? "Google live"
+            : `${drivers.length} online`}
+        </div>
       </div>
 
-      {(requestData || tripData || completedTrip || draftRoute?.dropoffName) ? (
+      {/* Route card */}
+      {showRouteCard ? (
         <div className="nx-map-card nx-map-route-card">
-          <div className="nx-route-mini-row"><span className="nx-dot nx-dot-pickup" />{pickup}</div>
-          <div className="nx-route-mini-row"><span className="nx-dot nx-dot-destination" />{dropoff}</div>
+          <div className="nx-route-mini-row">
+            <span className="nx-dot nx-dot-pickup" />
+            {pickup}
+          </div>
+          <div className="nx-route-mini-row">
+            <span className="nx-dot nx-dot-destination" />
+            {dropoff}
+          </div>
           <div className="nx-map-metrics">
-            <span>{routeInfo?.distanceText || routeRecord?.distanceText || "Distance loading"}</span>
-            <span>{routeInfo?.durationText || routeRecord?.durationText || "ETA loading"}</span>
-            <span>{completedTrip ? "Final route" : tripData ? (routeTargetMode === "pickup" ? "Driver to pickup" : "To destination") : requestData ? `${viewCount} viewed` : "Preview"}</span>
-            {requestData && !tripData ? <span>{offersCount} offers</span> : null}
+            <span>
+              {routeInfo?.distanceText ||
+                routeRecord?.distanceText ||
+                "—"}
+            </span>
+            <span>
+              {routeInfo?.durationText || routeRecord?.durationText || "—"}
+            </span>
+            <span>
+              {completedTrip
+                ? "Final route"
+                : tripData
+                ? routeTargetMode === "pickup"
+                  ? "Driver to pickup"
+                  : "To destination"
+                : requestData
+                ? `${viewCount} viewed`
+                : "Preview"}
+            </span>
+            {requestData && !tripData ? (
+              <span>
+                {offersCount} offer{offersCount === 1 ? "" : "s"}
+              </span>
+            ) : null}
           </div>
           {openMapsUrl ? (
-            <a className="nx-map-open-link" href={openMapsUrl} target="_blank" rel="noreferrer">
+            <a
+              className="nx-map-open-link"
+              href={openMapsUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
               Open in Google Maps
             </a>
           ) : null}
         </div>
       ) : null}
 
+      {/* Map controls */}
       <div className="nx-map-control-stack">
-        <button className="nx-map-control">＋</button>
-        <button className="nx-map-control">⌖</button>
-        <button className="nx-map-control">−</button>
+        <button
+          type="button"
+          className="nx-map-control"
+          onClick={zoomIn}
+          aria-label="Zoom in"
+        >
+          ＋
+        </button>
+        <button
+          type="button"
+          className="nx-map-control"
+          onClick={recenter}
+          aria-label="Recenter map"
+        >
+          ⌖
+        </button>
+        <button
+          type="button"
+          className="nx-map-control"
+          onClick={zoomOut}
+          aria-label="Zoom out"
+        >
+          −
+        </button>
       </div>
     </section>
   );
