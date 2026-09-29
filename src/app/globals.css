@@ -1664,3 +1664,11 @@ select option { background: #071421; color: #fff; }
   border-color: transparent;
   box-shadow: 0 10px 24px rgba(0, 102, 255, 0.24);
 }
+/* ---------- RiderMap: premium polish ---------- */
+.nx-map-status-card.is-searching .nx-map-chip {
+  animation: nxSearchPulse 2s ease-in-out infinite;
+}
+@keyframes nxSearchPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
