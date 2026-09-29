@@ -1,8 +1,12 @@
 // File: src/components/ui/ActionCard.jsx
-
-export default function ActionCard({ children, style = {}, className = "" }) {
+/**
+ * Glass-morphism card container used across NEXRIDE.
+ * Passthrough to any extra props (id, onClick, aria-*, data-*).
+ */
+export default function ActionCard({ children, className = "", style, ...rest }) {
+  const classes = `nx-glass-panel nx-card-pro ${className}`.trim();
   return (
-    <div className={`nx-glass-panel nx-card-pro ${className}`.trim()} style={style}>
+    <div className={classes} style={style} {...rest}>
       {children}
     </div>
   );
