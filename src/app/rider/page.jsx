@@ -703,6 +703,38 @@ export default function RiderPage() {
     }
   }, [tripId, tripData, city, requestId, profile?.fullName]);
 
+    /* --------------------------- Fare boost ----------------------------- */
+  // inDrive-style: nudge the fare up to attract drivers faster.
+  const handleBoostFare = useCallback(
+    async (bump) => {
+      const cityKey = cityRef.current;
+      const reqId = requestIdRef.current || requestId;
+      if (!reqId || !cityKey) return;
+
+      const current = Number(requestData?.offerPrice || 0);
+      const delta = Number(bump);
+      if (!Number.isFinite(delta) || delta <= 0) return;
+
+      const next = Math.round((current + delta) * 100) / 100;
+
+      setError("");
+      setSuccess("");
+
+      try {
+        await update(ref(db, `rideRequests/${cityKey}/${reqId}`), {
+          offerPrice: next,
+          boostedAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+        setSuccess(`Fare boosted to $${next.toFixed(2)}.`);
+      } catch (err) {
+        console.error("[RiderPage] boost fare failed:", err);
+        setError("Could not boost fare.");
+      }
+    },
+    [requestId, requestData?.offerPrice]
+  );
+  
   const handleContactDriver = useCallback(() => {
     if (!tripData?.driverPhone) {
       setError("Driver phone is not available yet.");
