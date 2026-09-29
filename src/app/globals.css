@@ -1517,3 +1517,49 @@ select option { background: #071421; color: #fff; }
 }
 
 .nx-offers-empty { text-align: left; }
+/* ---------- TripSheet: premium polish ---------- */
+.nx-trip-eta {
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--cyan);
+  letter-spacing: -0.02em;
+}
+
+.nx-status-cancelled {
+  color: #ffdbe1 !important;
+  background: rgba(255, 91, 110, 0.16) !important;
+  border-color: rgba(255, 91, 110, 0.28) !important;
+}
+
+.nx-otp-box-btn {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 120ms ease, background 120ms ease;
+}
+.nx-otp-box-btn:active { transform: scale(0.985); }
+
+.nx-trip-step.done span {
+  background: rgba(32, 226, 138, 0.65);
+  box-shadow: 0 0 12px rgba(32, 226, 138, 0.5);
+}
+.nx-trip-step.active span {
+  background: var(--cyan);
+  box-shadow: 0 0 18px rgba(0, 212, 255, 0.75);
+  animation: nxStepPulse 1.8s ease-in-out infinite;
+}
+@keyframes nxStepPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.25); }
+}
+
+.nx-voice-card.compact {
+  padding: 10px 12px;
+  min-height: auto;
+}
+.nx-voice-copy { flex: 1; min-width: 0; }
+.nx-voice-card.compact .nx-soft-text {
+  margin: 2px 0 0;
+  font-size: 11px;
+  opacity: 0.8;
+}
