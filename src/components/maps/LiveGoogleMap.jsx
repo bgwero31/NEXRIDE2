@@ -2,7 +2,14 @@
 
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   buildGoogleDirectionsPoint,
   fallbackRouteEstimate,
@@ -11,6 +18,11 @@ import {
   loadGoogleMapsApi,
   toLatLng,
 } from "../../lib/googleMaps";
+
+/* ------------------------------ Constants ----------------------------- */
+
+const CAMERA_THROTTLE_MS = 400;
+const BOUNDS_THROTTLE_MS = 700;
 
 const mapStyles = [
   { elementType: "geometry", stylers: [{ color: "#edf2f7" }] },
@@ -32,6 +44,8 @@ const mapStyles = [
   { featureType: "water", elementType: "geometry", stylers: [{ color: "#d9e9ff" }] },
   { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#7a93ad" }] },
 ];
+
+/* ------------------------------ Helpers ------------------------------- */
 
 function cleanNumber(value, fallback = 0) {
   const n = Number(value);
@@ -91,6 +105,18 @@ function pointKey(point) {
   return `${coords.lat.toFixed(5)},${coords.lng.toFixed(5)}`;
 }
 
+/** Stable key for a markers array — used to avoid redraw when content is identical. */
+function markersKey(markers) {
+  if (!Array.isArray(markers) || !markers.length) return "0";
+  return markers
+    .map((m) => {
+      const c = toLatLng(m);
+      if (!c) return m?.id || "";
+      return `${m?.id || "m"}:${c.lat.toFixed(4)},${c.lng.toFixed(4)}`;
+    })
+    .join("|");
+}
+
 function createHtmlOverlay(google, map, position, className, render, title = "", zIndex = 1000) {
   const point = toLatLng(position);
   if (!point) return null;
@@ -102,7 +128,8 @@ function createHtmlOverlay(google, map, position, className, render, title = "",
     div.style.position = "absolute";
     div.style.zIndex = String(zIndex);
     div.style.transform = "translate(-50%, -50%)";
-    div.style.pointerEvents = "auto";
+    // Do NOT block map gestures under markers — only inner content gets events.
+    div.style.pointerEvents = "none";
     if (title) div.title = title;
     render(div);
     this.div = div;
@@ -111,7 +138,9 @@ function createHtmlOverlay(google, map, position, className, render, title = "",
   overlay.draw = function draw() {
     const projection = this.getProjection();
     if (!projection || !this.div) return;
-    const pixel = projection.fromLatLngToDivPixel(new google.maps.LatLng(point.lat, point.lng));
+    const pixel = projection.fromLatLngToDivPixel(
+      new google.maps.LatLng(point.lat, point.lng)
+    );
     if (!pixel) return;
     this.div.style.left = `${pixel.x}px`;
     this.div.style.top = `${pixel.y}px`;
@@ -194,23 +223,32 @@ function routeCopy(phase) {
   return "Live follow";
 }
 
-export default function LiveGoogleMap({
-  city = "harare",
-  role = "rider",
-  origin = null,
-  destination = null,
-  driverLocation = null,
-  riderLocation = null,
-  driverPhotoUrl = "",
-  riderPhotoUrl = "",
-  markers = [],
-  showRoute = true,
-  cameraFollow = true,
-  followTarget = "driver",
-  routePhase = "route",
-  onRouteInfo,
-  onMapStatus,
-}) {
+/* ---------------------------- Component ------------------------------- */
+
+const LiveGoogleMap = forwardRef(function LiveGoogleMap(
+  {
+    city = "harare",
+    role = "rider",
+    origin = null,
+    destination = null,
+    driverLocation = null,
+    riderLocation = null,
+    driverPhotoUrl = "",
+    riderPhotoUrl = "",
+    markers = [],
+    showRoute = true,
+    cameraFollow = true,
+    followTarget = "driver",
+    routePhase = "route",
+    // NEW (optional): pass true to enable Google traffic pricing tier
+    withTraffic = false,
+    // NEW (optional): dynamic bottom padding for fitBounds
+    boundsBottomPadding = 220,
+    onRouteInfo,
+    onMapStatus,
+  },
+  ref
+) {
   const mapNodeRef = useRef(null);
   const mapRef = useRef(null);
   const directionsRendererRef = useRef(null);
@@ -223,6 +261,15 @@ export default function LiveGoogleMap({
   const overlayRefs = useRef([]);
   const lastBoundsAtRef = useRef(0);
   const lastRouteFitKeyRef = useRef("");
+  const lastCameraAtRef = useRef(0);
+  const lastCameraKeyRef = useRef("");
+
+  // Callback refs — prevents parent re-renders from triggering effects.
+  const onRouteInfoRef = useRef(onRouteInfo);
+  const onMapStatusRef = useRef(onMapStatus);
+  useEffect(() => { onRouteInfoRef.current = onRouteInfo; }, [onRouteInfo]);
+  useEffect(() => { onMapStatusRef.current = onMapStatus; }, [onMapStatus]);
+
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
 
@@ -232,12 +279,41 @@ export default function LiveGoogleMap({
   const driverPoint = useMemo(() => toLatLng(driverLocation), [driverLocation]);
   const riderPoint = useMemo(() => toLatLng(riderLocation), [riderLocation]);
 
+  const markersKeyStr = useMemo(() => markersKey(markers), [markers]);
+
+  /* --------------- Expose imperative API to parent ----------------- */
+  useImperativeHandle(
+    ref,
+    () => ({
+      zoomIn: () => {
+        const map = mapRef.current;
+        if (!map) return;
+        map.setZoom(Math.min(21, (map.getZoom() || 14) + 1));
+      },
+      zoomOut: () => {
+        const map = mapRef.current;
+        if (!map) return;
+        map.setZoom(Math.max(4, (map.getZoom() || 14) - 1));
+      },
+      recenter: () => {
+        const map = mapRef.current;
+        if (!map) return;
+        const target =
+          driverPoint || riderPoint || toLatLng(originPoint) || center;
+        if (target) map.panTo(target);
+      },
+      getMap: () => mapRef.current,
+    }),
+    [center, driverPoint, originPoint, riderPoint]
+  );
+
+  /* --------------------- Init map --------------------- */
   useEffect(() => {
     let cancelled = false;
 
     if (!hasGoogleMapsApiKey()) {
       setError("Missing Google Maps key");
-      onMapStatus?.("fallback");
+      onMapStatusRef.current?.("fallback");
       return;
     }
 
@@ -254,7 +330,7 @@ export default function LiveGoogleMap({
             disableDefaultUI: true,
             clickableIcons: false,
             gestureHandling: "greedy",
-            styles: [],
+            styles: mapStyles,
             backgroundColor: "#f5f7fb",
             heading: 0,
             tilt: 0,
@@ -275,29 +351,51 @@ export default function LiveGoogleMap({
 
         setReady(true);
         setError("");
-        onMapStatus?.("google");
+        onMapStatusRef.current?.("google");
       })
       .catch((err) => {
-        console.error(err);
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("[LiveGoogleMap] load failed:", err);
+        }
         if (!cancelled) {
           setError("Google Maps failed to load");
-          onMapStatus?.("fallback");
+          onMapStatusRef.current?.("fallback");
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [center, onMapStatus]);
+  }, [center]);
 
+  /* --------------------- Cleanup on unmount --------------------- */
   useEffect(() => {
-    if (!ready || !mapRef.current || typeof window === "undefined" || !window.google?.maps) return;
+    return () => {
+      try {
+        markerRefs.current.forEach((m) => m.setMap(null));
+        overlayRefs.current.forEach((o) => o.setMap(null));
+        routeMarkerRefs.current.forEach((m) => m.setMap(null));
+        routeHaloRef.current?.setMap(null);
+        routeLineRef.current?.setMap(null);
+        routeShineRef.current?.setMap(null);
+        routeArrowRef.current?.setMap(null);
+      } catch {}
+      markerRefs.current = [];
+      overlayRefs.current = [];
+      routeMarkerRefs.current = [];
+    };
+  }, []);
+
+  /* --------------------- Recenter when idle --------------------- */
+  useEffect(() => {
+    if (!ready || !mapRef.current || !window.google?.maps) return;
     if (originPoint || destinationPoint || driverPoint || riderPoint || markers.length) return;
     mapRef.current.setCenter(center);
   }, [ready, center, originPoint, destinationPoint, driverPoint, riderPoint, markers.length]);
 
+  /* --------------------- Draw markers --------------------- */
   useEffect(() => {
-    if (!ready || !mapRef.current || typeof window === "undefined" || !window.google?.maps) return;
+    if (!ready || !mapRef.current || !window.google?.maps) return;
     const google = window.google;
     const map = mapRef.current;
 
@@ -315,17 +413,23 @@ export default function LiveGoogleMap({
         title: title || label || type,
         optimized: false,
         zIndex: type === "pickup" || type === "destination" ? 800 : 700,
-        label: label ? { text: String(label), color: "#ffffff", fontWeight: "900", fontSize: "11px" } : undefined,
+        label: label
+          ? { text: String(label), color: "#ffffff", fontWeight: "900", fontSize: "11px" }
+          : undefined,
         icon: markerIcon(google, type, heading),
       });
       markerRefs.current.push(marker);
       return marker;
     };
 
-    addMarker({ position: originPoint, type: "pickup", title: routePhase === "pickup" ? "Pickup" : "Route start" });
+    addMarker({
+      position: originPoint,
+      type: "pickup",
+      title: routePhase === "pickup" ? "Pickup" : "Route start",
+    });
 
     if (destinationPoint) {
-      const destinationOverlay = createHtmlOverlay(
+      const overlay = createHtmlOverlay(
         google,
         map,
         destinationPoint,
@@ -334,41 +438,43 @@ export default function LiveGoogleMap({
         routePhase === "pickup" ? "Pickup" : "Destination",
         970
       );
-      if (destinationOverlay) overlayRefs.current.push(destinationOverlay);
+      if (overlay) overlayRefs.current.push(overlay);
     }
 
     if (driverPoint) {
-      const driverOverlay = createHtmlOverlay(
+      const overlay = createHtmlOverlay(
         google,
         map,
         driverPoint,
         "nx-gmap-car-marker",
-        (div) => renderCar(div, {
-          heading: driverLocation?.heading,
-          photoUrl: driverPhotoUrl,
-          label: role === "driver" ? "You" : "Driver",
-        }),
+        (div) =>
+          renderCar(div, {
+            heading: driverLocation?.heading,
+            photoUrl: driverPhotoUrl,
+            label: role === "driver" ? "You" : "Driver",
+          }),
         role === "driver" ? "Your live car" : "Driver live car",
         1005
       );
-      if (driverOverlay) overlayRefs.current.push(driverOverlay);
+      if (overlay) overlayRefs.current.push(overlay);
     }
 
     if (riderPoint) {
-      const riderOverlay = createHtmlOverlay(
+      const overlay = createHtmlOverlay(
         google,
         map,
         riderPoint,
         "nx-gmap-rider-marker",
-        (div) => renderPhoto(div, {
-          photoUrl: riderPhotoUrl,
-          fallback: role === "rider" ? "You" : "R",
-          label: role === "rider" ? "You" : "Rider",
-        }),
+        (div) =>
+          renderPhoto(div, {
+            photoUrl: riderPhotoUrl,
+            fallback: role === "rider" ? "You" : "R",
+            label: role === "rider" ? "You" : "Rider",
+          }),
         role === "rider" ? "Your live pickup" : "Rider live pickup",
         1000
       );
-      if (riderOverlay) overlayRefs.current.push(riderOverlay);
+      if (overlay) overlayRefs.current.push(overlay);
     }
 
     markers.forEach((marker) => {
@@ -376,20 +482,21 @@ export default function LiveGoogleMap({
       if (!point) return;
 
       if (marker.type === "driver") {
-        const driverOverlay = createHtmlOverlay(
+        const overlay = createHtmlOverlay(
           google,
           map,
           point,
           "nx-gmap-car-marker is-nearby",
-          (div) => renderCar(div, {
-            heading: marker.heading,
-            photoUrl: marker.driverPhotoUrl || marker.photoUrl || "",
-            label: "",
-          }),
+          (div) =>
+            renderCar(div, {
+              heading: marker.heading,
+              photoUrl: marker.driverPhotoUrl || marker.photoUrl || "",
+              label: "",
+            }),
           marker.title || marker.name || "Nearby driver",
           880
         );
-        if (driverOverlay) overlayRefs.current.push(driverOverlay);
+        if (overlay) overlayRefs.current.push(overlay);
         return;
       }
 
@@ -403,13 +510,32 @@ export default function LiveGoogleMap({
     });
 
     const bounds = new google.maps.LatLngBounds();
-    const allPoints = [originPoint, destinationPoint, driverPoint, riderPoint, ...markers].map(toLatLng).filter(Boolean);
+    const allPoints = [originPoint, destinationPoint, driverPoint, riderPoint, ...markers]
+      .map(toLatLng)
+      .filter(Boolean);
     allPoints.forEach((point) => bounds.extend(point));
-    if (!showRoute && allPoints.length > 1 && !bounds.isEmpty()) map.fitBounds(bounds, 76);
-  }, [ready, originPoint, destinationPoint, driverPoint, riderPoint, markers, role, showRoute, driverLocation?.heading, driverPhotoUrl, riderPhotoUrl, routePhase]);
+    if (!showRoute && allPoints.length > 1 && !bounds.isEmpty()) {
+      map.fitBounds(bounds, 76);
+    }
+  }, [
+    ready,
+    originPoint,
+    destinationPoint,
+    driverPoint,
+    riderPoint,
+    markersKeyStr,
+    role,
+    showRoute,
+    driverLocation?.heading,
+    driverPhotoUrl,
+    riderPhotoUrl,
+    routePhase,
+    markers,
+  ]);
 
+  /* --------------------- Camera follow (throttled) --------------------- */
   useEffect(() => {
-    if (!ready || !cameraFollow || !mapRef.current || typeof window === "undefined" || !window.google?.maps) return;
+    if (!ready || !cameraFollow || !mapRef.current || !window.google?.maps) return;
 
     const target =
       followTarget === "rider" ? riderPoint :
@@ -419,6 +545,18 @@ export default function LiveGoogleMap({
       driverPoint || riderPoint || toLatLng(originPoint) || toLatLng(destinationPoint);
 
     if (!target) return;
+
+    // Throttle: don't pan more than once every CAMERA_THROTTLE_MS for the same target
+    const now = Date.now();
+    const key = pointKey(target);
+    if (
+      now - lastCameraAtRef.current < CAMERA_THROTTLE_MS &&
+      key === lastCameraKeyRef.current
+    ) {
+      return;
+    }
+    lastCameraAtRef.current = now;
+    lastCameraKeyRef.current = key;
 
     const currentZoom = mapRef.current.getZoom?.() || 14;
     const desiredZoom = routePhase === "pickup" || routePhase === "destination" ? 17 : 15;
@@ -434,11 +572,18 @@ export default function LiveGoogleMap({
     } else {
       mapRef.current.panTo(target);
       if (currentZoom < desiredZoom) mapRef.current.setZoom(desiredZoom);
-      if (Number.isFinite(heading) && typeof mapRef.current.setHeading === "function") mapRef.current.setHeading(heading);
-      if (typeof mapRef.current.setTilt === "function") mapRef.current.setTilt(routePhase === "pickup" || routePhase === "destination" ? 35 : 0);
+      if (Number.isFinite(heading) && typeof mapRef.current.setHeading === "function") {
+        mapRef.current.setHeading(heading);
+      }
+      if (typeof mapRef.current.setTilt === "function") {
+        mapRef.current.setTilt(
+          routePhase === "pickup" || routePhase === "destination" ? 35 : 0
+        );
+      }
     }
-  }, [cameraFollow, destinationPoint, driverPoint, followTarget, originPoint, ready, riderPoint, routePhase]);
+  }, [cameraFollow, destinationPoint, driverPoint, followTarget, originPoint, ready, riderPoint, routePhase, driverLocation?.heading]);
 
+  /* --------------------- Clear route when hidden --------------------- */
   useEffect(() => {
     if (!ready || showRoute) return;
     directionsRendererRef.current?.set("directions", null);
@@ -452,8 +597,9 @@ export default function LiveGoogleMap({
     routeArrowRef.current = null;
   }, [ready, showRoute]);
 
+  /* --------------------- Route drawing + directions --------------------- */
   useEffect(() => {
-    if (!ready || !showRoute || !originPoint || !destinationPoint || typeof window === "undefined" || !window.google?.maps) {
+    if (!ready || !showRoute || !originPoint || !destinationPoint || !window.google?.maps) {
       return;
     }
 
@@ -462,141 +608,171 @@ export default function LiveGoogleMap({
     const service = new google.maps.DirectionsService();
     const routeFitKey = `${routePhase}:${pointKey(originPoint)}:${pointKey(destinationPoint)}`;
 
-    service.route(
-      {
-        origin: buildGoogleDirectionsPoint(google, originPoint, city),
-        destination: buildGoogleDirectionsPoint(google, destinationPoint, city),
-        travelMode: google.maps.TravelMode.DRIVING,
-        drivingOptions: {
-          departureTime: new Date(),
-          trafficModel: google.maps.TrafficModel.BEST_GUESS,
-        },
-        provideRouteAlternatives: false,
-        region: "ZW",
-      },
-      (result, status) => {
-        if (cancelled) return;
+    const request = {
+      origin: buildGoogleDirectionsPoint(google, originPoint, city),
+      destination: buildGoogleDirectionsPoint(google, destinationPoint, city),
+      travelMode: google.maps.TravelMode.DRIVING,
+      provideRouteAlternatives: false,
+      region: "ZW",
+    };
 
-        routeHaloRef.current?.setMap(null);
-        routeHaloRef.current = null;
-        routeLineRef.current?.setMap(null);
-        routeLineRef.current = null;
-        routeShineRef.current?.setMap(null);
-        routeShineRef.current = null;
-        routeArrowRef.current?.setMap(null);
-        routeArrowRef.current = null;
-        routeMarkerRefs.current.forEach((marker) => marker.setMap(null));
-        routeMarkerRefs.current = [];
+    // Only enable traffic tier when explicitly requested (costs more).
+    if (withTraffic) {
+      request.drivingOptions = {
+        departureTime: new Date(),
+        trafficModel: google.maps.TrafficModel.BEST_GUESS,
+      };
+    }
 
-        if (status === "OK" && result?.routes?.[0]?.legs?.[0]) {
-          directionsRendererRef.current?.setDirections(result);
+    service.route(request, (result, status) => {
+      if (cancelled) return;
 
-          const overviewPath = result.routes[0].overview_path || [];
-          routeHaloRef.current = new google.maps.Polyline({
-            path: overviewPath,
-            map: mapRef.current,
-            strokeColor: "#071225",
-            strokeOpacity: 0.92,
-            strokeWeight: 15,
-            zIndex: 610,
-          });
-          routeLineRef.current = new google.maps.Polyline({
-            path: overviewPath,
-            map: mapRef.current,
-            strokeColor: "#2d18ff",
-            strokeOpacity: 1,
-            strokeWeight: 9,
-            zIndex: 630,
-          });
-          routeShineRef.current = new google.maps.Polyline({
-            path: overviewPath,
-            map: mapRef.current,
-            strokeColor: "#14d8ff",
-            strokeOpacity: 0.90,
-            strokeWeight: 4,
-            zIndex: 640,
-          });
-          routeArrowRef.current = new google.maps.Polyline({
-            path: overviewPath,
-            map: mapRef.current,
-            strokeOpacity: 0,
-            zIndex: 660,
-            icons: [
-              {
-                icon: {
-                  path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-                  scale: 4.7,
-                  fillColor: "#ffffff",
-                  fillOpacity: 1,
-                  strokeColor: "#06152b",
-                  strokeWeight: 2,
-                },
-                offset: "11%",
-                repeat: "74px",
+      // Clean previous route
+      routeHaloRef.current?.setMap(null);
+      routeHaloRef.current = null;
+      routeLineRef.current?.setMap(null);
+      routeLineRef.current = null;
+      routeShineRef.current?.setMap(null);
+      routeShineRef.current = null;
+      routeArrowRef.current?.setMap(null);
+      routeArrowRef.current = null;
+      routeMarkerRefs.current.forEach((marker) => marker.setMap(null));
+      routeMarkerRefs.current = [];
+
+      if (status === "OK" && result?.routes?.[0]?.legs?.[0]) {
+        directionsRendererRef.current?.setDirections(result);
+
+        const overviewPath = result.routes[0].overview_path || [];
+
+        routeHaloRef.current = new google.maps.Polyline({
+          path: overviewPath,
+          map: mapRef.current,
+          strokeColor: "#071225",
+          strokeOpacity: 0.92,
+          strokeWeight: 15,
+          zIndex: 610,
+        });
+        routeLineRef.current = new google.maps.Polyline({
+          path: overviewPath,
+          map: mapRef.current,
+          strokeColor: "#2d18ff",
+          strokeOpacity: 1,
+          strokeWeight: 9,
+          zIndex: 630,
+        });
+        routeShineRef.current = new google.maps.Polyline({
+          path: overviewPath,
+          map: mapRef.current,
+          strokeColor: "#14d8ff",
+          strokeOpacity: 0.90,
+          strokeWeight: 4,
+          zIndex: 640,
+        });
+        routeArrowRef.current = new google.maps.Polyline({
+          path: overviewPath,
+          map: mapRef.current,
+          strokeOpacity: 0,
+          zIndex: 660,
+          icons: [
+            {
+              icon: {
+                path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+                scale: 4.7,
+                fillColor: "#ffffff",
+                fillOpacity: 1,
+                strokeColor: "#06152b",
+                strokeWeight: 2,
               },
-            ],
-          });
+              offset: "11%",
+              repeat: "74px",
+            },
+          ],
+        });
 
-          const leg = result.routes[0].legs[0];
-          const startCoords = positionFromRouteLocation(leg.start_location);
-          const endCoords = positionFromRouteLocation(leg.end_location);
+        const leg = result.routes[0].legs[0];
+        const startCoords = positionFromRouteLocation(leg.start_location);
+        const endCoords = positionFromRouteLocation(leg.end_location);
 
-          if (mapRef.current) {
-            if (startCoords) {
-              routeMarkerRefs.current.push(new google.maps.Marker({
+        if (mapRef.current) {
+          if (startCoords) {
+            routeMarkerRefs.current.push(
+              new google.maps.Marker({
                 position: startCoords,
                 map: mapRef.current,
-                title: routePhase === "pickup" ? "Driver live location" : "Route start",
+                title:
+                  routePhase === "pickup" ? "Driver live location" : "Route start",
                 optimized: false,
                 zIndex: 930,
-                icon: markerIcon(google, routePhase === "pickup" || role === "driver" ? "driver" : "pickup", driverLocation?.heading),
-                label: routePhase === "pickup" && role === "driver" ? { text: "ME", color: "#ffffff", fontWeight: "900", fontSize: "11px" } : undefined,
-              }));
-            }
-
-            const now = Date.now();
-            const shouldFitRoute = routeFitKey !== lastRouteFitKeyRef.current || routePhase === "completed";
-            if (shouldFitRoute && now - lastBoundsAtRef.current > 700) {
-              const bounds = new google.maps.LatLngBounds();
-              overviewPath.forEach((point) => bounds.extend(point));
-              if (!bounds.isEmpty()) {
-                mapRef.current.fitBounds(bounds, {
-                  top: 96,
-                  left: 42,
-                  right: 42,
-                  bottom: routePhase === "completed" ? 170 : 220,
-                });
-              }
-              lastBoundsAtRef.current = now;
-              lastRouteFitKeyRef.current = routeFitKey;
-            }
+                icon: markerIcon(
+                  google,
+                  routePhase === "pickup" || role === "driver" ? "driver" : "pickup",
+                  driverLocation?.heading
+                ),
+                label:
+                  routePhase === "pickup" && role === "driver"
+                    ? { text: "ME", color: "#ffffff", fontWeight: "900", fontSize: "11px" }
+                    : undefined,
+              })
+            );
           }
 
-          onRouteInfo?.({
-            distanceText: leg.distance?.text || "",
-            durationText: leg.duration_in_traffic?.text || leg.duration?.text || "",
-            distanceMeters: leg.distance?.value || null,
-            durationSeconds: leg.duration_in_traffic?.value || leg.duration?.value || null,
-            startAddress: leg.start_address || "",
-            endAddress: leg.end_address || "",
-            pickupCoords: startCoords,
-            dropoffCoords: endCoords,
-            source: "google",
-            phase: routePhase,
-          });
-          return;
+          const now = Date.now();
+          const shouldFitRoute =
+            routeFitKey !== lastRouteFitKeyRef.current || routePhase === "completed";
+          if (shouldFitRoute && now - lastBoundsAtRef.current > BOUNDS_THROTTLE_MS) {
+            const bounds = new google.maps.LatLngBounds();
+            overviewPath.forEach((point) => bounds.extend(point));
+            if (!bounds.isEmpty()) {
+              mapRef.current.fitBounds(bounds, {
+                top: 96,
+                left: 42,
+                right: 42,
+                bottom:
+                  routePhase === "completed"
+                    ? 170
+                    : Math.max(120, Number(boundsBottomPadding) || 220),
+              });
+            }
+            lastBoundsAtRef.current = now;
+            lastRouteFitKeyRef.current = routeFitKey;
+          }
         }
 
-        directionsRendererRef.current?.set("directions", null);
-        const estimate = fallbackRouteEstimate(originPoint, destinationPoint);
-        if (estimate) onRouteInfo?.({ ...estimate, phase: routePhase });
+        onRouteInfoRef.current?.({
+          distanceText: leg.distance?.text || "",
+          durationText: leg.duration_in_traffic?.text || leg.duration?.text || "",
+          distanceMeters: leg.distance?.value || null,
+          durationSeconds: leg.duration_in_traffic?.value || leg.duration?.value || null,
+          startAddress: leg.start_address || "",
+          endAddress: leg.end_address || "",
+          pickupCoords: startCoords,
+          dropoffCoords: endCoords,
+          source: "google",
+          phase: routePhase,
+        });
+        return;
       }
-    );
+
+      directionsRendererRef.current?.set("directions", null);
+      const estimate = fallbackRouteEstimate(originPoint, destinationPoint);
+      if (estimate) onRouteInfoRef.current?.({ ...estimate, phase: routePhase });
+    });
 
     return () => {
       cancelled = true;
     };
-  }, [ready, showRoute, originPoint, destinationPoint, city, onRouteInfo, routePhase, role, driverLocation?.heading]);
+  }, [
+    ready,
+    showRoute,
+    originPoint,
+    destinationPoint,
+    city,
+    routePhase,
+    role,
+    withTraffic,
+    boundsBottomPadding,
+    driverLocation?.heading,
+  ]);
 
   if (!hasGoogleMapsApiKey()) return null;
 
@@ -618,4 +794,8 @@ export default function LiveGoogleMap({
       ) : null}
     </div>
   );
-}
+});
+
+LiveGoogleMap.displayName = "LiveGoogleMap";
+
+export default LiveGoogleMap;
