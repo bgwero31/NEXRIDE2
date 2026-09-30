@@ -1672,3 +1672,297 @@ select option { background: #071421; color: #fff; }
   0%, 100% { opacity: 1; }
   50% { opacity: 0.55; }
 }
+/* ============================================================
+   RequestSheet v2 — Uber/inDrive premium redesign
+   ============================================================ */
+
+.nx-request-v2 {
+  display: grid;
+  gap: 14px;
+}
+
+/* ---------- Header ---------- */
+.nx-request-v2-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.nx-request-v2-title {
+  margin: 0;
+  font-size: 26px;
+  line-height: 1;
+  font-weight: 1000;
+  letter-spacing: -0.055em;
+  color: #fff;
+}
+.nx-request-v2-price-badge {
+  display: grid;
+  gap: 1px;
+  justify-items: end;
+  padding: 8px 12px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.14), rgba(0, 102, 255, 0.12));
+  border: 1px solid rgba(0, 212, 255, 0.22);
+}
+.nx-request-v2-price-label {
+  font-size: 9px;
+  font-weight: 1000;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #9ec6ff;
+}
+.nx-request-v2-price-badge strong {
+  font-size: 22px;
+  font-weight: 1000;
+  letter-spacing: -0.05em;
+  color: #fff;
+}
+
+/* ---------- Route card v2 ---------- */
+.nx-route-card-v2 {
+  padding: 12px;
+}
+
+/* ---------- Route preview strip (compact) ---------- */
+.nx-route-preview-v2 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(0, 102, 255, 0.10), rgba(255, 255, 255, 0.05));
+  border: 1px solid rgba(0, 212, 255, 0.18);
+}
+.nx-route-preview-v2.is-loading {
+  justify-content: center;
+  min-height: 56px;
+}
+.nx-route-preview-v2-skeleton {
+  width: 60%;
+  height: 20px;
+  border-radius: 10px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.06), rgba(255,255,255,0.14), rgba(255,255,255,0.06));
+  background-size: 200% auto;
+  animation: nxShimmer 1.4s linear infinite;
+}
+@keyframes nxShimmer {
+  to { background-position: -200% 0; }
+}
+
+.nx-route-preview-v2-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.nx-route-preview-v2-metric {
+  display: grid;
+  gap: 1px;
+}
+.nx-route-preview-v2-metric strong {
+  font-size: 15px;
+  font-weight: 1000;
+  letter-spacing: -0.03em;
+  color: #fff;
+}
+.nx-route-preview-v2-metric span {
+  font-size: 9px;
+  font-weight: 1000;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--soft);
+}
+.nx-route-preview-v2-divider {
+  width: 1px;
+  height: 26px;
+  background: rgba(255, 255, 255, 0.10);
+}
+
+.nx-route-preview-v2-suggest {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  color: #00131c;
+  background: linear-gradient(135deg, #23d6ff, #1268ff);
+  border: none;
+  font-weight: 1000;
+  font-size: 11px;
+  letter-spacing: -0.01em;
+  box-shadow: 0 8px 20px rgba(0, 102, 255, 0.28);
+  cursor: pointer;
+  transition: transform 120ms ease;
+}
+.nx-route-preview-v2-suggest:active { transform: scale(0.97); }
+.nx-route-preview-v2-suggest span { opacity: 0.75; text-transform: uppercase; font-size: 9px; letter-spacing: 0.6px; }
+.nx-route-preview-v2-suggest strong { font-size: 13px; }
+
+/* ---------- Fare hero block (inDrive) ---------- */
+.nx-fare-block-v2 {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 22px;
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.10), rgba(0, 102, 255, 0.08), rgba(255, 255, 255, 0.03));
+  border: 1px solid rgba(0, 212, 255, 0.22);
+}
+.nx-fare-block-v2-label {
+  font-size: 10px;
+  font-weight: 1000;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #9ec6ff;
+}
+.nx-fare-block-v2-input-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.nx-fare-block-v2-prefix {
+  font-size: 30px;
+  font-weight: 1000;
+  color: var(--cyan);
+  letter-spacing: -0.05em;
+  line-height: 1;
+}
+.nx-fare-block-v2-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #fff;
+  font-size: 44px;
+  font-weight: 1000;
+  letter-spacing: -0.06em;
+  line-height: 1;
+  padding: 0;
+  font-variant-numeric: tabular-nums;
+}
+.nx-fare-block-v2-input::-webkit-outer-spin-button,
+.nx-fare-block-v2-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.nx-fare-block-v2-input[type="number"] { -moz-appearance: textfield; }
+
+.nx-fare-block-v2-hint {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--soft2);
+  letter-spacing: -0.01em;
+}
+
+/* ---------- Chips (payment / ride mode) ---------- */
+.nx-chips-block {
+  display: grid;
+  gap: 8px;
+}
+.nx-chips-label {
+  font-size: 10px;
+  font-weight: 1000;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--soft2);
+}
+.nx-chips-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.nx-chip {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  align-items: center;
+  padding: 10px 6px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: var(--soft2);
+  font-size: 11px;
+  font-weight: 1000;
+  cursor: pointer;
+  transition: transform 120ms ease, background 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+.nx-chip-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+.nx-chip-text {
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.nx-chip.is-active {
+  color: #00131c;
+  background: linear-gradient(135deg, #23d6ff, #1268ff);
+  border-color: transparent;
+  box-shadow: 0 10px 24px rgba(0, 102, 255, 0.24);
+}
+.nx-chip:active { transform: scale(0.97); }
+
+/* ---------- Subtle row (passengers + city) ---------- */
+.nx-subtle-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.nx-subtle-field { display: grid; gap: 6px; }
+.nx-stepper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 4px 4px 4px 4px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  min-height: 44px;
+}
+.nx-stepper button {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 1000;
+  cursor: pointer;
+  transition: transform 120ms ease, background 140ms ease;
+}
+.nx-stepper button:active { transform: scale(0.94); background: rgba(255, 255, 255, 0.16); }
+.nx-stepper span {
+  flex: 1;
+  text-align: center;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 1000;
+}
+
+.nx-subtle-select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 900;
+  outline: none;
+}
+.nx-subtle-select:focus {
+  border-color: rgba(0, 212, 255, 0.42);
+  box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.08);
+}
+
+/* ---------- Note input ---------- */
+.nx-input-note {
+  font-size: 13px;
+  resize: none;
+}
