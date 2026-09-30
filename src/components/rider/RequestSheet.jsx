@@ -41,10 +41,6 @@ function price(value) {
   return Number.isFinite(n) ? n.toFixed(2) : "0.00";
 }
 
-/**
- * InDrive-style suggested fare band derived from route distance.
- * Base + per-km estimate. Returns suggested/min/max in USD.
- */
 function suggestFare(distanceMeters) {
   const km = Number(distanceMeters || 0) / 1000;
   const base = 2;
@@ -70,6 +66,22 @@ function writeStored(key, value) {
     localStorage.setItem(key, value);
   } catch {}
 }
+
+/* ----------------------------- Constants ------------------------------ */
+
+const PAYMENT_OPTIONS = [
+  { value: "cash", label: "Cash", icon: "💵" },
+  { value: "ecocash", label: "EcoCash", icon: "📱" },
+  { value: "onemoney", label: "OneMoney", icon: "📲" },
+  { value: "card", label: "Card", icon: "💳" },
+];
+
+const RIDE_MODES = [
+  { value: "standard", label: "Standard", icon: "🚗" },
+  { value: "comfort", label: "Comfort", icon: "✨" },
+  { value: "quick", label: "Quick", icon: "⚡" },
+  { value: "family", label: "Family", icon: "👨‍👩‍👧" },
+];
 
 /* ---------------------------- Component ------------------------------- */
 
@@ -112,13 +124,11 @@ export default function RequestSheet({
   const hasAutoLocatedRef = useRef(false);
   const appSettingsRef = useRef(appSettings);
 
-  // Keep appSettings in a ref so the init effect never depends on it directly.
   useEffect(() => {
     appSettingsRef.current = appSettings;
   }, [appSettings]);
 
-  /* --------------- Initial form hydration (once at mount) ------------ */
-  // Runs ONCE. Prevents "form resets every render" bug from appSettings churn.
+  /* --------------- Initial form hydration (once) ------------ */
   useEffect(() => {
     const settings = appSettingsRef.current || {};
     const savedPickup =
@@ -147,7 +157,6 @@ export default function RequestSheet({
   }, []);
 
   /* ------------------- Google Places Autocomplete -------------------- */
-  // Attached once. City bias updates separately via setBounds.
   useEffect(() => {
     if (!hasGoogleMapsApiKey()) return;
     if (!pickupInputRef.current || !dropoffInputRef.current) return;
@@ -238,7 +247,7 @@ export default function RequestSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* ------------- Re-bias autocomplete when the city changes ----------- */
+  /* ------------- Re-bias autocomplete when city changes ----------- */
   useEffect(() => {
     if (!hasGoogleMapsApiKey()) return;
     const center = getCityCenter(city);
@@ -261,9 +270,7 @@ export default function RequestSheet({
     setError("");
 
     if (typeof navigator === "undefined" || !navigator.geolocation) {
-      setError(
-        "GPS is not available on this device. Type your pickup manually."
-      );
+      setError("GPS unavailable. Type pickup manually.");
       return;
     }
 
@@ -274,9 +281,7 @@ export default function RequestSheet({
         const accuracy = Number(gpsPoint?.accuracy || 9999);
 
         if (!gpsPoint || accuracy > 250) {
-          setError(
-            "GPS is too weak right now. Move outside or type pickup manually."
-          );
+          setError("GPS weak. Move outside or type pickup.");
           setLocating(false);
           return;
         }
@@ -286,7 +291,6 @@ export default function RequestSheet({
 
         setCity(detectedCity);
         saveDetectedCityLocal(detectedCity);
-        // Fire-and-forget: city save must NEVER block the ride flow.
         saveDetectedCity({
           db,
           ref,
@@ -309,17 +313,14 @@ export default function RequestSheet({
         setLocating(false);
       },
       () => {
-        setError(
-          "Could not read GPS. Type pickup manually or allow location access."
-        );
+        setError("Could not read GPS. Type pickup manually.");
         setLocating(false);
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
     );
   }, [city, user?.uid]);
 
-  /* --------------- Auto-GPS on mount (smart + non-clobbering) -------- */
-  // Only auto-locates if there is NO saved custom pickup.
+  /* --------------- Auto-GPS on mount ------------ */
   useEffect(() => {
     if (hasAutoLocatedRef.current) return;
     if (pickupCoords) return;
@@ -330,7 +331,6 @@ export default function RequestSheet({
       savedPickup.trim() &&
       savedPickup !== "Current GPS pickup"
     ) {
-      // Respect the saved address — don't wipe it with GPS.
       hasAutoLocatedRef.current = true;
       return;
     }
@@ -341,7 +341,7 @@ export default function RequestSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* --------------------- Live route preview (debounced) ------------- */
+  /* --------------------- Live route preview ------------- */
   useEffect(() => {
     const cleanPickup = pickupName.trim();
     const cleanDropoff = dropoffName.trim();
@@ -361,11 +361,10 @@ export default function RequestSheet({
           origin: pickupCoords || cleanPickup,
           destination: dropoffCoords || cleanDropoff,
           city,
-          // withTraffic defaults to false — cheaper + faster in ZW.
         });
         if (!cancelled && route) setRoutePreview(route);
       } catch {
-        // Route preview is optional — silent fail is correct here.
+        // optional
       } finally {
         if (!cancelled) setRouteLoading(false);
       }
@@ -478,7 +477,6 @@ export default function RequestSheet({
       setCity(requestCity);
       saveDetectedCityLocal(requestCity);
 
-      // Non-blocking city persistence
       saveDetectedCity({
         db,
         ref,
@@ -527,7 +525,6 @@ export default function RequestSheet({
 
       await set(requestRef, payload);
 
-      // Non-blocking notification — must never block the ride flow.
       queueNexrideEvent({
         type: nexrideNotificationTypes.REQUEST_CREATED,
         city: requestCity,
@@ -546,7 +543,6 @@ export default function RequestSheet({
         },
       }).catch(() => {});
 
-      // Persist session preferences
       writeStored("nexride-last-request-id", requestRef.key);
       writeStored("nexride-last-place", requestCity);
       writeStored("nexride-default-pickup", cleanPickup);
@@ -555,9 +551,7 @@ export default function RequestSheet({
       onRequestCreated?.({ ...payload, id: requestRef.key });
     } catch (err) {
       console.error("[RequestSheet] submit failed:", err);
-      setError(
-        "Failed to post ride request. Check your internet and try again."
-      );
+      setError("Failed to post request. Check your internet and try again.");
     } finally {
       setSaving(false);
     }
@@ -565,29 +559,27 @@ export default function RequestSheet({
 
   /* ------------------------------ Render ------------------------------ */
   return (
-    <form onSubmit={submitRequest} className="nx-request-sheet">
-      <div className="nx-sheet-head">
-        <div>
-          <div className="nx-eyebrow">Live ride request</div>
-          <h2 className="nx-sheet-title">Where to & how much?</h2>
-          <p className="nx-sheet-copy">
-            Your pickup uses phone GPS automatically. Add your destination and
-            fare.
-          </p>
+    <form onSubmit={submitRequest} className="nx-request-sheet nx-request-v2">
+      {/* Header — clean, no fluff */}
+      <div className="nx-request-v2-head">
+        <h2 className="nx-request-v2-title">Where to?</h2>
+        <div className="nx-request-v2-price-badge">
+          <span className="nx-request-v2-price-label">Your offer</span>
+          <strong>${price(offerPrice)}</strong>
         </div>
-        <div className="nx-price-badge">${price(offerPrice)}</div>
       </div>
 
       {error ? <div className="nx-alert-error">{error}</div> : null}
 
-      <ActionCard className="nx-route-card">
+      {/* Route card — the hero */}
+      <ActionCard className="nx-route-card nx-route-card-v2">
         <div className="nx-route-row">
           <span className="nx-dot nx-dot-pickup" />
           <input
             ref={pickupInputRef}
             className="nx-route-input"
             type="text"
-            placeholder="Current GPS pickup"
+            placeholder="Pickup location"
             value={pickupName}
             onChange={(e) => {
               setPickupName(e.target.value);
@@ -623,11 +615,133 @@ export default function RequestSheet({
         </div>
       </ActionCard>
 
-      <div className="nx-field-grid two">
-        <label className="nx-field">
-          <span>City</span>
+      {/* Route preview — compact, no fluff */}
+      {routePreview ? (
+        <div className="nx-route-preview-v2">
+          <div className="nx-route-preview-v2-left">
+            <div className="nx-route-preview-v2-metric">
+              <strong>{routePreview.distanceText || "—"}</strong>
+              <span>Distance</span>
+            </div>
+            <div className="nx-route-preview-v2-divider" />
+            <div className="nx-route-preview-v2-metric">
+              <strong>{routePreview.durationText || "—"}</strong>
+              <span>ETA</span>
+            </div>
+          </div>
+          {suggested ? (
+            <button
+              type="button"
+              className="nx-route-preview-v2-suggest"
+              onClick={() =>
+                setOfferPrice(suggested.suggested.toFixed(2))
+              }
+            >
+              <span>Suggested</span>
+              <strong>${suggested.suggested.toFixed(2)}</strong>
+            </button>
+          ) : null}
+        </div>
+      ) : routeLoading ? (
+        <div className="nx-route-preview-v2 is-loading">
+          <div className="nx-route-preview-v2-skeleton" />
+        </div>
+      ) : null}
+
+      {/* Fare — the inDrive hero input */}
+      <div className="nx-fare-block-v2">
+        <label className="nx-fare-block-v2-label">Your fare</label>
+        <div className="nx-fare-block-v2-input-wrap">
+          <span className="nx-fare-block-v2-prefix">$</span>
+          <input
+            className="nx-fare-block-v2-input"
+            type="number"
+            min="1"
+            step="0.50"
+            value={offerPrice}
+            onChange={(e) => setOfferPrice(e.target.value)}
+            inputMode="decimal"
+          />
+        </div>
+        {suggested ? (
+          <div className="nx-fare-block-v2-hint">
+            Suggested range ${suggested.min.toFixed(2)} – $
+            {suggested.max.toFixed(2)}
+          </div>
+        ) : null}
+      </div>
+
+      {/* Payment chips */}
+      <div className="nx-chips-block">
+        <span className="nx-chips-label">Payment</span>
+        <div className="nx-chips-row">
+          {PAYMENT_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              className={`nx-chip ${
+                preferredPayment === opt.value ? "is-active" : ""
+              }`}
+              onClick={() => setPreferredPayment(opt.value)}
+            >
+              <span className="nx-chip-icon">{opt.icon}</span>
+              <span className="nx-chip-text">{opt.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Ride mode chips */}
+      <div className="nx-chips-block">
+        <span className="nx-chips-label">Ride</span>
+        <div className="nx-chips-row">
+          {RIDE_MODES.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              className={`nx-chip ${
+                rideMode === opt.value ? "is-active" : ""
+              }`}
+              onClick={() => setRideMode(opt.value)}
+            >
+              <span className="nx-chip-icon">{opt.icon}</span>
+              <span className="nx-chip-text">{opt.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Passengers + city — subtle row */}
+      <div className="nx-subtle-row">
+        <div className="nx-subtle-field">
+          <span className="nx-chips-label">Passengers</span>
+          <div className="nx-stepper">
+            <button
+              type="button"
+              onClick={() =>
+                setPeople((p) => String(Math.max(1, Number(p || 1) - 1)))
+              }
+              aria-label="Fewer passengers"
+            >
+              −
+            </button>
+            <span>{people}</span>
+            <button
+              type="button"
+              onClick={() =>
+                setPeople((p) => String(Math.min(8, Number(p || 1) + 1)))
+              }
+              aria-label="More passengers"
+            >
+              +
+            </button>
+          </div>
+        </div>
+
+        <div className="nx-subtle-field">
+          <span className="nx-chips-label">City</span>
           <select
-            className="nx-input"
+            className="nx-subtle-select"
             value={city}
             onChange={(e) => setCity(e.target.value)}
           >
@@ -637,132 +751,21 @@ export default function RequestSheet({
               </option>
             ))}
           </select>
-        </label>
-        <label className="nx-field">
-          <span>Passengers</span>
-          <input
-            className="nx-input"
-            type="number"
-            min="1"
-            max="8"
-            value={people}
-            onChange={(e) => setPeople(e.target.value)}
-          />
-        </label>
+        </div>
       </div>
 
-      <div className="nx-field-grid three">
-        <label className="nx-field">
-          <span>Your fare</span>
-          <input
-            className="nx-input"
-            type="number"
-            min="1"
-            step="0.50"
-            value={offerPrice}
-            onChange={(e) => setOfferPrice(e.target.value)}
-          />
-        </label>
-        <label className="nx-field">
-          <span>Payment</span>
-          <select
-            className="nx-input"
-            value={preferredPayment}
-            onChange={(e) => setPreferredPayment(e.target.value)}
-          >
-            <option value="cash">Cash</option>
-            <option value="ecocash">EcoCash</option>
-            <option value="onemoney">OneMoney</option>
-            <option value="card">Card</option>
-          </select>
-        </label>
-        <label className="nx-field">
-          <span>Ride</span>
-          <select
-            className="nx-input"
-            value={rideMode}
-            onChange={(e) => setRideMode(e.target.value)}
-          >
-            <option value="standard">Standard</option>
-            <option value="comfort">Comfort</option>
-            <option value="quick">Quick</option>
-            <option value="family">Family</option>
-          </select>
-        </label>
-      </div>
-
-      {routePreview ? (
-        <ActionCard className="nx-route-preview-card">
-          <div className="nx-offer-top">
-            <div>
-              <div className="nx-eyebrow">Route preview</div>
-              <h3 className="nx-card-title">
-                {routePreview.distanceText} • {routePreview.durationText}
-              </h3>
-              <p className="nx-sheet-copy">
-                Real distance and ETA will be saved with this request.
-              </p>
-            </div>
-            <a
-              className="nx-status-pill"
-              href={googleMapsDirectionsUrl({
-                origin: pickupCoords || pickupName,
-                destination: dropoffName,
-                city,
-              })}
-              target="_blank"
-              rel="noreferrer"
-            >
-              OPEN
-            </a>
-          </div>
-
-          {suggested ? (
-            <div className="nx-fare-suggest">
-              <div className="nx-fare-suggest-text">
-                <span className="nx-fare-suggest-label">
-                  Suggested ${suggested.suggested.toFixed(2)}
-                </span>
-                <span className="nx-fare-suggest-range">
-                  Range ${suggested.min.toFixed(2)} – $
-                  {suggested.max.toFixed(2)}
-                </span>
-              </div>
-              {Number(offerPrice) !== suggested.suggested ? (
-                <button
-                  type="button"
-                  className="nx-fare-suggest-apply"
-                  onClick={() =>
-                    setOfferPrice(suggested.suggested.toFixed(2))
-                  }
-                >
-                  Use
-                </button>
-              ) : (
-                <span className="nx-fare-suggest-ok">✓ Applied</span>
-              )}
-            </div>
-          ) : null}
-        </ActionCard>
-      ) : routeLoading ? (
-        <ActionCard className="nx-route-preview-card">
-          <div className="nx-eyebrow">Calculating route…</div>
-          <p className="nx-sheet-copy">
-            Fetching distance and ETA from Google.
-          </p>
-        </ActionCard>
-      ) : null}
-
+      {/* Note for driver — collapsible-ish via small textarea */}
       <textarea
-        className="nx-input"
+        className="nx-input nx-input-note"
         rows={2}
-        placeholder="Optional note for drivers, e.g. luggage, gate number"
+        placeholder="Note for driver (optional)"
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
       />
 
+      {/* Submit */}
       <PremiumButton type="submit" disabled={!canSubmit} loading={saving}>
-        {saving ? "Posting request..." : "Find drivers now"}
+        {saving ? "Posting…" : "Find drivers"}
       </PremiumButton>
     </form>
   );
