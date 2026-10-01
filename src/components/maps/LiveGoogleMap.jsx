@@ -153,19 +153,45 @@ function createHtmlOverlay(google, map, position, className, render, title = "",
   return overlay;
 }
 
+/* ------------------ Premium blue navigation arrow marker ------------------ */
+// Uber/inDrive style: solid blue arrow that rotates to point in the
+// driver's heading direction. No car silhouette.
 function renderCar(div, { heading = 0, photoUrl = "", label = "" } = {}) {
-  const car = document.createElement("div");
-  car.className = "nx-gmap-car-marker-inner";
-  car.style.transform = `rotate(${cleanNumber(heading, 0)}deg)`;
-  car.innerHTML = `
-    <svg viewBox="0 0 64 64" aria-hidden="true" class="nx-gmap-car-svg">
-      <path d="M18 39h28c3.8 0 7-3.1 7-7v-6.2c0-2.4-1.5-4.6-3.8-5.5l-7.7-3.2A17.5 17.5 0 0 0 34.8 16h-5.6c-2.3 0-4.6.5-6.7 1.4l-7.7 3.2a5.9 5.9 0 0 0-3.8 5.5V32c0 3.9 3.1 7 7 7Z" />
-      <path d="M22 22h20l5.5 4H16.5L22 22Z" class="nx-gmap-car-window" />
-      <circle cx="20" cy="40" r="4" />
-      <circle cx="44" cy="40" r="4" />
-      <path d="M32 5l6 9H26l6-9Z" class="nx-gmap-car-nose" />
+  const arrow = document.createElement("div");
+  arrow.className = "nx-gmap-arrow-marker";
+  arrow.style.transform = `rotate(${cleanNumber(heading, 0)}deg)`;
+  arrow.innerHTML = `
+    <svg viewBox="0 0 64 64" aria-hidden="true" class="nx-gmap-arrow-svg">
+      <!-- Soft drop shadow -->
+      <ellipse cx="32" cy="58" rx="10" ry="3" fill="#06152b" opacity="0.22"/>
+
+      <!-- Outer white ring for contrast against any map -->
+      <circle cx="32" cy="32" r="22" fill="#ffffff"/>
+
+      <!-- Blue arrow (paper-plane / navigation chevron) -->
+      <path
+        d="M32 12
+           L48 48
+           L32 40
+           L16 48
+           Z"
+        fill="#0b6dff"
+        stroke="#0b6dff"
+        stroke-width="1"
+        stroke-linejoin="round"
+      />
+
+      <!-- Subtle highlight on the top edge -->
+      <path
+        d="M32 12 L46 44"
+        stroke="#00d4ff"
+        stroke-width="1.4"
+        stroke-linecap="round"
+        fill="none"
+        opacity="0.75"
+      />
     </svg>`;
-  div.appendChild(car);
+  div.appendChild(arrow);
 
   if (photoUrl) {
     const badge = document.createElement("img");
