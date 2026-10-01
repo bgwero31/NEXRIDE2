@@ -29,7 +29,19 @@ import PremiumButton from "../ui/PremiumButton";
 
 const cityOptions = SERVICE_CITY_KEYS;
 
-/* ------------------------------ Helpers ------------------------------- */
+const PAYMENT_OPTIONS = [
+  { value: "cash", label: "Cash" },
+  { value: "ecocash", label: "EcoCash" },
+  { value: "onemoney", label: "OneMoney" },
+  { value: "card", label: "Card" },
+];
+
+const RIDE_OPTIONS = [
+  { value: "standard", label: "Standard" },
+  { value: "comfort", label: "Comfort" },
+  { value: "quick", label: "Quick" },
+  { value: "family", label: "Family" },
+];
 
 function cityLabel(city) {
   if (!city) return "City";
@@ -43,47 +55,19 @@ function price(value) {
 
 function suggestFare(distanceMeters) {
   const km = Number(distanceMeters || 0) / 1000;
-  const base = 2;
-  const perKm = 0.6;
-  const suggested = Math.max(base, Math.round((base + km * perKm) * 2) / 2);
-  const min = Math.max(1, Math.round(suggested * 0.75 * 2) / 2);
-  const max = Math.round(suggested * 1.35 * 2) / 2;
-  return { min, max, suggested };
+  const suggested = Math.max(2, Math.round((2 + km * 0.6) * 2) / 2);
+  return suggested;
 }
 
 function readStored(key) {
   if (typeof window === "undefined") return null;
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
+  try { return localStorage.getItem(key); } catch { return null; }
 }
 
 function writeStored(key, value) {
   if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(key, value);
-  } catch {}
+  try { localStorage.setItem(key, value); } catch {}
 }
-
-/* ----------------------------- Constants ------------------------------ */
-
-const PAYMENT_OPTIONS = [
-  { value: "cash", label: "Cash", icon: "💵" },
-  { value: "ecocash", label: "EcoCash", icon: "📱" },
-  { value: "onemoney", label: "OneMoney", icon: "📲" },
-  { value: "card", label: "Card", icon: "💳" },
-];
-
-const RIDE_MODES = [
-  { value: "standard", label: "Standard", icon: "🚗" },
-  { value: "comfort", label: "Comfort", icon: "✨" },
-  { value: "quick", label: "Quick", icon: "⚡" },
-  { value: "family", label: "Family", icon: "👨‍👩‍👧" },
-];
-
-/* ---------------------------- Component ------------------------------- */
 
 export default function RequestSheet({
   user,
@@ -93,10 +77,7 @@ export default function RequestSheet({
   onRequestCreated,
   onDraftRouteChange,
 }) {
-  /* ---------- Form state ---------- */
-  const [city, setCity] = useState(
-    normalizeCity(initialCity || profile?.city || "zvishavane")
-  );
+  const [city, setCity] = useState(normalizeCity(initialCity || profile?.city || "zvishavane"));
   const [pickupName, setPickupName] = useState("");
   const [dropoffName, setDropoffName] = useState("");
   const [offerPrice, setOfferPrice] = useState("3");
@@ -104,19 +85,14 @@ export default function RequestSheet({
   const [rideMode, setRideMode] = useState("standard");
   const [people, setPeople] = useState("1");
   const [notes, setNotes] = useState("");
-
-  /* ---------- Coordinates + route ---------- */
+  const [notesOpen, setNotesOpen] = useState(false);
   const [pickupCoords, setPickupCoords] = useState(null);
   const [dropoffCoords, setDropoffCoords] = useState(null);
   const [routePreview, setRoutePreview] = useState(null);
-  const [routeLoading, setRouteLoading] = useState(false);
-
-  /* ---------- UI status ---------- */
   const [saving, setSaving] = useState(false);
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState("");
 
-  /* ---------- Refs ---------- */
   const pickupInputRef = useRef(null);
   const dropoffInputRef = useRef(null);
   const pickupAutocompleteRef = useRef(null);
@@ -124,29 +100,16 @@ export default function RequestSheet({
   const hasAutoLocatedRef = useRef(false);
   const appSettingsRef = useRef(appSettings);
 
-  useEffect(() => {
-    appSettingsRef.current = appSettings;
-  }, [appSettings]);
+  useEffect(() => { appSettingsRef.current = appSettings; }, [appSettings]);
 
-  /* --------------- Initial form hydration (once) ------------ */
+  /* Hydrate once */
   useEffect(() => {
     const settings = appSettingsRef.current || {};
-    const savedPickup =
-      readStored("nexride-default-pickup") || settings.defaultPickup || "";
-    const savedDropoff =
-      readStored("nexride-default-dropoff") || settings.defaultDropoff || "";
-    const savedPayment =
-      readStored("nexride-preferred-payment") ||
-      settings.preferredPayment ||
-      "cash";
-    const savedRideMode =
-      readStored("nexride-ride-mode") || settings.rideMode || "standard";
-    const savedCity =
-      readStored("nexride-gps-detected-city") ||
-      readStored("nexride-last-place") ||
-      initialCity ||
-      profile?.city ||
-      "zvishavane";
+    const savedPickup = readStored("nexride-default-pickup") || settings.defaultPickup || "";
+    const savedDropoff = readStored("nexride-default-dropoff") || settings.defaultDropoff || "";
+    const savedPayment = readStored("nexride-preferred-payment") || settings.preferredPayment || "cash";
+    const savedRideMode = readStored("nexride-ride-mode") || settings.rideMode || "standard";
+    const savedCity = readStored("nexride-gps-detected-city") || readStored("nexride-last-place") || initialCity || profile?.city || "zvishavane";
 
     setCity(normalizeCity(savedCity));
     if (savedPickup) setPickupName(savedPickup);
@@ -156,98 +119,53 @@ export default function RequestSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* ------------------- Google Places Autocomplete -------------------- */
+  /* Autocomplete */
   useEffect(() => {
     if (!hasGoogleMapsApiKey()) return;
     if (!pickupInputRef.current || !dropoffInputRef.current) return;
-
     let cancelled = false;
-    let pickupListener = null;
-    let dropoffListener = null;
+    let pL = null, dL = null;
 
-    loadGoogleMapsApi()
-      .then((google) => {
-        if (cancelled || !google?.maps?.places) return;
+    loadGoogleMapsApi().then((google) => {
+      if (cancelled || !google?.maps?.places) return;
+      const center = getCityCenter(city);
+      const bounds = new google.maps.LatLngBounds(
+        { lat: center.lat - 0.5, lng: center.lng - 0.5 },
+        { lat: center.lat + 0.5, lng: center.lng + 0.5 }
+      );
+      const opts = {
+        componentRestrictions: { country: "zw" },
+        fields: ["formatted_address", "geometry", "name"],
+        bounds, strictBounds: false,
+      };
+      const pAC = new google.maps.places.Autocomplete(pickupInputRef.current, opts);
+      const dAC = new google.maps.places.Autocomplete(dropoffInputRef.current, opts);
+      pickupAutocompleteRef.current = pAC;
+      dropoffAutocompleteRef.current = dAC;
 
-        const center = getCityCenter(city);
-        const bounds = new google.maps.LatLngBounds(
-          { lat: center.lat - 0.5, lng: center.lng - 0.5 },
-          { lat: center.lat + 0.5, lng: center.lng + 0.5 }
-        );
-
-        const options = {
-          componentRestrictions: { country: "zw" },
-          fields: ["formatted_address", "geometry", "name"],
-          bounds,
-          strictBounds: false,
-        };
-
-        const pickupAutocomplete = new google.maps.places.Autocomplete(
-          pickupInputRef.current,
-          options
-        );
-        const dropoffAutocomplete = new google.maps.places.Autocomplete(
-          dropoffInputRef.current,
-          options
-        );
-
-        pickupAutocompleteRef.current = pickupAutocomplete;
-        dropoffAutocompleteRef.current = dropoffAutocomplete;
-
-        pickupListener = pickupAutocomplete.addListener(
-          "place_changed",
-          () => {
-            const place = pickupAutocomplete.getPlace();
-            const formatted =
-              place.formatted_address ||
-              place.name ||
-              pickupInputRef.current?.value ||
-              "";
-            const location = place.geometry?.location;
-            if (formatted) setPickupName(formatted);
-            if (location)
-              setPickupCoords({ lat: location.lat(), lng: location.lng() });
-          }
-        );
-
-        dropoffListener = dropoffAutocomplete.addListener(
-          "place_changed",
-          () => {
-            const place = dropoffAutocomplete.getPlace();
-            const formatted =
-              place.formatted_address ||
-              place.name ||
-              dropoffInputRef.current?.value ||
-              "";
-            const location = place.geometry?.location;
-            if (formatted) setDropoffName(formatted);
-            if (location)
-              setDropoffCoords({ lat: location.lat(), lng: location.lng() });
-          }
-        );
-      })
-      .catch((err) => {
-        if (process.env.NODE_ENV !== "production") {
-          console.warn(
-            "[RequestSheet] places init failed:",
-            err?.message || err
-          );
-        }
+      pL = pAC.addListener("place_changed", () => {
+        const pl = pAC.getPlace();
+        const f = pl.formatted_address || pl.name || pickupInputRef.current?.value || "";
+        const loc = pl.geometry?.location;
+        if (f) setPickupName(f);
+        if (loc) setPickupCoords({ lat: loc.lat(), lng: loc.lng() });
       });
+      dL = dAC.addListener("place_changed", () => {
+        const pl = dAC.getPlace();
+        const f = pl.formatted_address || pl.name || dropoffInputRef.current?.value || "";
+        const loc = pl.geometry?.location;
+        if (f) setDropoffName(f);
+        if (loc) setDropoffCoords({ lat: loc.lat(), lng: loc.lng() });
+      });
+    }).catch(() => {});
 
     return () => {
       cancelled = true;
-      try {
-        pickupListener?.remove?.();
-        dropoffListener?.remove?.();
-      } catch {}
-      pickupAutocompleteRef.current = null;
-      dropoffAutocompleteRef.current = null;
+      try { pL?.remove?.(); dL?.remove?.(); } catch {}
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* ------------- Re-bias autocomplete when city changes ----------- */
   useEffect(() => {
     if (!hasGoogleMapsApiKey()) return;
     const center = getCityCenter(city);
@@ -265,139 +183,75 @@ export default function RequestSheet({
     })();
   }, [city]);
 
-  /* ----------------------- GPS location helper ------------------------ */
+  /* GPS */
   const useCurrentLocation = useCallback(() => {
     setError("");
-
     if (typeof navigator === "undefined" || !navigator.geolocation) {
-      setError("GPS unavailable. Type pickup manually.");
+      setError("GPS not available. Type pickup manually.");
       return;
     }
-
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const gpsPoint = buildGpsPointFromPosition(pos);
         const accuracy = Number(gpsPoint?.accuracy || 9999);
-
         if (!gpsPoint || accuracy > 250) {
-          setError("GPS weak. Move outside or type pickup.");
+          setError("GPS too weak. Type pickup manually.");
           setLocating(false);
           return;
         }
-
         const detected = getNearestCityFromPoint(gpsPoint);
         const detectedCity = detected?.cityKey || city;
-
         setCity(detectedCity);
         saveDetectedCityLocal(detectedCity);
-        saveDetectedCity({
-          db,
-          ref,
-          update,
-          uid: user?.uid,
-          cityKey: detectedCity,
-        }).catch(() => {});
-
-        setPickupCoords({
-          lat: gpsPoint.lat,
-          lng: gpsPoint.lng,
-          accuracy,
-          source: "phone-gps",
-        });
-        setPickupName((current) =>
-          current?.trim() && current !== "Current GPS pickup"
-            ? current
-            : "Current GPS pickup"
-        );
+        saveDetectedCity({ db, ref, update, uid: user?.uid, cityKey: detectedCity }).catch(() => {});
+        setPickupCoords({ lat: gpsPoint.lat, lng: gpsPoint.lng, accuracy, source: "phone-gps" });
+        setPickupName((c) => (c?.trim() && c !== "Current GPS pickup" ? c : "Current GPS pickup"));
         setLocating(false);
       },
-      () => {
-        setError("Could not read GPS. Type pickup manually.");
-        setLocating(false);
-      },
+      () => { setError("Could not read GPS."); setLocating(false); },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
     );
   }, [city, user?.uid]);
 
-  /* --------------- Auto-GPS on mount ------------ */
   useEffect(() => {
-    if (hasAutoLocatedRef.current) return;
-    if (pickupCoords) return;
-
-    const savedPickup = readStored("nexride-default-pickup");
-    if (
-      savedPickup &&
-      savedPickup.trim() &&
-      savedPickup !== "Current GPS pickup"
-    ) {
+    if (hasAutoLocatedRef.current || pickupCoords) return;
+    const saved = readStored("nexride-default-pickup");
+    if (saved && saved.trim() && saved !== "Current GPS pickup") {
       hasAutoLocatedRef.current = true;
       return;
     }
-
     hasAutoLocatedRef.current = true;
-    const timer = setTimeout(() => useCurrentLocation(), 400);
-    return () => clearTimeout(timer);
+    const t = setTimeout(() => useCurrentLocation(), 400);
+    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* --------------------- Live route preview ------------- */
+  /* Route preview */
   useEffect(() => {
-    const cleanPickup = pickupName.trim();
-    const cleanDropoff = dropoffName.trim();
-
-    if (!cleanPickup || !cleanDropoff) {
-      setRoutePreview(null);
-      setRouteLoading(false);
-      return;
-    }
-
+    const cp = pickupName.trim();
+    const cd = dropoffName.trim();
+    if (!cp || !cd) { setRoutePreview(null); return; }
     let cancelled = false;
-    setRouteLoading(true);
-
     const timer = setTimeout(async () => {
       try {
         const route = await getGoogleRouteDetails({
-          origin: pickupCoords || cleanPickup,
-          destination: dropoffCoords || cleanDropoff,
-          city,
+          origin: pickupCoords || cp, destination: dropoffCoords || cd, city,
         });
         if (!cancelled && route) setRoutePreview(route);
-      } catch {
-        // optional
-      } finally {
-        if (!cancelled) setRouteLoading(false);
-      }
+      } catch {}
     }, 700);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [city, dropoffCoords, dropoffName, pickupCoords, pickupName]);
 
-  /* ------------------------ Derived values ---------------------------- */
-  const cleanCity = useMemo(
-    () => normalizeCity(city || "zvishavane"),
-    [city]
-  );
-
+  const cleanCity = useMemo(() => normalizeCity(city || "zvishavane"), [city]);
   const canSubmit = Boolean(
-    user?.uid &&
-      cleanCity &&
-      pickupName.trim() &&
-      (pickupCoords || pickupName.trim() !== "Current GPS pickup") &&
-      dropoffName.trim() &&
-      Number(offerPrice) > 0 &&
-      Number(people) > 0
+    user?.uid && cleanCity && pickupName.trim() &&
+    (pickupCoords || pickupName.trim() !== "Current GPS pickup") &&
+    dropoffName.trim() && Number(offerPrice) > 0 && Number(people) > 0
   );
+  const suggested = routePreview ? suggestFare(routePreview.distanceMeters) : null;
 
-  const suggested = useMemo(
-    () => (routePreview ? suggestFare(routePreview.distanceMeters) : null),
-    [routePreview]
-  );
-
-  /* ------------------- Draft route notifications to map -------------- */
   useEffect(() => {
     onDraftRouteChange?.({
       city: cleanCity,
@@ -408,362 +262,215 @@ export default function RequestSheet({
       routePreview,
       offerPrice: Number(offerPrice || 0),
     });
-  }, [
-    cleanCity,
-    dropoffCoords,
-    dropoffName,
-    offerPrice,
-    onDraftRouteChange,
-    pickupCoords,
-    pickupName,
-    routePreview,
-  ]);
+  }, [cleanCity, dropoffCoords, dropoffName, offerPrice, onDraftRouteChange, pickupCoords, pickupName, routePreview]);
 
-  /* --------------------------- Submit handler ------------------------ */
+  const bumpFare = (delta) => {
+    setOfferPrice((prev) => {
+      const n = Number(prev || 0) + delta;
+      return String(Math.max(1, Math.round(n * 100) / 100));
+    });
+  };
+
   const submitRequest = async (e) => {
     e.preventDefault();
     setError("");
-
-    const cleanPickup = pickupName.trim();
-    const cleanDropoff = dropoffName.trim();
+    const cp = pickupName.trim();
+    const cd = dropoffName.trim();
     const priceNumber = Number(offerPrice);
     const peopleNumber = Number(people || 1);
 
-    if (!user?.uid) {
-      setError("Login again before requesting a ride.");
-      return;
+    if (!user?.uid) return setError("Login again before requesting.");
+    if (!cp || !cd) return setError("Add pickup and destination.");
+    if (cp === "Current GPS pickup" && !pickupCoords) {
+      setError("Allow GPS or type pickup.");
+      return useCurrentLocation();
     }
-
-    if (!cleanPickup || !cleanDropoff) {
-      setError("Add pickup and destination first.");
-      return;
-    }
-
-    if (cleanPickup === "Current GPS pickup" && !pickupCoords) {
-      setError("Allow GPS first, or type your pickup manually.");
-      useCurrentLocation();
-      return;
-    }
-
-    if (!Number.isFinite(priceNumber) || priceNumber <= 0) {
-      setError("Add a valid offer price.");
-      return;
-    }
+    if (!Number.isFinite(priceNumber) || priceNumber <= 0) return setError("Add a valid fare.");
 
     try {
       setSaving(true);
-
       let googleRoute = routePreview;
       if (!googleRoute) {
         try {
           googleRoute = await getGoogleRouteDetails({
-            origin: pickupCoords || cleanPickup,
-            destination: dropoffCoords || cleanDropoff,
-            city: cleanCity,
+            origin: pickupCoords || cp, destination: dropoffCoords || cd, city: cleanCity,
           });
-        } catch {
-          googleRoute = null;
-        }
+        } catch { googleRoute = null; }
       }
-
-      const resolvedPickup = googleRoute?.pickupCoords || pickupCoords || null;
-      const resolvedDropoff =
-        googleRoute?.dropoffCoords || dropoffCoords || null;
-      const detectedFromPickup = getNearestCityFromPoint(
-        resolvedPickup || pickupCoords
-      );
-      const requestCity = detectedFromPickup?.cityKey || cleanCity;
+      const rp = googleRoute?.pickupCoords || pickupCoords || null;
+      const rd = googleRoute?.dropoffCoords || dropoffCoords || null;
+      const detected = getNearestCityFromPoint(rp || pickupCoords);
+      const requestCity = detected?.cityKey || cleanCity;
 
       setCity(requestCity);
       saveDetectedCityLocal(requestCity);
-
-      saveDetectedCity({
-        db,
-        ref,
-        update,
-        uid: user.uid,
-        cityKey: requestCity,
-      }).catch(() => {});
+      saveDetectedCity({ db, ref, update, uid: user.uid, cityKey: requestCity }).catch(() => {});
 
       const requestRef = push(ref(db, `rideRequests/${requestCity}`));
       const now = Date.now();
-
       const payload = {
-        id: requestRef.key,
-        city: requestCity,
+        id: requestRef.key, city: requestCity,
         riderId: user.uid,
         riderName: profile?.fullName || user.email || "Rider",
         riderPhone: profile?.phone || "",
         riderPhotoUrl: profile?.photoUrl || profile?.profilePhotoUrl || "",
-        pickupName: googleRoute?.startAddress || cleanPickup,
-        pickupLat: resolvedPickup?.lat ?? null,
-        pickupLng: resolvedPickup?.lng ?? null,
-        dropoffName: googleRoute?.endAddress || cleanDropoff,
-        dropoffLat: resolvedDropoff?.lat ?? null,
-        dropoffLng: resolvedDropoff?.lng ?? null,
+        pickupName: googleRoute?.startAddress || cp,
+        pickupLat: rp?.lat ?? null, pickupLng: rp?.lng ?? null,
+        dropoffName: googleRoute?.endAddress || cd,
+        dropoffLat: rd?.lat ?? null, dropoffLng: rd?.lng ?? null,
         distanceText: googleRoute?.distanceText || "",
         distanceMeters: googleRoute?.distanceMeters || null,
         durationText: googleRoute?.durationText || "",
         durationSeconds: googleRoute?.durationSeconds || null,
         routeSource: googleRoute?.source || "manual",
-        mapsUrl: googleMapsDirectionsUrl({
-          origin: resolvedPickup || cleanPickup,
-          destination: resolvedDropoff || cleanDropoff,
-          city: requestCity,
-        }),
-        offerPrice: priceNumber,
-        people: peopleNumber,
-        notes: notes.trim(),
-        preferredPayment,
-        rideMode,
-        status: "open",
-        viewCount: 0,
-        offersCount: 0,
-        createdAt: now,
-        updatedAt: now,
+        mapsUrl: googleMapsDirectionsUrl({ origin: rp || cp, destination: rd || cd, city: requestCity }),
+        offerPrice: priceNumber, people: peopleNumber,
+        notes: notes.trim(), preferredPayment, rideMode,
+        status: "open", viewCount: 0, offersCount: 0,
+        createdAt: now, updatedAt: now,
       };
 
       await set(requestRef, payload);
 
       queueNexrideEvent({
         type: nexrideNotificationTypes.REQUEST_CREATED,
-        city: requestCity,
-        targetRole: "driver",
+        city: requestCity, targetRole: "driver",
         title: "New NEXRIDE request",
-        message: `${
-          profile?.fullName || "A rider"
-        } is offering $${price(priceNumber)} from ${
-          payload.pickupName || "pickup"
-        }.`,
+        message: `${profile?.fullName || "A rider"} is offering $${price(priceNumber)} from ${payload.pickupName || "pickup"}.`,
         url: "/driver",
-        data: {
-          requestId: requestRef.key,
-          city: requestCity,
-          offerPrice: priceNumber,
-        },
+        data: { requestId: requestRef.key, city: requestCity, offerPrice: priceNumber },
       }).catch(() => {});
 
       writeStored("nexride-last-request-id", requestRef.key);
       writeStored("nexride-last-place", requestCity);
-      writeStored("nexride-default-pickup", cleanPickup);
-      writeStored("nexride-default-dropoff", cleanDropoff);
+      writeStored("nexride-default-pickup", cp);
+      writeStored("nexride-default-dropoff", cd);
 
       onRequestCreated?.({ ...payload, id: requestRef.key });
     } catch (err) {
       console.error("[RequestSheet] submit failed:", err);
-      setError("Failed to post request. Check your internet and try again.");
-    } finally {
-      setSaving(false);
-    }
+      setError("Failed to post. Check internet.");
+    } finally { setSaving(false); }
   };
 
-  /* ------------------------------ Render ------------------------------ */
+  /* ---------------------------------- RENDER ---------------------------------- */
   return (
-    <form onSubmit={submitRequest} className="nx-request-sheet nx-request-v2">
-      {/* Header — clean, no fluff */}
-      <div className="nx-request-v2-head">
-        <h2 className="nx-request-v2-title">Where to?</h2>
-        <div className="nx-request-v2-price-badge">
-          <span className="nx-request-v2-price-label">Your offer</span>
-          <strong>${price(offerPrice)}</strong>
-        </div>
+    <form onSubmit={submitRequest} className="nx-rs">
+      {/* Header — single line */}
+      <div className="nx-rs-head">
+        <h2 className="nx-rs-title">Where to?</h2>
+        <span className="nx-rs-badge">${price(offerPrice)}</span>
       </div>
 
-      {error ? <div className="nx-alert-error">{error}</div> : null}
+      {error ? <div className="nx-alert-error nx-rs-alert">{error}</div> : null}
 
-      {/* Route card — the hero */}
-      <ActionCard className="nx-route-card nx-route-card-v2">
-        <div className="nx-route-row">
+      {/* Route — compact */}
+      <div className="nx-rs-route">
+        <div className="nx-rs-route-row">
           <span className="nx-dot nx-dot-pickup" />
           <input
             ref={pickupInputRef}
-            className="nx-route-input"
+            className="nx-rs-input"
             type="text"
-            placeholder="Pickup location"
+            placeholder="Pickup"
             value={pickupName}
-            onChange={(e) => {
-              setPickupName(e.target.value);
-              if (!e.target.value.trim()) setPickupCoords(null);
-            }}
+            onChange={(e) => { setPickupName(e.target.value); if (!e.target.value.trim()) setPickupCoords(null); }}
             autoComplete="off"
           />
-          <button
-            type="button"
-            className="nx-mini-btn"
-            onClick={useCurrentLocation}
-            disabled={locating}
-            aria-label="Use current location"
-          >
+          <button type="button" className="nx-rs-gps" onClick={useCurrentLocation} disabled={locating} aria-label="Use GPS">
             {locating ? "…" : "📍"}
           </button>
         </div>
-        <div className="nx-route-line" />
-        <div className="nx-route-row">
+        <div className="nx-rs-route-line" />
+        <div className="nx-rs-route-row">
           <span className="nx-dot nx-dot-destination" />
           <input
             ref={dropoffInputRef}
-            className="nx-route-input"
+            className="nx-rs-input"
             type="text"
             placeholder="Where to?"
             value={dropoffName}
-            onChange={(e) => {
-              setDropoffName(e.target.value);
-              setDropoffCoords(null);
-            }}
+            onChange={(e) => { setDropoffName(e.target.value); setDropoffCoords(null); }}
             autoComplete="off"
           />
         </div>
-      </ActionCard>
+      </div>
 
-      {/* Route preview — compact, no fluff */}
-      {routePreview ? (
-        <div className="nx-route-preview-v2">
-          <div className="nx-route-preview-v2-left">
-            <div className="nx-route-preview-v2-metric">
-              <strong>{routePreview.distanceText || "—"}</strong>
-              <span>Distance</span>
-            </div>
-            <div className="nx-route-preview-v2-divider" />
-            <div className="nx-route-preview-v2-metric">
-              <strong>{routePreview.durationText || "—"}</strong>
-              <span>ETA</span>
-            </div>
-          </div>
-          {suggested ? (
-            <button
-              type="button"
-              className="nx-route-preview-v2-suggest"
-              onClick={() =>
-                setOfferPrice(suggested.suggested.toFixed(2))
-              }
-            >
-              <span>Suggested</span>
-              <strong>${suggested.suggested.toFixed(2)}</strong>
-            </button>
-          ) : null}
-        </div>
-      ) : routeLoading ? (
-        <div className="nx-route-preview-v2 is-loading">
-          <div className="nx-route-preview-v2-skeleton" />
-        </div>
-      ) : null}
-
-      {/* Fare — the inDrive hero input */}
-      <div className="nx-fare-block-v2">
-        <label className="nx-fare-block-v2-label">Your fare</label>
-        <div className="nx-fare-block-v2-input-wrap">
-          <span className="nx-fare-block-v2-prefix">$</span>
-          <input
-            className="nx-fare-block-v2-input"
-            type="number"
-            min="1"
-            step="0.50"
-            value={offerPrice}
-            onChange={(e) => setOfferPrice(e.target.value)}
-            inputMode="decimal"
-          />
-        </div>
-        {suggested ? (
-          <div className="nx-fare-block-v2-hint">
-            Suggested range ${suggested.min.toFixed(2)} – $
-            {suggested.max.toFixed(2)}
-          </div>
+      {/* Route info + city — one compact row */}
+      <div className="nx-rs-info">
+        <select className="nx-rs-city" value={city} onChange={(e) => setCity(e.target.value)}>
+          {cityOptions.map((c) => <option key={c} value={c}>{cityLabel(c)}</option>)}
+        </select>
+        <span className="nx-rs-sep">•</span>
+        <span className="nx-rs-pax">
+          <button type="button" onClick={() => setPeople((p) => String(Math.max(1, Number(p) - 1)))} aria-label="Fewer">−</button>
+          <span>{people} pax</span>
+          <button type="button" onClick={() => setPeople((p) => String(Math.min(8, Number(p) + 1)))} aria-label="More">+</button>
+        </span>
+        {routePreview ? (
+          <>
+            <span className="nx-rs-sep">•</span>
+            <span className="nx-rs-meta">{routePreview.distanceText} · {routePreview.durationText}</span>
+          </>
         ) : null}
       </div>
 
-      {/* Payment chips */}
-      <div className="nx-chips-block">
-        <span className="nx-chips-label">Payment</span>
-        <div className="nx-chips-row">
-          {PAYMENT_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              className={`nx-chip ${
-                preferredPayment === opt.value ? "is-active" : ""
-              }`}
-              onClick={() => setPreferredPayment(opt.value)}
-            >
-              <span className="nx-chip-icon">{opt.icon}</span>
-              <span className="nx-chip-text">{opt.label}</span>
-            </button>
-          ))}
-        </div>
+      {/* Fare — compact stepper row */}
+      <div className="nx-rs-fare">
+        <span className="nx-rs-fare-label">Fare</span>
+        <button type="button" className="nx-rs-step" onClick={() => bumpFare(-0.5)} aria-label="Lower">−</button>
+        <div className="nx-rs-fare-display">${price(offerPrice)}</div>
+        <button type="button" className="nx-rs-step" onClick={() => bumpFare(0.5)} aria-label="Raise">+</button>
+        {suggested && Number(offerPrice) !== suggested ? (
+          <button type="button" className="nx-rs-suggest" onClick={() => setOfferPrice(suggested.toFixed(2))}>
+            ${suggested.toFixed(2)}
+          </button>
+        ) : null}
       </div>
 
-      {/* Ride mode chips */}
-      <div className="nx-chips-block">
-        <span className="nx-chips-label">Ride</span>
-        <div className="nx-chips-row">
-          {RIDE_MODES.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              className={`nx-chip ${
-                rideMode === opt.value ? "is-active" : ""
-              }`}
-              onClick={() => setRideMode(opt.value)}
-            >
-              <span className="nx-chip-icon">{opt.icon}</span>
-              <span className="nx-chip-text">{opt.label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Passengers + city — subtle row */}
-      <div className="nx-subtle-row">
-        <div className="nx-subtle-field">
-          <span className="nx-chips-label">Passengers</span>
-          <div className="nx-stepper">
-            <button
-              type="button"
-              onClick={() =>
-                setPeople((p) => String(Math.max(1, Number(p || 1) - 1)))
-              }
-              aria-label="Fewer passengers"
-            >
-              −
-            </button>
-            <span>{people}</span>
-            <button
-              type="button"
-              onClick={() =>
-                setPeople((p) => String(Math.min(8, Number(p || 1) + 1)))
-              }
-              aria-label="More passengers"
-            >
-              +
-            </button>
-          </div>
-        </div>
-
-        <div className="nx-subtle-field">
-          <span className="nx-chips-label">City</span>
-          <select
-            className="nx-subtle-select"
-            value={city}
-            onChange={(e) => setCity(e.target.value)}
+      {/* Payment pills */}
+      <div className="nx-rs-pills">
+        {PAYMENT_OPTIONS.map((p) => (
+          <button
+            key={p.value}
+            type="button"
+            className={`nx-rs-chip ${preferredPayment === p.value ? "is-active" : ""}`}
+            onClick={() => setPreferredPayment(p.value)}
           >
-            {cityOptions.map((item) => (
-              <option key={item} value={item}>
-                {cityLabel(item)}
-              </option>
-            ))}
-          </select>
-        </div>
+            {p.label}
+          </button>
+        ))}
       </div>
 
-      {/* Note for driver — collapsible-ish via small textarea */}
-      <textarea
-        className="nx-input nx-input-note"
-        rows={2}
-        placeholder="Note for driver (optional)"
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-      />
+      {/* Ride mode pills */}
+      <div className="nx-rs-pills">
+        {RIDE_OPTIONS.map((r) => (
+          <button
+            key={r.value}
+            type="button"
+            className={`nx-rs-chip ${rideMode === r.value ? "is-active" : ""}`}
+            onClick={() => setRideMode(r.value)}
+          >
+            {r.label}
+          </button>
+        ))}
+      </div>
 
-      {/* Submit */}
+      {/* Notes — collapsed by default */}
+      {notesOpen ? (
+        <input
+          className="nx-rs-input nx-rs-notes"
+          placeholder="Note for driver (luggage, gate…)"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+        />
+      ) : (
+        <button type="button" className="nx-rs-notes-toggle" onClick={() => setNotesOpen(true)}>
+          + Add note for driver
+        </button>
+      )}
+
+      {/* CTA */}
       <PremiumButton type="submit" disabled={!canSubmit} loading={saving}>
         {saving ? "Posting…" : "Find drivers"}
       </PremiumButton>
