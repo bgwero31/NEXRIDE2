@@ -2210,3 +2210,21 @@ select option { background: #071421; color: #fff; }
   font-size: 13px;
   margin-top: 2px;
 }
+/* ---------- DriverTripControls: premium polish ---------- */
+.nx-trip-status-col {
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+  flex: 0 0 auto;
+}
+.nx-trip-elapsed {
+  font-size: 10px;
+  font-weight: 1000;
+  color: var(--soft);
+  letter-spacing: 0.02em;
+}
+
+.nx-confirm-danger {
+  background: rgba(255, 91, 110, 0.10) !important;
+  border-color: rgba(255, 91, 110, 0.24) !important;
+  }
