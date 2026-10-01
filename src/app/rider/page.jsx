@@ -802,14 +802,15 @@ export default function RiderPage() {
         onCityDetected={handleDetectedCity}
       />
 
-      <FloatingTopBar
-        title="NEXRIDE"
-        subtitle={`${profile?.fullName || "Rider"} • ${cityLabel(city)}`}
-        avatarUrl={profile?.photoUrl || profile?.profilePhotoUrl || ""}
-        role="rider"
-        onLogout={handleLogout}
-      />
-
+<FloatingTopBar
+  title="NEXRIDE"
+  subtitle={`${profile?.fullName || "Rider"} • ${cityLabel(city)}`}
+  avatarUrl={profile?.photoUrl || profile?.profilePhotoUrl || ""}
+  role="rider"
+  userEmail={user?.email || ""}
+  userPhone={profile?.phone || ""}
+  onLogout={handleLogout}
+/>
       {latestViewer && requestData && !tripData ? (
         <div className="nx-view-toast">
           <div className="nx-view-avatar">
