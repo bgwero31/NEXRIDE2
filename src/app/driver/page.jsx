@@ -768,13 +768,15 @@ export default function DriverPage() {
         onRouteInfoChange={setLiveRouteInfo}
       />
 
-      <FloatingTopBar
-        title="NEXRIDE"
-        subtitle={`${profile?.fullName || "Driver"} • ${cityLabel(cityKey)}`}
-        avatarUrl={profile?.photoUrl || profile?.profilePhotoUrl || ""}
-        role="driver"
-        onLogout={handleLogout}
-      />
+<FloatingTopBar
+  title="NEXRIDE"
+  subtitle={`${profile?.fullName || "Driver"} • ${cityLabel(cityKey)}`}
+  avatarUrl={profile?.photoUrl || profile?.profilePhotoUrl || ""}
+  role="driver"
+  userEmail={user?.email || ""}
+  userPhone={profile?.phone || ""}
+  onLogout={handleLogout}
+/>
 
       <BottomSheet
         height={mode === "queue" ? "32vh" : "24vh"}
