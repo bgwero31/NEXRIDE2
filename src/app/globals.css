@@ -1966,3 +1966,247 @@ select option { background: #071421; color: #fff; }
   font-size: 13px;
   resize: none;
 }
+/* ========================================================================
+   NEXRIDE RequestSheet — COMPACT premium edition
+   Drop-in replacement. Overrides previous big styles.
+   ======================================================================== */
+
+.nx-rs {
+  display: grid;
+  gap: 8px;
+  padding: 0 2px;
+}
+
+/* Header — single row */
+.nx-rs-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.nx-rs-title {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 1000;
+  letter-spacing: -0.04em;
+  color: #fff;
+  line-height: 1;
+}
+.nx-rs-badge {
+  padding: 5px 11px;
+  border-radius: 999px;
+  color: #dff8ff;
+  background: rgba(0, 102, 255, 0.16);
+  border: 1px solid rgba(0, 212, 255, 0.22);
+  font-size: 13px;
+  font-weight: 1000;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+.nx-rs-alert { padding: 8px 10px; font-size: 11px; margin: 0; }
+
+/* Route card */
+.nx-rs-route {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.nx-rs-route-row {
+  display: grid;
+  grid-template-columns: 12px 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+.nx-rs-route-row:last-child { grid-template-columns: 12px 1fr; }
+.nx-rs-route-line {
+  width: 2px;
+  height: 8px;
+  margin-left: 5px;
+  background: linear-gradient(180deg, rgba(0,212,255,0.55), rgba(32,226,138,0.4));
+}
+.nx-rs-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.045);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  outline: none;
+}
+.nx-rs-input:focus {
+  border-color: rgba(0, 212, 255, 0.5);
+  background: rgba(0, 212, 255, 0.06);
+}
+.nx-rs-input::placeholder { color: #7d90a9; font-weight: 600; }
+
+.nx-rs-gps {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  color: #fff;
+  background: linear-gradient(135deg, #00d4ff, #0066ff);
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+}
+.nx-rs-gps:disabled { opacity: 0.7; }
+
+/* Info row: city · pax · distance */
+.nx-rs-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--soft2);
+  flex-wrap: wrap;
+}
+.nx-rs-city {
+  background: transparent;
+  border: none;
+  color: #dff8ff;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 4px 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  appearance: none;
+}
+.nx-rs-city:focus { outline: 2px solid rgba(0, 212, 255, 0.4); }
+.nx-rs-sep { opacity: 0.4; }
+
+.nx-rs-pax {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+}
+.nx-rs-pax button {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 1000;
+  cursor: pointer;
+  line-height: 1;
+}
+.nx-rs-pax button:active { background: rgba(255, 255, 255, 0.10); }
+.nx-rs-pax span { font-size: 11px; color: #fff; font-weight: 900; }
+
+.nx-rs-meta { color: var(--cyan); font-weight: 900; }
+
+/* Fare row */
+.nx-rs-fare {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(0, 102, 255, 0.10), rgba(0, 212, 255, 0.06));
+  border: 1px solid rgba(0, 212, 255, 0.16);
+}
+.nx-rs-fare-label {
+  color: var(--soft);
+  font-size: 10px;
+  font-weight: 1000;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-right: auto;
+}
+.nx-rs-step {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  font-size: 16px;
+  font-weight: 1000;
+  cursor: pointer;
+  line-height: 1;
+}
+.nx-rs-step:active { transform: scale(0.94); }
+.nx-rs-fare-display {
+  min-width: 58px;
+  text-align: center;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 1000;
+  letter-spacing: -0.05em;
+}
+.nx-rs-suggest {
+  padding: 5px 9px;
+  border-radius: 999px;
+  color: #00131c;
+  background: linear-gradient(135deg, #23d6ff, #1268ff);
+  border: none;
+  font-size: 11px;
+  font-weight: 1000;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* Payment + ride chips */
+.nx-rs-pills {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.nx-rs-chip {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 7px 10px;
+  border-radius: 999px;
+  color: var(--soft2);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 11px;
+  font-weight: 1000;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition: all 140ms ease;
+  white-space: nowrap;
+}
+.nx-rs-chip:active { transform: scale(0.97); }
+.nx-rs-chip.is-active {
+  color: #00131c;
+  background: linear-gradient(135deg, #23d6ff, #1268ff);
+  border-color: transparent;
+  box-shadow: 0 8px 20px rgba(0, 102, 255, 0.22);
+}
+
+/* Notes */
+.nx-rs-notes { margin-top: 2px; font-size: 12px; }
+.nx-rs-notes-toggle {
+  width: 100%;
+  padding: 6px;
+  background: transparent;
+  border: none;
+  color: var(--cyan);
+  font-size: 11px;
+  font-weight: 900;
+  text-align: left;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+}
+.nx-rs-notes-toggle:active { opacity: 0.6; }
+
+/* Shrink the CTA */
+.nx-rs .nx-btn {
+  min-height: 44px;
+  font-size: 13px;
+  margin-top: 2px;
+}
