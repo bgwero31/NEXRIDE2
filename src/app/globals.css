@@ -2228,3 +2228,205 @@ select option { background: #071421; color: #fff; }
   background: rgba(255, 91, 110, 0.10) !important;
   border-color: rgba(255, 91, 110, 0.24) !important;
   }
+/* ========================================================================
+   FloatingTopBar — premium drawer polish
+   ======================================================================== */
+
+/* Drawer: safe area + smooth anim */
+.nx-app-drawer {
+  padding-top: calc(18px + env(safe-area-inset-top));
+  padding-bottom: calc(18px + env(safe-area-inset-bottom));
+  transition: transform 260ms cubic-bezier(0.32, 0.72, 0, 1), opacity 200ms ease;
+  opacity: 0;
+}
+.nx-app-drawer.open {
+  opacity: 1;
+}
+
+/* Backdrop fades in */
+.nx-app-drawer-backdrop {
+  opacity: 0;
+  transition: opacity 220ms ease;
+  pointer-events: none;
+}
+.nx-app-drawer-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Drawer header: add close button layout */
+.nx-drawer-profile {
+  position: relative;
+  padding-right: 40px;
+}
+.nx-drawer-identity { min-width: 0; flex: 1; }
+
+.nx-drawer-close {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  color: #b8c7d9;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+.nx-drawer-close:active { background: rgba(255, 255, 255, 0.12); }
+
+/* Role badge */
+.nx-drawer-role {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 1000;
+  letter-spacing: 0.6px;
+}
+.nx-drawer-role-rider {
+  color: #dff8ff;
+  background: rgba(0, 102, 255, 0.18);
+  border: 1px solid rgba(0, 212, 255, 0.24);
+}
+.nx-drawer-role-driver {
+  color: #dffff0;
+  background: rgba(32, 226, 138, 0.16);
+  border: 1px solid rgba(32, 226, 138, 0.28);
+}
+
+/* Drawer links — refreshed layout */
+.nx-drawer-link {
+  position: relative;
+  padding: 0 12px 0 14px;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+.nx-drawer-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nx-drawer-chevron {
+  flex: 0 0 auto;
+  color: #6b7c92;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1;
+  transition: transform 140ms ease, color 140ms ease;
+}
+.nx-drawer-link:hover .nx-drawer-chevron,
+.nx-drawer-link.active .nx-drawer-chevron {
+  color: #00d4ff;
+  transform: translateX(2px);
+}
+.nx-drawer-link.active {
+  color: #fff;
+  background: linear-gradient(
+    90deg,
+    rgba(0, 212, 255, 0.14),
+    rgba(0, 102, 255, 0.08)
+  );
+  border-color: rgba(0, 212, 255, 0.20);
+}
+.nx-drawer-link.active .nx-drawer-icon {
+  color: #00d4ff;
+}
+
+/* Icon styling */
+.nx-drawer-icon {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  color: #aeb7c4;
+  flex: 0 0 auto;
+}
+.nx-drawer-link.active .nx-drawer-icon {
+  color: #00d4ff;
+  filter: drop-shadow(0 0 8px rgba(0, 212, 255, 0.5));
+}
+
+/* Mode switch button — refreshed */
+.nx-drawer-mode {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 14px;
+}
+.nx-drawer-mode svg { width: 16px; height: 16px; }
+
+/* Logout — inline confirm */
+.nx-drawer-logout {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+.nx-drawer-confirm {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 16px;
+  background: rgba(255, 91, 110, 0.10);
+  border: 1px solid rgba(255, 91, 110, 0.24);
+}
+.nx-drawer-confirm-text {
+  color: #ffdbe1;
+  font-size: 12px;
+  font-weight: 900;
+  text-align: center;
+}
+.nx-drawer-confirm-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.nx-drawer-confirm-btn {
+  min-height: 34px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 1000;
+}
+.nx-drawer-confirm-btn.ghost {
+  color: #d6edff;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+}
+.nx-drawer-confirm-btn.danger {
+  color: #fff;
+  background: linear-gradient(135deg, #ff4d4f, #d9363e);
+}
+
+/* Footer brand */
+.nx-drawer-footer-brand {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #8fa0b6;
+  font-size: 11px;
+  font-weight: 1000;
+  letter-spacing: 0.08em;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.nx-drawer-footer-version {
+  color: #6b7c92;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+/* Menu button — align SVG */
+.nx-menu-btn {
+  padding: 0 !important;
+}
+.nx-menu-btn svg { display: block; }
