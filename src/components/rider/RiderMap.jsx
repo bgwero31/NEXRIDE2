@@ -7,7 +7,6 @@ import { onValue, ref } from "firebase/database";
 import { db } from "../../lib/firebase";
 import LiveGoogleMap from "../maps/LiveGoogleMap";
 import {
-  cityLabel,
   googleMapsDirectionsUrl,
   pointFromRecord,
   toLatLng,
@@ -96,9 +95,8 @@ export default function RiderMap({
           if (!item.online) return false;
           if (!Number.isFinite(Number(item.lat))) return false;
           if (!Number.isFinite(Number(item.lng))) return false;
-          // Freshness check — ignore stale heartbeats
           const seen = Number(item.lastSeen || item.updatedAt || 0);
-          if (!seen) return true; // no timestamp → assume fresh
+          if (!seen) return true;
           return now - seen <= DRIVER_STALE_MS;
         });
 
@@ -124,7 +122,6 @@ export default function RiderMap({
         const detected = getNearestCityFromPoint(gpsPoint);
         const detectedKey = detected?.cityKey || "";
 
-        // Only notify parent when the city ACTUALLY changes.
         if (detectedKey && detectedKey !== lastAnnouncedCityRef.current) {
           lastAnnouncedCityRef.current = detectedKey;
           onCityDetectedRef.current?.(detectedKey, detected);
@@ -160,7 +157,7 @@ export default function RiderMap({
   const activeDriver =
     tripData?.driverName || completedTrip?.driverName || "Nearby drivers";
 
-  // Memoize by value so identity changes only when position actually changes.
+  /* ----- Memoized by lat/lng VALUES, not object identity ----- */
   const tripDriverLive = useMemo(
     () => toLatLng(tripData?.driverLive),
     [tripData?.driverLive?.lat, tripData?.driverLive?.lng]
@@ -267,10 +264,16 @@ export default function RiderMap({
   }, [cityKey, mapDestination, mapOrigin]);
 
   const isSearching = mode === "waiting";
+  const isRequestMode = mode === "request";
   const showRouteCard = Boolean(
     requestData || tripData || completedTrip || draftRoute?.dropoffName
   );
   const showFallbackSkeleton = mapStatus !== "google" && !tripData;
+
+  /* ------------------------- Map control wiring ----------------------- */
+  const zoomIn = () => mapApiRef.current?.zoomIn?.();
+  const zoomOut = () => mapApiRef.current?.zoomOut?.();
+  const recenter = () => mapApiRef.current?.recenter?.();
 
   /* ---------------------------- Render ---------------------------- */
   return (
@@ -364,23 +367,24 @@ export default function RiderMap({
         onMapStatus={setMapStatus}
       />
 
-      {/* Status card */}
-      <div
-        className={`nx-map-card nx-map-status-card ${
-          isSearching ? "is-searching" : ""
-        }`}
-      >
-        <div>
-          <span className="nx-eyebrow">{cityLabel(cityKey)} live map</span>
-          <h3>{modeCopy(mode)}</h3>
-          <p>{activeDriver}</p>
+      {/* Status card — hidden in request mode */}
+      {!isRequestMode ? (
+        <div
+          className={`nx-map-card nx-map-status-card ${
+            isSearching ? "is-searching" : ""
+          }`}
+        >
+          <div>
+            <h3>{modeCopy(mode)}</h3>
+            <p>{activeDriver}</p>
+          </div>
+          {drivers.length > 0 ? (
+            <div className="nx-map-chip">
+              {drivers.length} nearby
+            </div>
+          ) : null}
         </div>
-        <div className="nx-map-chip">
-          {mapStatus === "google"
-            ? "Google live"
-            : `${drivers.length} online`}
-        </div>
-      </div>
+      ) : null}
 
       {/* Route card */}
       {showRouteCard ? (
@@ -437,7 +441,7 @@ export default function RiderMap({
         <button
           type="button"
           className="nx-map-control"
-          onClick={() => mapApiRef.current?.zoomIn?.()}
+          onClick={zoomIn}
           aria-label="Zoom in"
         >
           ＋
@@ -445,7 +449,7 @@ export default function RiderMap({
         <button
           type="button"
           className="nx-map-control"
-          onClick={() => mapApiRef.current?.recenter?.()}
+          onClick={recenter}
           aria-label="Recenter map"
         >
           ⌖
@@ -453,7 +457,7 @@ export default function RiderMap({
         <button
           type="button"
           className="nx-map-control"
-          onClick={() => mapApiRef.current?.zoomOut?.()}
+          onClick={zoomOut}
           aria-label="Zoom out"
         >
           −
