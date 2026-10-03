@@ -23,6 +23,8 @@ import {
 
 const CAMERA_THROTTLE_MS = 400;
 const BOUNDS_THROTTLE_MS = 700;
+/** How long to pause camera-follow after a user interaction (ms). */
+const USER_INTERACTION_PAUSE_MS = 4000;
 
 const mapStyles = [
   { elementType: "geometry", stylers: [{ color: "#edf2f7" }] },
@@ -266,9 +268,7 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
     cameraFollow = true,
     followTarget = "driver",
     routePhase = "route",
-    // NEW (optional): pass true to enable Google traffic pricing tier
     withTraffic = false,
-    // NEW (optional): dynamic bottom padding for fitBounds
     boundsBottomPadding = 220,
     onRouteInfo,
     onMapStatus,
@@ -290,6 +290,10 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
   const lastCameraAtRef = useRef(0);
   const lastCameraKeyRef = useRef("");
 
+  // FIX #2 + #3: pause camera-follow for N ms after any user interaction.
+  // Prevents the throttle + reset from fighting user zoom/pan on phones.
+  const userInteractionUntilRef = useRef(0);
+
   // Callback refs — prevents parent re-renders from triggering effects.
   const onRouteInfoRef = useRef(onRouteInfo);
   const onMapStatusRef = useRef(onMapStatus);
@@ -308,22 +312,27 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
   const markersKeyStr = useMemo(() => markersKey(markers), [markers]);
 
   /* --------------- Expose imperative API to parent ----------------- */
+  // FIX #2: every programmatic control marks a user interaction window,
+  // so camera-follow does not immediately overwrite the user's intent.
   useImperativeHandle(
     ref,
     () => ({
       zoomIn: () => {
         const map = mapRef.current;
         if (!map) return;
+        userInteractionUntilRef.current = Date.now() + USER_INTERACTION_PAUSE_MS;
         map.setZoom(Math.min(21, (map.getZoom() || 14) + 1));
       },
       zoomOut: () => {
         const map = mapRef.current;
         if (!map) return;
+        userInteractionUntilRef.current = Date.now() + USER_INTERACTION_PAUSE_MS;
         map.setZoom(Math.max(4, (map.getZoom() || 14) - 1));
       },
       recenter: () => {
         const map = mapRef.current;
         if (!map) return;
+        userInteractionUntilRef.current = Date.now() + USER_INTERACTION_PAUSE_MS;
         const target =
           driverPoint || riderPoint || toLatLng(originPoint) || center;
         if (target) map.panTo(target);
@@ -563,6 +572,9 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
   useEffect(() => {
     if (!ready || !cameraFollow || !mapRef.current || !window.google?.maps) return;
 
+    // FIX #3: skip camera-follow during the user-interaction pause window.
+    if (Date.now() < userInteractionUntilRef.current) return;
+
     const target =
       followTarget === "rider" ? riderPoint :
       followTarget === "origin" ? toLatLng(originPoint) :
@@ -608,6 +620,33 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
       }
     }
   }, [cameraFollow, destinationPoint, driverPoint, followTarget, originPoint, ready, riderPoint, routePhase, driverLocation?.heading]);
+
+  /* ------------- Pause camera follow on manual map interaction ------------- */
+  // FIX #4: when the user drags or pinches the map, remember for 4 seconds.
+  useEffect(() => {
+    if (!ready || !mapRef.current || !window.google?.maps) return;
+    const map = mapRef.current;
+
+    const markInteraction = () => {
+      userInteractionUntilRef.current = Date.now() + USER_INTERACTION_PAUSE_MS;
+    };
+
+    const listeners = [
+      map.addListener("dragstart", markInteraction),
+      map.addListener("zoom_changed", () => {
+        // If we're already in a pause window, don't extend it
+        if (Date.now() < userInteractionUntilRef.current) return;
+        // Otherwise assume this is a user gesture
+        markInteraction();
+      }),
+    ];
+
+    return () => {
+      listeners.forEach((l) => {
+        try { l?.remove?.(); } catch {}
+      });
+    };
+  }, [ready]);
 
   /* --------------------- Clear route when hidden --------------------- */
   useEffect(() => {
@@ -745,19 +784,30 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
           const now = Date.now();
           const shouldFitRoute =
             routeFitKey !== lastRouteFitKeyRef.current || routePhase === "completed";
+
           if (shouldFitRoute && now - lastBoundsAtRef.current > BOUNDS_THROTTLE_MS) {
-            const bounds = new google.maps.LatLngBounds();
-            overviewPath.forEach((point) => bounds.extend(point));
-            if (!bounds.isEmpty()) {
-              mapRef.current.fitBounds(bounds, {
-                top: 96,
-                left: 42,
-                right: 42,
-                bottom:
-                  routePhase === "completed"
-                    ? 170
-                    : Math.max(120, Number(boundsBottomPadding) || 220),
-              });
+            // FIX #5: skip fit if user is currently interacting with the map.
+            if (Date.now() >= userInteractionUntilRef.current) {
+              const bounds = new google.maps.LatLngBounds();
+
+              // Include the whole route path
+              overviewPath.forEach((point) => bounds.extend(point));
+
+              // Also include the live driver + rider so BOTH stay visible
+              if (driverPoint) bounds.extend(driverPoint);
+              if (riderPoint) bounds.extend(riderPoint);
+
+              if (!bounds.isEmpty()) {
+                mapRef.current.fitBounds(bounds, {
+                  top: 130,
+                  left: 50,
+                  right: 50,
+                  bottom:
+                    routePhase === "completed"
+                      ? 200
+                      : Math.max(160, Number(boundsBottomPadding) || 260),
+                });
+              }
             }
             lastBoundsAtRef.current = now;
             lastRouteFitKeyRef.current = routeFitKey;
@@ -797,7 +847,9 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
     role,
     withTraffic,
     boundsBottomPadding,
-    driverLocation?.heading,
+    // driverLocation?.heading is intentionally NOT in deps here.
+    // It changes every GPS tick and would cancel the in-flight
+    // Directions request before the polyline ever draws.
   ]);
 
   if (!hasGoogleMapsApiKey()) return null;
