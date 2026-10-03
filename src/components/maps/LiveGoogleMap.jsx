@@ -156,21 +156,14 @@ function createHtmlOverlay(google, map, position, className, render, title = "",
 }
 
 /* ------------------ Premium blue navigation arrow marker ------------------ */
-// Uber/inDrive style: solid blue arrow that rotates to point in the
-// driver's heading direction. No car silhouette.
 function renderCar(div, { heading = 0, photoUrl = "", label = "" } = {}) {
   const arrow = document.createElement("div");
   arrow.className = "nx-gmap-arrow-marker";
   arrow.style.transform = `rotate(${cleanNumber(heading, 0)}deg)`;
   arrow.innerHTML = `
     <svg viewBox="0 0 64 64" aria-hidden="true" class="nx-gmap-arrow-svg">
-      <!-- Soft drop shadow -->
       <ellipse cx="32" cy="58" rx="10" ry="3" fill="#06152b" opacity="0.22"/>
-
-      <!-- Outer white ring for contrast against any map -->
       <circle cx="32" cy="32" r="22" fill="#ffffff"/>
-
-      <!-- Blue arrow (paper-plane / navigation chevron) -->
       <path
         d="M32 12
            L48 48
@@ -182,8 +175,6 @@ function renderCar(div, { heading = 0, photoUrl = "", label = "" } = {}) {
         stroke-width="1"
         stroke-linejoin="round"
       />
-
-      <!-- Subtle highlight on the top edge -->
       <path
         d="M32 12 L46 44"
         stroke="#00d4ff"
@@ -290,8 +281,7 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
   const lastCameraAtRef = useRef(0);
   const lastCameraKeyRef = useRef("");
 
-  // FIX #2 + #3: pause camera-follow for N ms after any user interaction.
-  // Prevents the throttle + reset from fighting user zoom/pan on phones.
+  // Pause camera-follow for N ms after any user interaction.
   const userInteractionUntilRef = useRef(0);
 
   // Callback refs — prevents parent re-renders from triggering effects.
@@ -312,8 +302,6 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
   const markersKeyStr = useMemo(() => markersKey(markers), [markers]);
 
   /* --------------- Expose imperative API to parent ----------------- */
-  // FIX #2: every programmatic control marks a user interaction window,
-  // so camera-follow does not immediately overwrite the user's intent.
   useImperativeHandle(
     ref,
     () => ({
@@ -572,7 +560,7 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
   useEffect(() => {
     if (!ready || !cameraFollow || !mapRef.current || !window.google?.maps) return;
 
-    // FIX #3: skip camera-follow during the user-interaction pause window.
+    // Skip camera follow if user recently interacted with the map.
     if (Date.now() < userInteractionUntilRef.current) return;
 
     const target =
@@ -622,7 +610,6 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
   }, [cameraFollow, destinationPoint, driverPoint, followTarget, originPoint, ready, riderPoint, routePhase, driverLocation?.heading]);
 
   /* ------------- Pause camera follow on manual map interaction ------------- */
-  // FIX #4: when the user drags or pinches the map, remember for 4 seconds.
   useEffect(() => {
     if (!ready || !mapRef.current || !window.google?.maps) return;
     const map = mapRef.current;
@@ -634,9 +621,7 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
     const listeners = [
       map.addListener("dragstart", markInteraction),
       map.addListener("zoom_changed", () => {
-        // If we're already in a pause window, don't extend it
         if (Date.now() < userInteractionUntilRef.current) return;
-        // Otherwise assume this is a user gesture
         markInteraction();
       }),
     ];
@@ -665,6 +650,16 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
   /* --------------------- Route drawing + directions --------------------- */
   useEffect(() => {
     if (!ready || !showRoute || !originPoint || !destinationPoint || !window.google?.maps) {
+      // DEBUG: why aren't we running?
+      console.log("[NEXRIDE-ROUTE-SKIP]", {
+        ready,
+        showRoute,
+        hasOrigin: Boolean(originPoint),
+        hasDestination: Boolean(destinationPoint),
+        hasGoogle: Boolean(window.google?.maps),
+        originPoint,
+        destinationPoint,
+      });
       return;
     }
 
@@ -689,8 +684,26 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
       };
     }
 
+    // DEBUG: log every request
+    console.log("[NEXRIDE-ROUTE-REQUEST]", {
+      origin: request.origin,
+      destination: request.destination,
+      routePhase,
+      role,
+    });
+
     service.route(request, (result, status) => {
       if (cancelled) return;
+
+      // DEBUG: log Google's reply
+      console.log("[NEXRIDE-ROUTE]", {
+        status,
+        hasRoute: Boolean(result?.routes?.[0]),
+        pathLength: result?.routes?.[0]?.overview_path?.length,
+        distance: result?.routes?.[0]?.legs?.[0]?.distance?.text,
+        duration: result?.routes?.[0]?.legs?.[0]?.duration?.text,
+        errorMessage: result?.error_message,
+      });
 
       // Clean previous route
       routeHaloRef.current?.setMap(null);
@@ -786,14 +799,10 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
             routeFitKey !== lastRouteFitKeyRef.current || routePhase === "completed";
 
           if (shouldFitRoute && now - lastBoundsAtRef.current > BOUNDS_THROTTLE_MS) {
-            // FIX #5: skip fit if user is currently interacting with the map.
             if (Date.now() >= userInteractionUntilRef.current) {
               const bounds = new google.maps.LatLngBounds();
 
-              // Include the whole route path
               overviewPath.forEach((point) => bounds.extend(point));
-
-              // Also include the live driver + rider so BOTH stay visible
               if (driverPoint) bounds.extend(driverPoint);
               if (riderPoint) bounds.extend(riderPoint);
 
@@ -847,9 +856,7 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
     role,
     withTraffic,
     boundsBottomPadding,
-    // driverLocation?.heading is intentionally NOT in deps here.
-    // It changes every GPS tick and would cancel the in-flight
-    // Directions request before the polyline ever draws.
+    // driverLocation?.heading intentionally NOT here
   ]);
 
   if (!hasGoogleMapsApiKey()) return null;
