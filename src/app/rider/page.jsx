@@ -321,7 +321,7 @@ export default function RiderPage() {
   }, [tripId]);
 
   /* ------------- Rider live GPS broadcast during active trip ---------- */
-  // Deps now include `handleDetectedCity` (stable via useCallback) so
+  // Deps include `handleDetectedCity` (stable via useCallback) so
   // the effect never captures a stale handler.
   useEffect(() => {
     if (!user || !tripId || !tripData) return;
@@ -409,31 +409,28 @@ export default function RiderPage() {
 
   /* --------------------------- Handlers ------------------------------- */
 
-  const handleRequestCreated = useCallback(
-    (request) => {
-      speakNexrideStage("request_created", "rider", request, { force: true });
-      setError("");
-      setSuccess("Request posted. Drivers can view and negotiate now.");
-      setCompletedTrip(null);
-      setTripData(null);
-      setTripId("");
-      setOffers([]);
-      setViewers([]);
-      setViewCount(0);
-      setDraftRoute(null);      // clear old draft so map isn't stale
-      setLiveRouteInfo(null);   // clear any old route overlay
-      setRequestId(request.id);
-      setRequestData(request);
-      setCity(request.city || cityRef.current);
+  const handleRequestCreated = useCallback((request) => {
+    speakNexrideStage("request_created", "rider", request, { force: true });
+    setError("");
+    setSuccess("Request posted. Drivers can view and negotiate now.");
+    setCompletedTrip(null);
+    setTripData(null);
+    setTripId("");
+    setOffers([]);
+    setViewers([]);
+    setViewCount(0);
+    setDraftRoute(null);    // clear old draft so map isn't stale
+    setLiveRouteInfo(null); // clear any old route overlay
+    setRequestId(request.id);
+    setRequestData(request);
+    setCity(request.city || cityRef.current);
 
-      try {
-        localStorage.setItem("nexride-last-request-id", request.id);
-        if (request.city) localStorage.setItem("nexride-last-place", request.city);
-        localStorage.removeItem("nexride-active-trip-id");
-      } catch {}
-    },
-    []
-  );
+    try {
+      localStorage.setItem("nexride-last-request-id", request.id);
+      if (request.city) localStorage.setItem("nexride-last-place", request.city);
+      localStorage.removeItem("nexride-active-trip-id");
+    } catch {}
+  }, []);
 
   const handleAcceptOffer = useCallback(
     async (offer) => {
@@ -450,7 +447,7 @@ export default function RiderPage() {
         let freshRequest = requestData;
         try {
           const snap = await get(ref(db, `rideRequests/${cityKey}/${reqId}`));
-          if (snap.exists()) freshRequest = { ...requestData, ...snap.val() };
+          if (snap.exists()) freshRequest = { ...(requestData || {}), ...snap.val() };
         } catch {}
 
         if (!freshRequest) {
@@ -603,7 +600,10 @@ export default function RiderPage() {
         setError("Failed to accept this driver offer.");
       }
     },
-    [user, profile, requestId, requestData, offers]
+    // NOTE: `requestData` is intentionally NOT in deps — we read the
+    // freshest copy from Firebase inside the handler. Including it would
+    // rebuild this callback on every snapshot update.
+    [user, profile, requestId, offers]
   );
 
   const handleCancelRequest = useCallback(async () => {
@@ -703,7 +703,7 @@ export default function RiderPage() {
     }
   }, [tripId, tripData, city, requestId, profile?.fullName]);
 
-    /* --------------------------- Fare boost ----------------------------- */
+  /* --------------------------- Fare boost ----------------------------- */
   // inDrive-style: nudge the fare up to attract drivers faster.
   const handleBoostFare = useCallback(
     async (bump) => {
@@ -734,7 +734,7 @@ export default function RiderPage() {
     },
     [requestId, requestData?.offerPrice]
   );
-  
+
   const handleContactDriver = useCallback(() => {
     if (!tripData?.driverPhone) {
       setError("Driver phone is not available yet.");
@@ -797,20 +797,22 @@ export default function RiderPage() {
         draftRoute={draftRoute}
         viewCount={viewCount}
         offersCount={offers.length}
+        boundsBottomPadding={mode === "request" ? 220 : 160}
         onDriversCountChange={setNearbyDriversCount}
         onRouteInfoChange={setLiveRouteInfo}
         onCityDetected={handleDetectedCity}
       />
 
-<FloatingTopBar
-  title="NEXRIDE"
-  subtitle={`${profile?.fullName || "Rider"} • ${cityLabel(city)}`}
-  avatarUrl={profile?.photoUrl || profile?.profilePhotoUrl || ""}
-  role="rider"
-  userEmail={user?.email || ""}
-  userPhone={profile?.phone || ""}
-  onLogout={handleLogout}
-/>
+      <FloatingTopBar
+        title="NEXRIDE"
+        subtitle={`${profile?.fullName || "Rider"} • ${cityLabel(city)}`}
+        avatarUrl={profile?.photoUrl || profile?.profilePhotoUrl || ""}
+        role="rider"
+        userEmail={user?.email || ""}
+        userPhone={profile?.phone || ""}
+        onLogout={handleLogout}
+      />
+
       {latestViewer && requestData && !tripData ? (
         <div className="nx-view-toast">
           <div className="nx-view-avatar">
