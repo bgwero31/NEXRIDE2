@@ -7,6 +7,7 @@ import { onValue, ref } from "firebase/database";
 import { db } from "../../lib/firebase";
 import LiveGoogleMap from "../maps/LiveGoogleMap";
 import {
+  cityLabel,
   googleMapsDirectionsUrl,
   pointFromRecord,
   toLatLng,
@@ -53,6 +54,7 @@ export default function RiderMap({
   draftRoute = null,
   viewCount = 0,
   offersCount = 0,
+  boundsBottomPadding = 180,
   onDriversCountChange,
   onRouteInfoChange,
   onCityDetected,
@@ -94,8 +96,9 @@ export default function RiderMap({
           if (!item.online) return false;
           if (!Number.isFinite(Number(item.lat))) return false;
           if (!Number.isFinite(Number(item.lng))) return false;
+          // Freshness check — ignore stale heartbeats
           const seen = Number(item.lastSeen || item.updatedAt || 0);
-          if (!seen) return true;
+          if (!seen) return true; // no timestamp → assume fresh
           return now - seen <= DRIVER_STALE_MS;
         });
 
@@ -121,6 +124,7 @@ export default function RiderMap({
         const detected = getNearestCityFromPoint(gpsPoint);
         const detectedKey = detected?.cityKey || "";
 
+        // Only notify parent when the city ACTUALLY changes.
         if (detectedKey && detectedKey !== lastAnnouncedCityRef.current) {
           lastAnnouncedCityRef.current = detectedKey;
           onCityDetectedRef.current?.(detectedKey, detected);
@@ -156,16 +160,35 @@ export default function RiderMap({
   const activeDriver =
     tripData?.driverName || completedTrip?.driverName || "Nearby drivers";
 
-  const tripDriverLive = toLatLng(tripData?.driverLive);
-  const matchedOnlineDriver = tripData?.driverId
-    ? drivers.find(
-        (driver) =>
-          driver.id === tripData.driverId ||
-          driver.driverId === tripData.driverId
-      )
-    : null;
-  const driverLive = tripDriverLive || toLatLng(matchedOnlineDriver);
-  const riderLive = toLatLng(tripData?.riderLive) || riderCurrentLocation;
+  // Memoize by value so identity changes only when position actually changes.
+  const tripDriverLive = useMemo(
+    () => toLatLng(tripData?.driverLive),
+    [tripData?.driverLive?.lat, tripData?.driverLive?.lng]
+  );
+
+  const matchedOnlineDriver = useMemo(
+    () =>
+      tripData?.driverId
+        ? drivers.find(
+            (driver) =>
+              driver.id === tripData.driverId ||
+              driver.driverId === tripData.driverId
+          ) || null
+        : null,
+    [drivers, tripData?.driverId]
+  );
+
+  const matchedDriverLatLng = useMemo(
+    () => toLatLng(matchedOnlineDriver),
+    [matchedOnlineDriver?.lat, matchedOnlineDriver?.lng]
+  );
+
+  const driverLive = tripDriverLive || matchedDriverLatLng;
+
+  const riderLive = useMemo(
+    () => toLatLng(tripData?.riderLive) || riderCurrentLocation,
+    [tripData?.riderLive?.lat, tripData?.riderLive?.lng, riderCurrentLocation]
+  );
 
   const routeTargetMode =
     tripData?.status === "accepted" || tripData?.status === "arrived"
@@ -244,16 +267,10 @@ export default function RiderMap({
   }, [cityKey, mapDestination, mapOrigin]);
 
   const isSearching = mode === "waiting";
-  const isRequestMode = mode === "request";
   const showRouteCard = Boolean(
     requestData || tripData || completedTrip || draftRoute?.dropoffName
   );
   const showFallbackSkeleton = mapStatus !== "google" && !tripData;
-
-  /* ------------------------- Map control wiring ----------------------- */
-  const zoomIn = () => mapApiRef.current?.zoomIn?.();
-  const zoomOut = () => mapApiRef.current?.zoomOut?.();
-  const recenter = () => mapApiRef.current?.recenter?.();
 
   /* ---------------------------- Render ---------------------------- */
   return (
@@ -342,28 +359,28 @@ export default function RiderMap({
               : "destination"
             : "request"
         }
+        boundsBottomPadding={boundsBottomPadding}
         onRouteInfo={setRouteInfo}
         onMapStatus={setMapStatus}
       />
 
-      {/* Status card — hidden in request mode; the bottom sheet already asks "Where to?" */}
-      {!isRequestMode ? (
-        <div
-          className={`nx-map-card nx-map-status-card ${
-            isSearching ? "is-searching" : ""
-          }`}
-        >
-          <div>
-            <h3>{modeCopy(mode)}</h3>
-            <p>{activeDriver}</p>
-          </div>
-          {drivers.length > 0 ? (
-            <div className="nx-map-chip">
-              {drivers.length} nearby
-            </div>
-          ) : null}
+      {/* Status card */}
+      <div
+        className={`nx-map-card nx-map-status-card ${
+          isSearching ? "is-searching" : ""
+        }`}
+      >
+        <div>
+          <span className="nx-eyebrow">{cityLabel(cityKey)} live map</span>
+          <h3>{modeCopy(mode)}</h3>
+          <p>{activeDriver}</p>
         </div>
-      ) : null}
+        <div className="nx-map-chip">
+          {mapStatus === "google"
+            ? "Google live"
+            : `${drivers.length} online`}
+        </div>
+      </div>
 
       {/* Route card */}
       {showRouteCard ? (
@@ -420,7 +437,7 @@ export default function RiderMap({
         <button
           type="button"
           className="nx-map-control"
-          onClick={zoomIn}
+          onClick={() => mapApiRef.current?.zoomIn?.()}
           aria-label="Zoom in"
         >
           ＋
@@ -428,7 +445,7 @@ export default function RiderMap({
         <button
           type="button"
           className="nx-map-control"
-          onClick={recenter}
+          onClick={() => mapApiRef.current?.recenter?.()}
           aria-label="Recenter map"
         >
           ⌖
@@ -436,7 +453,7 @@ export default function RiderMap({
         <button
           type="button"
           className="nx-map-control"
-          onClick={zoomOut}
+          onClick={() => mapApiRef.current?.zoomOut?.()}
           aria-label="Zoom out"
         >
           −
