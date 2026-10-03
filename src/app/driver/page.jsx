@@ -78,6 +78,9 @@ export default function DriverPage() {
   const [completedTrip, setCompletedTrip] = useState(null);
   const [liveRouteInfo, setLiveRouteInfo] = useState(null);
 
+  /* ---------- Self location (shared with DriverMap) ---------- */
+  const [selfLocation, setSelfLocation] = useState(null);
+
   /* ---------- UI ---------- */
   const [negotiatingFor, setNegotiatingFor] = useState(null);
   const [proposedPrice, setProposedPrice] = useState("");
@@ -105,6 +108,9 @@ export default function DriverPage() {
   const cityRef = useRef(cityKey);
   useEffect(() => { cityRef.current = cityKey; }, [cityKey]);
 
+  // Active trip id in a ref so GPS effect doesn't restart per trip.
+  const activeTripIdRef = useRef("");
+
   /* --------------------------- Derived --------------------------- */
   const visibleRequests = useMemo(
     () =>
@@ -118,10 +124,17 @@ export default function DriverPage() {
     [requests, user?.uid]
   );
 
+  const activeTripId = activeTrip?.id || "";
+
   const mode = useMemo(
     () => getMode({ online, activeTrip, completedTrip }),
     [online, activeTrip, completedTrip]
   );
+
+  // Keep the ref in sync with the current trip id.
+  useEffect(() => {
+    activeTripIdRef.current = activeTripId;
+  }, [activeTripId]);
 
   /* ------------------------- Auth bootstrap ---------------------- */
   useEffect(() => {
@@ -250,7 +263,6 @@ export default function DriverPage() {
   /* ------------------ Completed trip fallback -------------------- */
   // When the active trip disappears (driver marked complete), keep watching
   // completedTrips for the final record, then show completed view.
-  const activeTripId = activeTrip?.id || "";
   useEffect(() => {
     if (!user || !activeTripId) return;
     try { completedTripUnsubRef.current?.(); } catch {}
@@ -326,9 +338,15 @@ export default function DriverPage() {
     return () => { cancelled = true; };
   }, [visibleRequests, user, profile, online, cityKey]);
 
-  /* -------------------- Driver GPS broadcast --------------------- */
-  // Depends only on user/online — NOT activeTrip, so we don't restart
-  // watchPosition every time the trip updates.
+  /* ------------- Single GPS watch (online + trip + display) ------------- */
+  // One watchPosition for the whole driver page:
+  //  - Updates `selfLocation` (DriverMap skips its own watch via prop)
+  //  - Broadcasts to `driversOnline/{city}/{uid}` (city-aware)
+  //  - Pushes to `activeTrips/{tripId}/driverLive` when a trip is active
+  //
+  // Deps: only [user, online]. City changes handled via cityRef.
+  // Trip id read via activeTripIdRef so this effect does NOT restart
+  // every time a trip starts or ends.
   useEffect(() => {
     if (!user || !online) return;
     if (typeof navigator === "undefined" || !navigator.geolocation) return;
@@ -339,11 +357,19 @@ export default function DriverPage() {
           const gpsPoint = buildGpsPointFromPosition(pos);
           if (!gpsPoint) return;
 
+          // 1. Local display state (DriverMap reads this via prop)
+          setSelfLocation({
+            lat: gpsPoint.lat,
+            lng: gpsPoint.lng,
+            heading: gpsPoint.heading,
+            accuracy: Number(pos.coords?.accuracy || 9999),
+          });
+
+          // 2. City-aware driversOnline broadcast
           const detected = getNearestCityFromPoint(gpsPoint);
           const currentCity = cityRef.current;
           const liveCity = detected?.cityKey || currentCity;
 
-          // If we crossed into another city, migrate online node.
           if (liveCity !== currentCity) {
             try {
               await update(ref(db, `driversOnline/${currentCity}/${user.uid}`), {
@@ -355,23 +381,33 @@ export default function DriverPage() {
 
             setCity(liveCity);
             saveDetectedCityLocal(liveCity);
-            saveDetectedCity({ db, ref, update, uid: user.uid, cityKey: liveCity }).catch(() => {});
+            saveDetectedCity({
+              db,
+              ref,
+              update,
+              uid: user.uid,
+              cityKey: liveCity,
+            }).catch(() => {});
           }
 
-          const live = {
+          await update(ref(db, `driversOnline/${liveCity}/${user.uid}`), {
             lat: gpsPoint.lat,
             lng: gpsPoint.lng,
             heading: gpsPoint.heading,
             city: liveCity,
             lastSeen: Date.now(),
-          };
+          });
 
-          await update(ref(db, `driversOnline/${liveCity}/${user.uid}`), live);
-
-          // Push to active trip if we have one (checked via ref-free path)
-          const tripId = (await get(ref(db, "activeTrips"))).val
-            ? null
-            : null; // placeholder — replaced below
+          // 3. Active-trip broadcast (read from ref → no effect restarts)
+          const tripId = activeTripIdRef.current;
+          if (tripId) {
+            await update(ref(db, `activeTrips/${tripId}/driverLive`), {
+              lat: gpsPoint.lat,
+              lng: gpsPoint.lng,
+              heading: gpsPoint.heading,
+              updatedAt: Date.now(),
+            });
+          }
         } catch (err) {
           if (process.env.NODE_ENV !== "production") {
             console.warn("[DriverPage] GPS push failed:", err);
@@ -379,36 +415,11 @@ export default function DriverPage() {
         }
       },
       () => {},
-      { enableHighAccuracy: true, maximumAge: 15000, timeout: 12000 }
-    );
-
-    return () => navigator.geolocation.clearWatch(watchId);
-  }, [user, online]);
-
-  // Separate effect writes GPS to active trip when we have one.
-  useEffect(() => {
-    if (!user || !online || !activeTripId) return;
-    if (typeof navigator === "undefined" || !navigator.geolocation) return;
-
-    const watchId = navigator.geolocation.watchPosition(
-      async (pos) => {
-        try {
-          const gpsPoint = buildGpsPointFromPosition(pos);
-          if (!gpsPoint) return;
-          await update(ref(db, `activeTrips/${activeTripId}/driverLive`), {
-            lat: gpsPoint.lat,
-            lng: gpsPoint.lng,
-            heading: gpsPoint.heading,
-            updatedAt: Date.now(),
-          });
-        } catch {}
-      },
-      () => {},
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 12000 }
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [user, online, activeTripId]);
+  }, [user, online]);
 
   /* --------------------------- Toggle online ---------------------- */
   const toggleOnline = useCallback(async () => {
@@ -765,18 +776,19 @@ export default function DriverPage() {
         completedTrip={completedTrip}
         requests={visibleRequests}
         driverPhotoUrl={profile?.photoUrl || profile?.profilePhotoUrl || ""}
+        selfLocation={selfLocation}
         onRouteInfoChange={setLiveRouteInfo}
       />
 
-<FloatingTopBar
-  title="NEXRIDE"
-  subtitle={`${profile?.fullName || "Driver"} • ${cityLabel(cityKey)}`}
-  avatarUrl={profile?.photoUrl || profile?.profilePhotoUrl || ""}
-  role="driver"
-  userEmail={user?.email || ""}
-  userPhone={profile?.phone || ""}
-  onLogout={handleLogout}
-/>
+      <FloatingTopBar
+        title="NEXRIDE"
+        subtitle={`${profile?.fullName || "Driver"} • ${cityLabel(cityKey)}`}
+        avatarUrl={profile?.photoUrl || profile?.profilePhotoUrl || ""}
+        role="driver"
+        userEmail={user?.email || ""}
+        userPhone={profile?.phone || ""}
+        onLogout={handleLogout}
+      />
 
       <BottomSheet
         height={mode === "queue" ? "32vh" : "24vh"}
