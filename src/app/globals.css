@@ -577,7 +577,7 @@ select option { background: #071421; color: #fff; }
 .nx-login-bg {
   position: absolute;
   inset: 0;
-  background-image: url('/nexridebackground.jpg'); 
+  background-image: url('/nexridebackground.png'); 
   background-size: cover;
   background-position: center;
   z-index: 0;
