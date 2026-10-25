@@ -20,12 +20,25 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Permission Popup State
-  const [showPermissions, setShowPermissions] = useState(true);
+  // Permissions Popup State
+  const [showPermissions, setShowPermissions] = useState(false);
 
   useEffect(() => {
     setMounted(true);
+    
+    // Check if user has already seen the permissions popup
+    const hasSeenPerms = localStorage.getItem("nexride-perms-shown");
+    if (!hasSeenPerms) {
+      setShowPermissions(true);
+    }
   }, []);
+
+  const handleContinue = () => {
+    localStorage.setItem("nexride-perms-shown", "true");
+    setShowPermissions(false);
+    // Optional: unlock voice when they click continue
+    try { unlockNexrideVoice("rider"); } catch {}
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -40,7 +53,6 @@ export default function LoginPage() {
 
     try {
       setLoading(true);
-      // Unlock voice on successful login click
       try { unlockNexrideVoice("rider"); } catch {}
 
       const cred = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
@@ -60,12 +72,12 @@ export default function LoginPage() {
 
   return (
     <main className="nx-login-container">
-      {/* 1. FULL BACKGROUND IMAGE WITH DARK FADE */}
+      {/* FULL BACKGROUND IMAGE */}
       <div className="nx-login-bg">
         <div className="nx-login-bg-overlay" />
       </div>
 
-      {/* 2. 3D PERMISSIONS POPUP (Shows on load) */}
+      {/* 3D PERMISSIONS POPUP (Only shows if not seen before) */}
       {showPermissions && (
         <div className="nx-permission-backdrop">
           <div className="nx-permission-3d-card">
@@ -82,7 +94,7 @@ export default function LoginPage() {
 
             <button 
               className="nx-btn nx-btn-primary nx-btn-block" 
-              onClick={() => setShowPermissions(false)}
+              onClick={handleContinue}
             >
               Continue to NEXRIDE
             </button>
@@ -90,16 +102,16 @@ export default function LoginPage() {
         </div>
       )}
 
-      {/* 3. BOTTOM LOGIN SHEET */}
+      {/* GLASS LOGIN SHEET */}
       <section className={`nx-login-sheet ${mounted ? "mounted" : ""}`}>
         <div className="nx-auth-sheet-handle" />
         
-        {/* Small brand mark inside sheet */}
         <div className="nx-login-brand-mini">
-          <img src="/nexridebackground10.jpg" alt="NEXRIDE" className="nx-mini-logo" />
+          {/* Using the proper logo file here instead of the wide background image */}
+          <img src="/nexride-icon.svg" alt="NEXRIDE" className="nx-mini-logo" />
           <div>
             <h1 className="nx-mini-title">NEXRIDE</h1>
-            <p className="nx-mini-sub">Ride smarter. Negotiate better.</p>
+            <p className="nx-mini-sub">Where Every Ride Feels Right</p>
           </div>
         </div>
 
