@@ -17,8 +17,6 @@ import {
   normalizeCity,
 } from "../../lib/nexrideCity";
 
-/* ------------------------------ Constants ----------------------------- */
-
 const DRIVER_STALE_MS = 90_000;
 const GPS_ACCURACY_LIMIT_M = 250;
 
@@ -38,8 +36,6 @@ function recordPoint(record, prefix, fallbackLabel) {
   if (coords) return { ...coords, label: fallbackLabel };
   return fallbackLabel ? { label: fallbackLabel } : null;
 }
-
-/* ---------------------------- Component ------------------------------- */
 
 export default function RiderMap({
   mode,
@@ -61,7 +57,10 @@ export default function RiderMap({
   const [riderCurrentLocation, setRiderCurrentLocation] = useState(null);
   const [routeInfo, setRouteInfo] = useState(null);
   const [mapStatus, setMapStatus] = useState("loading");
+  
+  // NEW STATE FOR THE BANNER
   const [directionStep, setDirectionStep] = useState(null);
+
   const onDriversCountChangeRef = useRef(onDriversCountChange);
   const onRouteInfoChangeRef = useRef(onRouteInfoChange);
   const onCityDetectedRef = useRef(onCityDetected);
@@ -73,7 +72,6 @@ export default function RiderMap({
   const lastAnnouncedCityRef = useRef("");
   const mapApiRef = useRef(null);
 
-  /* -------------------- Online drivers subscription ------------------- */
   useEffect(() => {
     if (!cityKey) return;
     const node = ref(db, `driversOnline/${cityKey}`);
@@ -100,7 +98,6 @@ export default function RiderMap({
     return () => unsub();
   }, [cityKey]);
 
-  /* ------------- Rider GPS watch ------------- */
   useEffect(() => {
     if (typeof navigator === "undefined" || !navigator.geolocation) return;
 
@@ -140,7 +137,6 @@ export default function RiderMap({
     if (routeInfo) onRouteInfoChangeRef.current?.(routeInfo);
   }, [routeInfo]);
 
-  /* -------------------------- Derived data ---------------------------- */
   const routeRecord = tripData || requestData || completedTrip || draftRoute || null;
   const pickup = routeRecord?.pickupName || "My live location";
   const dropoff = routeRecord?.dropoffName || "Choose destination";
@@ -196,7 +192,6 @@ export default function RiderMap({
     if (completedTrip) return recordPoint(completedTrip, "dropoff", completedTrip.dropoffName || dropoff);
     if (requestData) return recordPoint(requestData, "dropoff", requestData?.dropoffName || dropoff);
     
-    // FIX: Only return a coordinate if the user actually selected a place from Google
     if (draftRoute?.dropoffCoords) return { ...draftRoute.dropoffCoords, label: draftRoute.dropoffName || dropoff };
     return null; 
   }, [completedTrip, draftRoute, dropoff, pickup, requestData, routeTargetMode, tripData]);
@@ -236,12 +231,28 @@ export default function RiderMap({
   const zoomOut = () => mapApiRef.current?.zoomOut?.();
   const recenter = () => mapApiRef.current?.recenter?.();
 
-  /* ---------------------------- Render ---------------------------- */
+  const showRoute = Boolean(
+    mapOrigin &&
+    mapDestination &&
+    (requestData || tripData || completedTrip || draftRoute?.dropoffCoords)
+  );
+
   return (
     <section className="nx-live-map rider-map">
-      <div className="nx-map-grid" />
-      <div className="nx-map-glow one" />
-      <div className="nx-map-glow two" />
+      
+      {/* THE HEAD SOUTH NAVIGATION BANNER */}
+      {directionStep && showRoute && (
+        <div className="nx-map-nav-banner">
+          <div className="nx-map-nav-icon">
+            {directionStep.maneuver === "turn-right" ? "➡️" : 
+             directionStep.maneuver === "turn-left" ? "⬅️" : "⬆️"}
+          </div>
+          <div className="nx-map-nav-text">
+            <strong>{directionStep.text}</strong>
+            {directionStep.distance && <span>In {directionStep.distance}</span>}
+          </div>
+        </div>
+      )}
 
       {showFallbackSkeleton ? (
         <>
@@ -256,7 +267,6 @@ export default function RiderMap({
             <path className="nx-route-shadow" d="M76 590 C176 520 94 430 207 355 C316 283 236 205 328 128" />
             <path className="nx-route-path" d="M76 590 C176 520 94 430 207 355 C316 283 236 205 328 128" stroke="url(#routeGradientRider)" />
           </svg>
-
           <div className="nx-map-pin pickup" style={{ left: "18%", top: "76%" }}>●</div>
           <div className="nx-map-pin destination" style={{ left: "80%", top: "16%" }}>●</div>
         </>
@@ -268,42 +278,13 @@ export default function RiderMap({
         role="rider"
         origin={mapOrigin}
         destination={mapDestination}
-        driverLocation={driverLive}
-        riderLocation={riderLive}
-        driverPhotoUrl={
-          tripData?.driverPhotoUrl ||
-          completedTrip?.driverPhotoUrl ||
-          matchedOnlineDriver?.driverPhotoUrl ||
-          ""
-        }
-        riderPhotoUrl={
-          tripData?.riderPhotoUrl ||
-          completedTrip?.riderPhotoUrl ||
-          requestData?.riderPhotoUrl ||
-          ""
-        }
-        markers={tripData || completedTrip ? [] : driverMarkers}
-        
-        /* FIX: Only show the route line if we have actual coordinates for both points */
-        showRoute={Boolean(
-          mapOrigin &&
-          mapDestination &&
-          (requestData || tripData || completedTrip || draftRoute?.dropoffCoords)
-        )}
-        
+        showRoute={showRoute}
         followTarget={tripData ? "driver" : mapDestination ? "route" : "rider"}
-        routePhase={
-          isCompletedMap
-            ? "completed"
-            : tripData
-            ? routeTargetMode === "pickup"
-              ? "pickup"
-              : "destination"
-            : "request"
-        }
+        routePhase={isCompletedMap ? "completed" : tripData ? routeTargetMode : "request"}
         boundsBottomPadding={boundsBottomPadding}
         onRouteInfo={setRouteInfo}
         onMapStatus={setMapStatus}
+        onDirectionStep={setDirectionStep} // <--- PASSING THE PROP HERE
       />
 
       {!isRequestMode ? (
