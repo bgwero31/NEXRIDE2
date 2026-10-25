@@ -61,7 +61,7 @@ export default function RiderMap({
   const [riderCurrentLocation, setRiderCurrentLocation] = useState(null);
   const [routeInfo, setRouteInfo] = useState(null);
   const [mapStatus, setMapStatus] = useState("loading");
-
+  const [directionStep, setDirectionStep] = useState(null);
   const onDriversCountChangeRef = useRef(onDriversCountChange);
   const onRouteInfoChangeRef = useRef(onRouteInfoChange);
   const onCityDetectedRef = useRef(onCityDetected);
