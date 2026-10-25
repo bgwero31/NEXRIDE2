@@ -8,18 +8,24 @@ import { useRouter } from "next/navigation";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { get, ref } from "firebase/database";
 import { auth, db } from "../../lib/firebase";
-import NexrideBrand from "../../components/ui/NexrideBrand";
 import PremiumButton from "../../components/ui/PremiumButton";
+import { unlockNexrideVoice } from "../../lib/nexrideVoice";
 
 export default function LoginPage() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    // Trigger mount animation
+    setMounted(true);
+    // Unlock voice for iOS/Android (needs user interaction first, but this gets it ready)
+    try { unlockNexrideVoice("rider"); } catch {}
+  }, []);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -51,40 +57,77 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="nx-auth-shell">
-      <div className="nx-auth-bg" />
-      <section className={`nx-auth-card ${mounted ? "mounted" : ""}`}>
-        <NexrideBrand subtitle="Ride smarter. Negotiate better." />
+    <main className="nx-auth-shell-v2">
+      {/* Animated Background Elements */}
+      <div className="nx-auth-bg-v2">
+        <div className="nx-auth-glow-1" />
+        <div className="nx-auth-glow-2" />
+      </div>
 
-        <div className="nx-hero-word" aria-label="NEXRIDE">
-          {"NEXRIDE".split("").map((letter, index) => (
-            <span key={`${letter}-${index}`} style={{ animationDelay: `${index * 90}ms` }}>{letter}</span>
-          ))}
+      {/* Top Branding Area */}
+      <div className={`nx-auth-brand-area ${mounted ? "mounted" : ""}`}>
+        <div className="nx-auth-logo-mark">
+          <img src="/nexride-icon.svg" alt="NEXRIDE" />
         </div>
+        <h1 className="nx-auth-logo-text">NEXRIDE</h1>
+        <p className="nx-auth-tagline">Move Better.</p>
+      </div>
 
-        <p className="nx-auth-copy">A blue-black premium NEXRIDE experience with live tracking, smart fare offers, and trusted local drivers.</p>
+      {/* Bottom Login Card (Slides up like a Bottom Sheet) */}
+      <section className={`nx-auth-sheet ${mounted ? "mounted" : ""}`}>
+        <div className="nx-auth-sheet-handle" />
+        
+        <h2 className="nx-auth-sheet-title">Welcome back</h2>
+        <p className="nx-auth-sheet-subtitle">Log in to continue to your account.</p>
 
-        <form onSubmit={handleLogin} className="nx-stack">
-          <label className="nx-field">
-            <span>Email address</span>
-            <input className="nx-input" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <form onSubmit={handleLogin} className="nx-auth-form">
+          <label className="nx-auth-input-group">
+            <input
+              type="email"
+              className="nx-auth-input"
+              placeholder=" "
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+            />
+            <span className="nx-auth-label">Email address</span>
           </label>
-          <label className="nx-field">
-            <span>Password</span>
-            <input className="nx-input" type="password" placeholder="Your password" value={password} onChange={(e) => setPassword(e.target.value)} />
+
+          <label className="nx-auth-input-group">
+            <input
+              type={showPassword ? "text" : "password"}
+              className="nx-auth-input"
+              placeholder=" "
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+            />
+            <span className="nx-auth-label">Password</span>
+            <button
+              type="button"
+              className="nx-auth-eye"
+              onClick={() => setShowPassword(!showPassword)}
+            >
+              {showPassword ? "Hide" : "Show"}
+            </button>
           </label>
 
           {error ? <div className="nx-alert-error">{error}</div> : null}
 
-          <PremiumButton type="submit" disabled={loading}>{loading ? "Opening app..." : "Login to NEXRIDE"}</PremiumButton>
-          <Link href="/signup" className="nx-btn nx-btn-secondary">Create account</Link>
+          <div className="nx-auth-actions">
+            <PremiumButton type="submit" loading={loading} fullWidth>
+              Log In
+            </PremiumButton>
+          </div>
         </form>
 
-        <div className="nx-auth-pills">
-          <span>Map-first</span>
-          <span>Driver offers</span>
-          <span>OTP pickup</span>
+        <div className="nx-auth-divider">
+          <span>New to NEXRIDE?</span>
         </div>
+
+        <Link href="/signup" className="nx-btn nx-btn-secondary nx-btn-block">
+          Create an account
+        </Link>
       </section>
     </main>
   );
