@@ -577,11 +577,10 @@ select option { background: #071421; color: #fff; }
 .nx-login-bg {
   position: absolute;
   inset: 0;
-  background-image: url('/nexridebackground.png'); 
-  background-size: cover;
-  /* PUSHES THE IMAGE UP SO THE CAR IS VISIBLE ABOVE THE CARD */
-  background-position: center 20%;
-  background-repeat: no-repeat;
+  background-image: url('/nexridebackground.png') !important; 
+  background-size: cover !important;
+  background-position: center 15% !important; /* Shows the car perfectly */
+  background-repeat: no-repeat !important;
   z-index: 0;
 }
 
@@ -593,9 +592,9 @@ select option { background: #071421; color: #fff; }
     180deg,
     rgba(2, 6, 18, 0.0) 0%,    /* Completely clear at the very top */
     rgba(2, 6, 18, 0.2) 40%,   /* Slight fade in the middle */
-    rgba(2, 6, 18, 0.8) 80%,   /* Dark at the bottom */
+    rgba(2, 6, 18, 0.85) 80%,  /* Dark at the bottom */
     #020612 100%
-  );
+  ) !important;
 }
 
 /* TRUE GLASS LOGIN BOTTOM SHEET */
@@ -607,12 +606,14 @@ select option { background: #071421; color: #fff; }
   margin: 0 auto;
   
   /* THE GLASS EFFECT - Very transparent */
-  background: rgba(15, 20, 30, 0.35); 
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border-top: 1px solid rgba(255, 255, 255, 0.15);
-  border-left: 1px solid rgba(255, 255, 255, 0.05);
-  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  background: transparent !important; 
+  background-color: rgba(15, 20, 30, 0.45) !important; 
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+  
+  border-top: 1px solid rgba(255, 255, 255, 0.2) !important;
+  border-left: 1px solid rgba(255, 255, 255, 0.05) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
   
   border-top-left-radius: 32px;
   border-top-right-radius: 32px;
@@ -634,11 +635,12 @@ select option { background: #071421; color: #fff; }
   margin-top: 8px;
 }
 .nx-mini-logo {
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border-radius: 12px;
-  object-fit: cover;
-  box-shadow: 0 8px 16px rgba(0, 102, 255, 0.2);
+  object-fit: contain; /* Stops the image from being cut off */
+  background: rgba(0, 0, 0, 0.5); /* Dark background so it stands out */
+  padding: 4px;
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 .nx-mini-title { font-size: 20px; font-weight: 1000; color: #fff; margin: 0; letter-spacing: -0.5px; }
