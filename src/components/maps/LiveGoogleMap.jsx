@@ -106,7 +106,6 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
     const google = window.google; const map = mapRef.current;
     overlayRefs.current.forEach((overlay) => overlay.setMap(null)); overlayRefs.current = [];
 
-    // Ensure we ALWAYS draw the markers if we have coordinates
     if (driverPoint) {
       const overlay = createHtmlOverlay(google, map, driverPoint, "nx-gmap-car-marker", (div) => renderCar(div, { heading: driverLocation?.heading, photoUrl: driverPhotoUrl, label: role === "driver" ? "You" : "Driver" }), "Driver", 1005);
       if (overlay) overlayRefs.current.push(overlay);
@@ -119,7 +118,11 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
 
   useEffect(() => {
     if (!ready || !cameraFollow || !mapRef.current || !window.google?.maps) return;
+    
+    // FIX: If we just drew a route, do NOT snap back to the driver immediately!
+    // Let the user see the route for 5 seconds.
     if (Date.now() < userInteractionUntilRef.current) return;
+    
     const target = driverPoint || riderPoint || toLatLng(originPoint) || toLatLng(destinationPoint);
     if (!target) return;
     const now = Date.now(); const key = pointKey(target);
@@ -147,9 +150,17 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
 
     let cancelled = false; const google = window.google; const service = new google.maps.DirectionsService(); const routeFitKey = `${routePhase}:${pointKey(originPoint)}:${pointKey(destinationPoint)}`;
 
+    // 1. DRAW AN INSTANT STRAIGHT LINE (FALLBACK)
+    const p1 = toLatLng(originPoint); const p2 = toLatLng(destinationPoint);
+    if (p1 && p2) {
+      fallbackPolylineRef.current = new google.maps.Polyline({ path: [p1, p2], strokeColor: "#6100FF", strokeOpacity: 0.5, strokeWeight: 6, map: mapRef.current });
+    }
+
+    // 2. ASK GOOGLE FOR THE SNAPPED ROUTE
     service.route({ origin: buildGoogleDirectionsPoint(google, originPoint, city), destination: buildGoogleDirectionsPoint(google, destinationPoint, city), travelMode: google.maps.TravelMode.DRIVING, provideRouteAlternatives: false, region: "ZW" }, (result, status) => {
       if (cancelled) return;
       
+      // Remove the fallback line if Google responds
       fallbackPolylineRef.current?.setMap(null);
       directionsRendererRef.current?.set("directions", null);
 
@@ -160,22 +171,15 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
         if (firstStep && firstStep.instructions) onDirectionStepRef.current?.({ text: firstStep.instructions.replace(/<[^>]+>/g, ''), distance: firstStep.distance?.text || "", maneuver: firstStep.maneuver || "straight" });
 
         const now = Date.now();
-        if ((routeFitKey !== lastRouteFitKeyRef.current) && (now - lastBoundsAtRef.current > BOUNDS_THROTTLE_MS) && (Date.now() >= userInteractionUntilRef.current)) {
+        if ((routeFitKey !== lastRouteFitKeyRef.current) && (now - lastBoundsAtRef.current > BOUNDS_THROTTLE_MS)) {
+            // FIX: Pause the camera follow for 5 seconds so it doesn't zoom back in on the driver and hide the line!
+            userInteractionUntilRef.current = Date.now() + 5000;
+            
             mapRef.current?.fitBounds(leg.bounds, { top: 130, left: 50, right: 50, bottom: Math.max(160, Number(boundsBottomPadding) || 260) });
             lastBoundsAtRef.current = now; lastRouteFitKeyRef.current = routeFitKey;
         }
         onRouteInfoRef.current?.({ distanceText: leg.distance?.text || "", durationText: leg.duration?.text || "", distanceMeters: leg.distance?.value || null, durationSeconds: leg.duration?.value || null, startAddress: leg.start_address || "", endAddress: leg.end_address || "", source: "google", phase: routePhase });
         return;
-      }
-
-      // FALLBACK: IF GOOGLE FAILS, DRAW A STRAIGHT PURPLE LINE
-      const p1 = toLatLng(originPoint); const p2 = toLatLng(destinationPoint);
-      if (p1 && p2) {
-        fallbackPolylineRef.current = new google.maps.Polyline({ path: [p1, p2], strokeColor: "#6100FF", strokeOpacity: 0.8, strokeWeight: 6, map: mapRef.current });
-        const bounds = new google.maps.LatLngBounds(); bounds.extend(p1); bounds.extend(p2);
-        if (Date.now() >= userInteractionUntilRef.current) mapRef.current?.fitBounds(bounds, { top: 130, left: 50, right: 50, bottom: 200 });
-        const estimate = fallbackRouteEstimate(originPoint, destinationPoint);
-        if (estimate) onRouteInfoRef.current?.({ ...estimate, phase: routePhase });
       }
     });
 
