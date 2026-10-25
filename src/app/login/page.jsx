@@ -108,7 +108,7 @@ export default function LoginPage() {
         
         <div className="nx-login-brand-mini">
           {/* Using the proper logo file here instead of the wide background image */}
-          <img src="/nexride-icon.svg" alt="NEXRIDE" className="nx-mini-logo" />
+          <img src="/nexridebackground10.jpg" alt="NEXRIDE" className="nx-mini-logo" />
           <div>
             <h1 className="nx-mini-title">NEXRIDE</h1>
             <p className="nx-mini-sub">Where Every Ride Feels Right</p>
