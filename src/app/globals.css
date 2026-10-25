@@ -1859,3 +1859,110 @@ select option { background: #071421; color: #fff; }
 .nx-auth-divider span {
   padding: 0 12px;
 }
+/* =====================================================================
+   PREMIUM SPLASH SCREEN
+   ===================================================================== */
+
+.nx-splash-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999; /* Above everything */
+  background: #020612;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  transition: opacity 0.6s ease, visibility 0.6s ease;
+}
+
+/* Hide the splash when done */
+.nx-splash-overlay.is-done {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* The Road Line */
+.nx-splash-road {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  transform: translateY(-50%);
+  overflow: hidden;
+}
+.nx-splash-road::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 50%;
+  background: linear-gradient(90deg, transparent, var(--cyan), var(--blue), transparent);
+  animation: nx-road-slide 1.5s linear infinite;
+}
+
+@keyframes nx-road-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+/* The Car */
+.nx-splash-car {
+  position: relative;
+  z-index: 2;
+  width: 120px;
+  height: 120px;
+  margin-bottom: 24px;
+  animation: nx-car-zoom 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  opacity: 0;
+  transform: scale(0.5) translateX(-50px);
+}
+
+/* We use the blue arrow we already have for the splash car */
+.nx-splash-car svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 0 30px rgba(0, 212, 255, 0.6));
+}
+
+@keyframes nx-car-zoom {
+  0% { opacity: 0; transform: scale(0.8) translateX(-100px); }
+  100% { opacity: 1; transform: scale(1) translateX(0); }
+}
+
+/* Brand Text */
+.nx-splash-text {
+  position: relative;
+  z-index: 2;
+  font-size: 32px;
+  font-weight: 1000;
+  letter-spacing: -1.5px;
+  background: linear-gradient(105deg, #fff, var(--cyan) 40%, var(--blue) 60%, #fff);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  opacity: 0;
+  animation: nx-splash-text-in 0.8s ease 0.4s forwards, nxBrandFlow 3s linear infinite;
+}
+
+.nx-splash-sub {
+  position: relative;
+  z-index: 2;
+  color: var(--soft);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  margin-top: 8px;
+  opacity: 0;
+  animation: nx-splash-text-in 0.8s ease 0.6s forwards;
+}
+
+@keyframes nx-splash-text-in {
+  0% { opacity: 0; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
