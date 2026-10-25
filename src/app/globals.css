@@ -776,4 +776,34 @@ select option { background: #071421; color: #fff; }
 .nx-google-map-canvas {
   filter: saturate(1.2) contrast(1.1) brightness(0.95) !important;
 }
+ /* Uber-style pulsing rider dot */
+.nx-gmap-rider-dot { 
+  position: relative; 
+  width: 24px; 
+  height: 24px; 
+  display: grid; 
+  place-items: center; 
+}
+.nx-rider-pulse { 
+  position: absolute; 
+  width: 100%; 
+  height: 100%; 
+  background: rgba(0, 212, 255, 0.4); 
+  border-radius: 50%; 
+  animation: riderPulse 1.8s ease-out infinite; 
+}
+.nx-rider-core { 
+  position: relative; 
+  width: 14px; 
+  height: 14px; 
+  background: #0066ff; 
+  border: 3px solid #ffffff; 
+  border-radius: 50%; 
+  box-shadow: 0 2px 8px rgba(0, 102, 255, 0.6); 
+  z-index: 2; 
+}
+@keyframes riderPulse { 
+  0% { transform: scale(0.5); opacity: 0.9; } 
+  100% { transform: scale(2.5); opacity: 0; } 
+}  
 }
