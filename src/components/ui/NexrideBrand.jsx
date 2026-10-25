@@ -4,10 +4,6 @@
 
 import { useEffect, useState } from "react";
 
-/**
- * NEXRIDE brand lockup — logo mark + wordmark + optional subtitle.
- * Falls back gracefully if the user's avatar fails to load.
- */
 export default function NexrideBrand({
   size = "normal",
   subtitle = "",
@@ -25,7 +21,8 @@ export default function NexrideBrand({
   }, [avatarUrl]);
 
   const hasAvatar = Boolean(avatarUrl) && !imageError;
-  const logoSrc = hasAvatar ? avatarUrl : "/nexride-logo.svg";
+  // USE YOUR ACTUAL LOGO FILE HERE
+  const logoSrc = hasAvatar ? avatarUrl : "/nexridebackground10.jpg"; 
 
   const classes = [
     "nx-brand",
@@ -41,13 +38,17 @@ export default function NexrideBrand({
         className={`nx-brand-mark ${hasAvatar ? "has-photo" : ""}`}
         aria-hidden="true"
       >
-        <img
-          src={logoSrc}
-          alt=""
-          loading="lazy"
-          decoding="async"
-          onError={() => setImageError(true)}
-        />
+        {imageError ? (
+          <span style={{ fontWeight: 1000, fontSize: "24px", color: "#fff" }}>N</span>
+        ) : (
+          <img
+            src={logoSrc}
+            alt="NEXRIDE"
+            loading="lazy"
+            decoding="async"
+            onError={() => setImageError(true)}
+          />
+        )}
       </div>
       <div className="nx-brand-copy">
         <div className="nx-brand-text">NEXRIDE</div>
@@ -56,7 +57,6 @@ export default function NexrideBrand({
     </>
   );
 
-  // Optional: render as a link (useful for header home link)
   if (asLink) {
     return (
       <a href={href} className={classes} aria-label="NEXRIDE home">
@@ -66,4 +66,4 @@ export default function NexrideBrand({
   }
 
   return <div className={classes}>{inner}</div>;
-    }
+}
