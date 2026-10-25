@@ -36,7 +36,6 @@ export default function LoginPage() {
   const handleContinue = () => {
     localStorage.setItem("nexride-perms-shown", "true");
     setShowPermissions(false);
-    // Optional: unlock voice when they click continue
     try { unlockNexrideVoice("rider"); } catch {}
   };
 
@@ -77,7 +76,7 @@ export default function LoginPage() {
         <div className="nx-login-bg-overlay" />
       </div>
 
-      {/* 3D PERMISSIONS POPUP (Only shows if not seen before) */}
+      {/* 3D PERMISSIONS POPUP */}
       {showPermissions && (
         <div className="nx-permission-backdrop">
           <div className="nx-permission-3d-card">
@@ -104,13 +103,14 @@ export default function LoginPage() {
 
       {/* GLASS LOGIN SHEET */}
       <section className={`nx-login-sheet ${mounted ? "mounted" : ""}`}>
-        <div className="nx-auth-sheet-handle" />
+        {/* FIXED: Changed to nx-sheet-handle to match the CSS */}
+        <div className="nx-sheet-handle" style={{ margin: "0 auto 20px" }} />
         
         <div className="nx-login-brand-mini">
-          {/* Using the proper logo file here instead of the wide background image */}
           <img src="/nexridebackground10.jpg" alt="NEXRIDE" className="nx-mini-logo" />
           <div>
             <h1 className="nx-mini-title">NEXRIDE</h1>
+            {/* MOTTO HERE */}
             <p className="nx-mini-sub">Where Every Ride Feels Right</p>
           </div>
         </div>
