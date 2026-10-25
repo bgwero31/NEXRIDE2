@@ -59,6 +59,9 @@ const DriverMap = forwardRef(function DriverMap(
   const [internalSelfLocation, setInternalSelfLocation] = useState(null);
   const [routeInfo, setRouteInfo] = useState(null);
   const [mapStatus, setMapStatus] = useState("loading");
+  
+  // NEW STATE: For the "Head South" banner
+  const [directionStep, setDirectionStep] = useState(null);
 
   const mapApiRef = useRef(null);
 
@@ -186,10 +189,30 @@ const DriverMap = forwardRef(function DriverMap(
   const isSearching = mode === "queue" || mode === "offline";
   const showRouteCard = Boolean(activeTrip || completedTrip);
   const showFallbackSkeleton = mapStatus !== "google" && !activeTrip;
+  
+  // Helper to check if route is active
+  const showRoute = Boolean(
+    (activeTrip || completedTrip) && routeOrigin && routeDestination
+  );
 
   /* ---------------------------- Render ---------------------------- */
   return (
     <section className="nx-live-map driver-map">
+
+      {/* THE HEAD SOUTH NAVIGATION BANNER */}
+      {directionStep && showRoute && (
+        <div className="nx-map-nav-banner">
+          <div className="nx-map-nav-icon">
+            {directionStep.maneuver === "turn-right" ? "➡️" : 
+             directionStep.maneuver === "turn-left" ? "⬅️" : "⬆️"}
+          </div>
+          <div className="nx-map-nav-text">
+            <strong>{directionStep.text}</strong>
+            {directionStep.distance && <span>In {directionStep.distance}</span>}
+          </div>
+        </div>
+      )}
+
       <div className="nx-map-grid" />
       <div className="nx-map-glow one" />
       <div className="nx-map-glow two" />
@@ -239,9 +262,7 @@ const DriverMap = forwardRef(function DriverMap(
         }
         riderPhotoUrl={activeTrip?.riderPhotoUrl || completedTrip?.riderPhotoUrl || ""}
         markers={requestMarkers}
-        showRoute={Boolean(
-          (activeTrip || completedTrip) && routeOrigin && routeDestination
-        )}
+        showRoute={showRoute}
         followTarget={
           completedTrip ? "route" : activeTrip ? "driver" : "driver"
         }
@@ -257,6 +278,7 @@ const DriverMap = forwardRef(function DriverMap(
         boundsBottomPadding={boundsBottomPadding}
         onRouteInfo={setRouteInfo}
         onMapStatus={setMapStatus}
+        onDirectionStep={setDirectionStep} // <--- PASSING THE BANNER PROP HERE
       />
 
       {/* Status card */}
