@@ -57,8 +57,6 @@ export default function RiderMap({
   const [riderCurrentLocation, setRiderCurrentLocation] = useState(null);
   const [routeInfo, setRouteInfo] = useState(null);
   const [mapStatus, setMapStatus] = useState("loading");
-  
-  // NEW STATE FOR THE BANNER
   const [directionStep, setDirectionStep] = useState(null);
 
   const onDriversCountChangeRef = useRef(onDriversCountChange);
@@ -164,12 +162,19 @@ export default function RiderMap({
     [matchedOnlineDriver?.lat, matchedOnlineDriver?.lng]
   );
 
-  const driverLive = tripDriverLive || matchedDriverLatLng;
-
-  const riderLive = useMemo(
-    () => toLatLng(tripData?.riderLive) || riderCurrentLocation,
-    [tripData?.riderLive?.lat, tripData?.riderLive?.lng, riderCurrentLocation]
+  // --- THE NEW FALLBACK LOGIC ---
+  const fallbackPickup = useMemo(
+    () => recordPoint(tripData, "pickup", "Pickup"),
+    [tripData, pickup]
   );
+
+  const driverLive = tripDriverLive || matchedDriverLatLng || toLatLng(fallbackPickup);
+  
+  const riderLive = useMemo(
+    () => toLatLng(tripData?.riderLive) || riderCurrentLocation || toLatLng(fallbackPickup),
+    [tripData?.riderLive?.lat, tripData?.riderLive?.lng, riderCurrentLocation, fallbackPickup]
+  );
+  // -------------------------------
 
   const routeTargetMode =
     tripData?.status === "accepted" || tripData?.status === "arrived"
@@ -284,7 +289,7 @@ export default function RiderMap({
         boundsBottomPadding={boundsBottomPadding}
         onRouteInfo={setRouteInfo}
         onMapStatus={setMapStatus}
-        onDirectionStep={setDirectionStep} // <--- PASSING THE PROP HERE
+        onDirectionStep={setDirectionStep}
       />
 
       {!isRequestMode ? (
