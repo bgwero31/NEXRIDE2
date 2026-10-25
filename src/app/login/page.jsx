@@ -96,7 +96,7 @@ export default function LoginPage() {
         
         {/* Small brand mark inside sheet */}
         <div className="nx-login-brand-mini">
-          <img src="/nexride-icon.svg" alt="NEXRIDE" className="nx-mini-logo" />
+          <img src="/nexridebackground10.jpg" alt="NEXRIDE" className="nx-mini-logo" />
           <div>
             <h1 className="nx-mini-title">NEXRIDE</h1>
             <p className="nx-mini-sub">Ride smarter. Negotiate better.</p>
