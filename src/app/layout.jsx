@@ -4,7 +4,7 @@ import NexridePermissionGate from "@/components/system/NexridePermissionGate";
 import NexrideSplash from "@/components/system/NexrideSplash"; // <-- ADD THIS
 
 export const metadata = {
-  title: "NEXRIDE — Move Better",
+  title: "NEXRIDE — Where Every Ride Feels Right",
   description: "Request. Negotiate. Ride. Track school transport.",
   icons: {
     icon: "/favicon.svg",
