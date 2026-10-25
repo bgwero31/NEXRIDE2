@@ -39,6 +39,11 @@ export function toLatLng(value) {
   const lat = Number(value.lat);
   const lng = Number(value.lng);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  
+  // 🚨 THE FIX: Block Null Island (0,0)
+  // If Firebase or GPS drops a 0,0 coordinate, ignore it so it doesn't break the map.
+  if (lat === 0 && lng === 0) return null; 
+  
   return { lat, lng };
 }
 
@@ -91,7 +96,7 @@ export function loadGoogleMapsApi() {
       script.id = GOOGLE_MAPS_SCRIPT_ID;
       script.async = true;
       script.defer = true;
-      // geometry: for spherical math + polyline utilities (Phase 2)
+      // geometry: for spherical math + polyline utilities
       // places:   for autocomplete + place details
       script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places,geometry&v=weekly`;
       document.head.appendChild(script);
