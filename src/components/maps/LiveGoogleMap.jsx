@@ -67,7 +67,6 @@ function pointKey(point) {
 const LiveGoogleMap = forwardRef(function LiveGoogleMap(
   {
     city = "harare",
-    role = "rider",
     origin = null,
     destination = null,
     showRoute = true,
@@ -76,7 +75,7 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
     boundsBottomPadding = 220,
     onRouteInfo,
     onMapStatus,
-    onDirectionStep, // NEW: Sends the "Head south" text to the parent
+    onDirectionStep, // Sends the "Head south" text to the parent
   },
   ref
 ) {
@@ -164,10 +163,10 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
           // GOOGLE DRAWS THE POLYLINE AND PINS NATIVELY
           directionsRendererRef.current = new google.maps.DirectionsRenderer({
             map: mapRef.current,
-            suppressMarkers: false, // THIS SHOWS THE NATIVE A/B PINS
+            suppressMarkers: false, // SHOWS THE NATIVE A/B PINS
             preserveViewport: true,
             polylineOptions: {
-              strokeColor: "#6100FF", // THE PURPLE ROUTE
+              strokeColor: "#6100FF", // PURPLE ROUTE
               strokeOpacity: 1,
               strokeWeight: 8,
               zIndex: 50,
@@ -216,7 +215,6 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
     mapRef.current.panTo(target);
     if (currentZoom < desiredZoom) mapRef.current.setZoom(desiredZoom);
     
-    // Add the 3D tilt for navigation
     if (typeof mapRef.current.setTilt === "function") {
       mapRef.current.setTilt(routePhase === "pickup" || routePhase === "destination" ? 45 : 0);
     }
@@ -248,6 +246,7 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
   useEffect(() => {
     if (!ready || !showRoute || !originPoint || !destinationPoint || !window.google?.maps) {
       directionsRendererRef.current?.set("directions", null);
+      onDirectionStepRef.current?.(null);
       return;
     }
 
@@ -268,7 +267,6 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
       if (cancelled) return;
 
       if (status === "OK" && result?.routes?.[0]?.legs?.[0]) {
-        // THIS DRAWS THE PURPLE ROUTE AND NATIVE PINS
         directionsRendererRef.current?.setDirections(result);
 
         const leg = result.routes[0].legs[0];
@@ -276,7 +274,6 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
         // Grab the first step instruction (e.g., "Head south")
         const firstStep = leg.steps?.[0];
         if (firstStep && firstStep.instructions) {
-          // Strip HTML tags from Google's instruction
           const cleanInstruction = firstStep.instructions.replace(/<[^>]+>/g, '');
           onDirectionStepRef.current?.({
             text: cleanInstruction,
@@ -315,6 +312,7 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
       }
 
       directionsRendererRef.current?.set("directions", null);
+      onDirectionStepRef.current?.(null);
       const estimate = fallbackRouteEstimate(originPoint, destinationPoint);
       if (estimate) onRouteInfoRef.current?.({ ...estimate, phase: routePhase });
     });
