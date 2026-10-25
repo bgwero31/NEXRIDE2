@@ -112,8 +112,22 @@ const DriverMap = forwardRef(function DriverMap(
     mode === "queue" ? "Tap a request to view route" : "Open request marketplace"
   );
 
-  const driverLive = toLatLng(activeTrip?.driverLive) || selfLocation;
-  const riderLive = toLatLng(activeTrip?.riderLive);
+  // --- THE NEW FALLBACK LOGIC ---
+  const fallbackPickup = useMemo(
+    () => recordPoint(activeTrip, "pickup", "Pickup"),
+    [activeTrip]
+  );
+
+  const driverLive = useMemo(
+    () => toLatLng(activeTrip?.driverLive) || selfLocation || toLatLng(fallbackPickup),
+    [activeTrip?.driverLive?.lat, activeTrip?.driverLive?.lng, selfLocation, fallbackPickup]
+  );
+
+  const riderLive = useMemo(
+    () => toLatLng(activeTrip?.riderLive) || toLatLng(fallbackPickup),
+    [activeTrip?.riderLive?.lat, activeTrip?.riderLive?.lng, fallbackPickup]
+  );
+  // -------------------------------
 
   const routeTargetMode =
     activeTrip?.status === "accepted" || activeTrip?.status === "arrived"
@@ -278,7 +292,7 @@ const DriverMap = forwardRef(function DriverMap(
         boundsBottomPadding={boundsBottomPadding}
         onRouteInfo={setRouteInfo}
         onMapStatus={setMapStatus}
-        onDirectionStep={setDirectionStep} // <--- PASSING THE BANNER PROP HERE
+        onDirectionStep={setDirectionStep}
       />
 
       {/* Status card */}
