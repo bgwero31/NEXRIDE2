@@ -24,15 +24,16 @@ import {
   nexrideNotificationTypes,
   queueNexrideEvent,
 } from "../../lib/nexrideNotifications";
+import ActionCard from "../ui/ActionCard";
 import PremiumButton from "../ui/PremiumButton";
 
 const cityOptions = SERVICE_CITY_KEYS;
 
 const PAYMENT_OPTIONS = [
-  { value: "cash", label: "💵 Cash" },
-  { value: "ecocash", label: "📱 EcoCash" },
-  { value: "onemoney", label: "📲 OneMoney" },
-  { value: "card", label: "💳 Card" },
+  { value: "cash", label: "Cash" },
+  { value: "ecocash", label: "EcoCash" },
+  { value: "onemoney", label: "OneMoney" },
+  { value: "card", label: "Card" },
 ];
 
 const RIDE_OPTIONS = [
@@ -354,56 +355,57 @@ export default function RequestSheet({
 
   /* ---------------------------------- RENDER ---------------------------------- */
   return (
-    <form onSubmit={submitRequest} className="nx-rs-v3">
-      
-      {/* 1. PICKUP & DESTINATION (Uber Style) */}
-      <div className="nx-rs-v3-route-box">
-        <div className="nx-rs-v3-route-line" />
-        
-        {/* Pickup Row */}
-        <div className="nx-rs-v3-row">
+    <form onSubmit={submitRequest} className="nx-rs">
+      {/* Header — single line */}
+      <div className="nx-rs-head">
+        <h2 className="nx-rs-title">Where to?</h2>
+        <span className="nx-rs-badge">${price(offerPrice)}</span>
+      </div>
+
+      {error ? <div className="nx-alert-error nx-rs-alert">{error}</div> : null}
+
+      {/* Route — compact */}
+      <div className="nx-rs-route">
+        <div className="nx-rs-route-row">
           <span className="nx-dot nx-dot-pickup" />
           <input
             ref={pickupInputRef}
-            className="nx-rs-v3-input pickup"
+            className="nx-rs-input"
             type="text"
+            placeholder="Pickup"
             value={pickupName}
             onChange={(e) => { setPickupName(e.target.value); if (!e.target.value.trim()) setPickupCoords(null); }}
-            placeholder="Pickup location"
             autoComplete="off"
           />
-          <button type="button" className="nx-rs-v3-gps" onClick={useCurrentLocation} disabled={locating}>
+          <button type="button" className="nx-rs-gps" onClick={useCurrentLocation} disabled={locating} aria-label="Use GPS">
             {locating ? "…" : "📍"}
           </button>
         </div>
-
-        {/* Dropoff Row */}
-        <div className="nx-rs-v3-row">
+        <div className="nx-rs-route-line" />
+        <div className="nx-rs-route-row">
           <span className="nx-dot nx-dot-destination" />
           <input
             ref={dropoffInputRef}
-            className="nx-rs-v3-input dropoff"
+            className="nx-rs-input"
             type="text"
+            placeholder="Where to?"
             value={dropoffName}
             onChange={(e) => { setDropoffName(e.target.value); setDropoffCoords(null); }}
-            placeholder="Where to?"
             autoComplete="off"
           />
         </div>
       </div>
 
-      {error ? <div className="nx-alert-error nx-rs-v3-alert">{error}</div> : null}
-
-      {/* 2. INFO ROW (City, Pax, Route Meta) */}
+      {/* Route info + city — one compact row */}
       <div className="nx-rs-info">
         <select className="nx-rs-city" value={city} onChange={(e) => setCity(e.target.value)}>
           {cityOptions.map((c) => <option key={c} value={c}>{cityLabel(c)}</option>)}
         </select>
         <span className="nx-rs-sep">•</span>
         <span className="nx-rs-pax">
-          <button type="button" onClick={() => setPeople((p) => String(Math.max(1, Number(p) - 1)))}>−</button>
+          <button type="button" onClick={() => setPeople((p) => String(Math.max(1, Number(p) - 1)))} aria-label="Fewer">−</button>
           <span>{people} pax</span>
-          <button type="button" onClick={() => setPeople((p) => String(Math.min(8, Number(p) + 1)))}>+</button>
+          <button type="button" onClick={() => setPeople((p) => String(Math.min(8, Number(p) + 1)))} aria-label="More">+</button>
         </span>
         {routePreview ? (
           <>
@@ -413,56 +415,48 @@ export default function RequestSheet({
         ) : null}
       </div>
 
-      {/* 3. THE FARE (inDrive Style) */}
-      <div className="nx-rs-v3-fare-box">
-        <div className="nx-rs-v3-fare-label">Offer your fare</div>
-        
-        <div className="nx-rs-v3-fare-controls">
-          <button type="button" className="nx-rs-v3-step" onClick={() => bumpFare(-0.5)}>−</button>
-          <div className="nx-rs-v3-fare-display">${price(offerPrice)}</div>
-          <button type="button" className="nx-rs-v3-step" onClick={() => bumpFare(0.5)}>+</button>
-        </div>
-
-        {suggested && Number(offerPrice) !== suggested && (
-          <button 
-            type="button" 
-            className="nx-rs-v3-suggest"
-            onClick={() => setOfferPrice(suggested.toFixed(2))}
-          >
-            Suggested: ${suggested.toFixed(2)}
+      {/* Fare — compact stepper row */}
+      <div className="nx-rs-fare">
+        <span className="nx-rs-fare-label">Fare</span>
+        <button type="button" className="nx-rs-step" onClick={() => bumpFare(-0.5)} aria-label="Lower">−</button>
+        <div className="nx-rs-fare-display">${price(offerPrice)}</div>
+        <button type="button" className="nx-rs-step" onClick={() => bumpFare(0.5)} aria-label="Raise">+</button>
+        {suggested && Number(offerPrice) !== suggested ? (
+          <button type="button" className="nx-rs-suggest" onClick={() => setOfferPrice(suggested.toFixed(2))}>
+            ${suggested.toFixed(2)}
           </button>
-        )}
+        ) : null}
       </div>
 
-      {/* 4. PAYMENT & RIDE CHIPS (Horizontal Scroll) */}
-      <div className="nx-rs-v3-chips-wrap">
-        <div className="nx-rs-v3-chips-scroll">
-          {PAYMENT_OPTIONS.map((p) => (
-            <button
-              key={p.value}
-              type="button"
-              className={`nx-rs-v3-chip ${preferredPayment === p.value ? "is-active" : ""}`}
-              onClick={() => setPreferredPayment(p.value)}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-        <div className="nx-rs-v3-chips-scroll">
-          {RIDE_OPTIONS.map((r) => (
-            <button
-              key={r.value}
-              type="button"
-              className={`nx-rs-v3-chip ${rideMode === r.value ? "is-active" : ""}`}
-              onClick={() => setRideMode(r.value)}
-            >
-              {r.label}
-            </button>
-          ))}
-        </div>
+      {/* Payment pills */}
+      <div className="nx-rs-pills">
+        {PAYMENT_OPTIONS.map((p) => (
+          <button
+            key={p.value}
+            type="button"
+            className={`nx-rs-chip ${preferredPayment === p.value ? "is-active" : ""}`}
+            onClick={() => setPreferredPayment(p.value)}
+          >
+            {p.label}
+          </button>
+        ))}
       </div>
 
-      {/* 5. NOTES */}
+      {/* Ride mode pills */}
+      <div className="nx-rs-pills">
+        {RIDE_OPTIONS.map((r) => (
+          <button
+            key={r.value}
+            type="button"
+            className={`nx-rs-chip ${rideMode === r.value ? "is-active" : ""}`}
+            onClick={() => setRideMode(r.value)}
+          >
+            {r.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Notes — collapsed by default */}
       {notesOpen ? (
         <input
           className="nx-rs-input nx-rs-notes"
@@ -476,13 +470,10 @@ export default function RequestSheet({
         </button>
       )}
 
-      {/* 6. SUBMIT BUTTON */}
-      <div style={{ marginTop: 12 }}>
-        <PremiumButton type="submit" disabled={!canSubmit} loading={saving}>
-          {saving ? "Finding driver..." : `Request NEXRIDE • $${price(offerPrice)}`}
-        </PremiumButton>
-      </div>
-
+      {/* CTA */}
+      <PremiumButton type="submit" disabled={!canSubmit} loading={saving}>
+        {saving ? "Posting…" : "Find drivers"}
+      </PremiumButton>
     </form>
   );
 }
