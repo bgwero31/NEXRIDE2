@@ -92,7 +92,14 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
         if (cancelled || !mapNodeRef.current) return;
         if (!mapRef.current) {
           mapRef.current = new google.maps.Map(mapNodeRef.current, { center, zoom: 15, minZoom: 4, maxZoom: 21, disableDefaultUI: true, clickableIcons: false, gestureHandling: "greedy", styles: mapStyles, backgroundColor: "#f5f7fb", heading: 0, tilt: 0 });
-          directionsRendererRef.current = new google.maps.DirectionsRenderer({ map: mapRef.current, suppressMarkers: true, preserveViewport: true, polylineOptions: { strokeColor: "#6100FF", strokeOpacity: 1, strokeWeight: 8, zIndex: 50 } });
+          
+          // 🔥 FIXED: Changed the line color from Purple (#6100FF) to your Green (#20e28a)
+          directionsRendererRef.current = new google.maps.DirectionsRenderer({ 
+            map: mapRef.current, 
+            suppressMarkers: true, 
+            preserveViewport: true, 
+            polylineOptions: { strokeColor: "#20e28a", strokeOpacity: 1, strokeWeight: 8, zIndex: 50 } 
+          });
         }
         setReady(true); setError(""); onMapStatusRef.current?.("google");
     }).catch((err) => { if (!cancelled) { setError("Google Maps failed to load"); onMapStatusRef.current?.("fallback"); } });
@@ -148,19 +155,34 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
       return;
     }
 
-    let cancelled = false; const google = window.google; const service = new google.maps.DirectionsService(); const routeFitKey = `${routePhase}:${pointKey(originPoint)}:${pointKey(destinationPoint)}`;
+    let cancelled = false; 
+    const google = window.google; 
+    const service = new google.maps.DirectionsService(); 
+    const routeFitKey = `${routePhase}:${pointKey(originPoint)}:${pointKey(destinationPoint)}`;
 
-    // 1. DRAW AN INSTANT STRAIGHT LINE (FALLBACK)
+    // 1. DRAW AN INSTANT STRAIGHT LINE (FALLBACK) - Changed to Green to match mockup
     const p1 = toLatLng(originPoint); const p2 = toLatLng(destinationPoint);
     if (p1 && p2) {
-      fallbackPolylineRef.current = new google.maps.Polyline({ path: [p1, p2], strokeColor: "#6100FF", strokeOpacity: 0.5, strokeWeight: 6, map: mapRef.current });
+      fallbackPolylineRef.current = new google.maps.Polyline({ 
+        path: [p1, p2], 
+        strokeColor: "#20e28a", // Changed to your brand green!
+        strokeOpacity: 0.5, 
+        strokeWeight: 6, 
+        map: mapRef.current 
+      });
     }
 
     // 2. ASK GOOGLE FOR THE SNAPPED ROUTE
-    service.route({ origin: buildGoogleDirectionsPoint(google, originPoint, city), destination: buildGoogleDirectionsPoint(google, destinationPoint, city), travelMode: google.maps.TravelMode.DRIVING, provideRouteAlternatives: false, region: "ZW" }, (result, status) => {
+    service.route({ 
+      origin: buildGoogleDirectionsPoint(google, originPoint, city), 
+      destination: buildGoogleDirectionsPoint(google, destinationPoint, city), 
+      travelMode: google.maps.TravelMode.DRIVING, 
+      provideRouteAlternatives: false, 
+      region: "ZW" 
+    }, (result, status) => {
       if (cancelled) return;
       
-      // Remove the fallback line if Google responds
+      // Remove the fallback line no matter what happens
       fallbackPolylineRef.current?.setMap(null);
       directionsRendererRef.current?.set("directions", null);
 
@@ -168,18 +190,40 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
         directionsRendererRef.current?.setDirections(result);
         const leg = result.routes[0].legs[0];
         const firstStep = leg.steps?.[0];
-        if (firstStep && firstStep.instructions) onDirectionStepRef.current?.({ text: firstStep.instructions.replace(/<[^>]+>/g, ''), distance: firstStep.distance?.text || "", maneuver: firstStep.maneuver || "straight" });
+        
+        if (firstStep && firstStep.instructions) {
+          onDirectionStepRef.current?.({
+            text: firstStep.instructions.replace(/<[^>]+>/g, ''), 
+            distance: firstStep.distance?.text || "", 
+            maneuver: firstStep.maneuver || "straight" 
+          });
+        }
 
         const now = Date.now();
         if ((routeFitKey !== lastRouteFitKeyRef.current) && (now - lastBoundsAtRef.current > BOUNDS_THROTTLE_MS)) {
-            // FIX: Pause the camera follow for 5 seconds so it doesn't zoom back in on the driver and hide the line!
             userInteractionUntilRef.current = Date.now() + 5000;
-            
             mapRef.current?.fitBounds(leg.bounds, { top: 130, left: 50, right: 50, bottom: Math.max(160, Number(boundsBottomPadding) || 260) });
-            lastBoundsAtRef.current = now; lastRouteFitKeyRef.current = routeFitKey;
+            lastBoundsAtRef.current = now; 
+            lastRouteFitKeyRef.current = routeFitKey;
         }
-        onRouteInfoRef.current?.({ distanceText: leg.distance?.text || "", durationText: leg.duration?.text || "", distanceMeters: leg.distance?.value || null, durationSeconds: leg.duration?.value || null, startAddress: leg.start_address || "", endAddress: leg.end_address || "", source: "google", phase: routePhase });
+        
+        onRouteInfoRef.current?.({
+          distanceText: leg.distance?.text || "", 
+          durationText: leg.duration?.text || "", 
+          distanceMeters: leg.distance?.value || null, 
+          durationSeconds: leg.duration?.value || null, 
+          startAddress: leg.start_address || "", 
+          endAddress: leg.end_address || "", 
+          source: "google", 
+          phase: routePhase 
+        });
         return;
+      } else {
+        // 🔥 THIS IS THE MAGIC: It will tell you EXACTLY why the line is broken in the console!
+        console.error("🚨 GOOGLE DIRECTIONS API FAILED. Status:", status);
+        if (status === "REQUEST_DENIED") {
+           console.error("👉 You need to enable 'Directions API' in your Google Cloud Console!");
+        }
       }
     });
 
