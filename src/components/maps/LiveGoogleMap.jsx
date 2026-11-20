@@ -3,7 +3,7 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { buildGoogleDirectionsPoint, getCityCenter, hasGoogleMapsApiKey, loadGoogleMapsApi, toLatLng } from "../../lib/googleMaps";
+import { getGoogleRouteDetails, getCityCenter, hasGoogleMapsApiKey, loadGoogleMapsApi, toLatLng } from "../../lib/googleMaps";
 
 const CAMERA_THROTTLE_MS = 400;
 
@@ -101,7 +101,7 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
   { city = "harare", role = "rider", origin = null, destination = null, driverLocation = null, riderLocation = null, pickupLocation = null, dropoffLocation = null, markers = [], followTarget = "auto", driverPhotoUrl = "", showRoute = true, cameraFollow = true, routePhase = "route", boundsBottomPadding = 220, lightMap = false, nearbyDrivers = [], onRouteInfo, onMapStatus, onDirectionStep },
   ref
 ) {
-  const mapNodeRef = useRef(null); const mapRef = useRef(null); const directionsRendererRef = useRef(null); const fallbackPolylineRef = useRef(null); const overlayRefs = useRef([]);
+  const mapNodeRef = useRef(null); const mapRef = useRef(null); const roadPolylineRef = useRef(null); const overlayRefs = useRef([]);
   const lastRouteFitKeyRef = useRef(""); const lastRouteRequestRef = useRef(null); const routeRequestIdRef = useRef(0); const lastCameraAtRef = useRef(0); const lastCameraKeyRef = useRef(""); const userInteractionUntilRef = useRef(0);
 
   const lastOverviewKey = useRef("");
@@ -110,6 +110,8 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
   useEffect(() => { onMapStatusRef.current = onMapStatus; }, [onMapStatus]);
   useEffect(() => { onDirectionStepRef.current = onDirectionStep; }, [onDirectionStep]);
 
+  const [routeRetry, setRouteRetry] = useState(0);
+  const [routeUnavailable, setRouteUnavailable] = useState(false);
   const [ready, setReady] = useState(false); const [error, setError] = useState("");
   const center = useMemo(() => getCityCenter(city), [city]);
   const originPoint = useMemo(() => resolvePoint(origin), [origin]);
@@ -146,11 +148,8 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
         if (!mapRef.current) {
           mapRef.current = new google.maps.Map(mapNodeRef.current, { center, zoom: 15, minZoom: 4, maxZoom: 21, disableDefaultUI: true, clickableIcons: false, gestureHandling: "greedy", styles: lightMap ? lightMapStyles : mapStyles, backgroundColor: lightMap ? "#e9ecf0" : "#141b25", heading: 0, tilt: 0 });
           
-          directionsRendererRef.current = new google.maps.DirectionsRenderer({ 
-            map: mapRef.current, 
-            suppressMarkers: true, 
-            preserveViewport: true, 
-            polylineOptions: { strokeColor: lightMap ? "#2262bb" : "#2071e2", strokeOpacity: 1, strokeWeight: 7, zIndex: 50 }
+          roadPolylineRef.current = new google.maps.Polyline({
+            strokeColor: "#2262bb", strokeOpacity: 1, strokeWeight: 7, zIndex: 50,
           });
         }
         setReady(true); setError(""); onMapStatusRef.current?.("google");
@@ -158,7 +157,7 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
     return () => { cancelled = true; };
   }, [center, lightMap]);
 
-  useEffect(() => { return () => { routeRequestIdRef.current += 1; try { overlayRefs.current.forEach((o) => o.setMap(null)); fallbackPolylineRef.current?.setMap(null); directionsRendererRef.current?.setMap(null); } catch {} overlayRefs.current = []; }; }, []);
+  useEffect(() => { return () => { routeRequestIdRef.current += 1; try { overlayRefs.current.forEach((o) => o.setMap(null)); roadPolylineRef.current?.setMap(null); } catch {} overlayRefs.current = []; }; }, []);
 
   useEffect(() => {
     if (!ready || !mapRef.current || !window.google?.maps) return;
@@ -232,22 +231,21 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
       strokeColor: "#5d8fcf", strokeOpacity: 0.62, strokeWeight: 4, zIndex: 20,
     });
     let disposed = false;
-    new google.maps.DirectionsService().route({
+    getGoogleRouteDetails({
       origin: { lat: pickupLat, lng: pickupLng },
       destination: { lat: dropoffLat, lng: dropoffLng },
-      travelMode: google.maps.TravelMode.DRIVING,
-      region: "ZW",
-    }, (result, status) => {
-      const path = result?.routes?.[0]?.overview_path;
-      if (disposed || status !== "OK" || !path?.length) return;
+      city,
+    }).then((route) => {
+      const path = route?.path;
+      if (disposed || !path?.length) return;
       preview.setPath(path);
       preview.setMap(mapRef.current);
-    });
+    }).catch(() => {});
     return () => {
       disposed = true;
       preview.setMap(null);
     };
-  }, [ready, routePhase, pickupLat, pickupLng, dropoffLat, dropoffLng]);
+  }, [ready, routePhase, pickupLat, pickupLng, dropoffLat, dropoffLng, city]);
 
   useEffect(() => {
     if (!ready || !cameraFollow || !mapRef.current || !window.google?.maps) return;
@@ -278,8 +276,8 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
 
   useEffect(() => {
     if (!ready || !showRoute || !originPoint || !destinationPoint || !window.google?.maps) {
-      directionsRendererRef.current?.set("directions", null);
-      fallbackPolylineRef.current?.setMap(null);
+      roadPolylineRef.current?.setMap(null);
+      setRouteUnavailable(false);
       routeRequestIdRef.current += 1;
       lastRouteRequestRef.current = null;
       lastRouteFitKeyRef.current = "";
@@ -287,7 +285,6 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
       return;
     }
 
-    const google = window.google;
     const previous = lastRouteRequestRef.current;
     const sameTarget = previous?.phase === routePhase && previous.city === city &&
       (previous.destinationKey === pointKey(destinationPoint) ||
@@ -298,7 +295,6 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
     // but do not spend a Directions request for every tiny GPS change.
     if (sameTarget && movedMeters < ROUTE_REFRESH_MIN_METERS) return;
 
-    const service = new google.maps.DirectionsService();
     const requestId = ++routeRequestIdRef.current;
     lastRouteRequestRef.current = {
       phase: routePhase, city,
@@ -308,82 +304,55 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
 
     if (!sameTarget) {
       onDirectionStepRef.current?.(null);
-      directionsRendererRef.current?.set("directions", null);
+      roadPolylineRef.current?.setMap(null);
+      setRouteUnavailable(false);
     }
 
-    // Show the provisional connection while Directions calculates the road route.
-    const p1 = toLatLng(originPoint); const p2 = toLatLng(destinationPoint);
-    fallbackPolylineRef.current?.setMap(null);
-    if (p1 && p2 && !directionsRendererRef.current?.getDirections()) {
-      fallbackPolylineRef.current = new google.maps.Polyline({ 
-        path: [p1, p2], 
-        strokeColor: lightMap ? "#2262bb" : "#2071e2",
-        strokeOpacity: 0,
-        icons: [{ icon: { path: "M 0,-1 0,1", strokeOpacity: 0.65, scale: 3 }, offset: "0", repeat: "15px" }],
-        strokeWeight: 4,
-        map: mapRef.current 
-      });
-    }
-
-    // 2. ASK GOOGLE FOR THE SNAPPED ROUTE
-    service.route({ 
-      origin: buildGoogleDirectionsPoint(google, originPoint, city), 
-      destination: buildGoogleDirectionsPoint(google, destinationPoint, city), 
-      travelMode: google.maps.TravelMode.DRIVING, 
-      provideRouteAlternatives: false, 
-      region: "ZW" 
-    }, (result, status) => {
+    function showUnavailable() {
       if (requestId !== routeRequestIdRef.current) return;
+      roadPolylineRef.current?.setMap(null);
+      lastRouteFitKeyRef.current = "";
+      setRouteUnavailable(true);
+      onDirectionStepRef.current?.(null);
+      onRouteInfoRef.current?.({ source: "unavailable", phase: routePhase, distanceText: "", durationText: "" });
+    }
 
-      if (status === "OK" && result?.routes?.[0]?.legs?.[0]) {
-        fallbackPolylineRef.current?.setMap(null);
-        directionsRendererRef.current?.setDirections(result);
-        const leg = result.routes[0].legs[0];
-        const firstStep = leg.steps?.[0];
-        
-        if (firstStep && firstStep.instructions) {
-          onDirectionStepRef.current?.({
-            text: firstStep.instructions.replace(/<[^>]+>/g, ''), 
-            distance: firstStep.distance?.text || "", 
-            maneuver: firstStep.maneuver || "straight" 
-          });
-        }
-
-        if (routePhase !== lastRouteFitKeyRef.current) {
-          const fittedBounds = result.routes[0].bounds || new google.maps.LatLngBounds(leg.start_location, leg.end_location);
-          fitRide([driverPoint, riderPoint, pickupPoint, dropoffPoint], fittedBounds);
-          lastRouteFitKeyRef.current = routePhase;
-        }
-
-        onRouteInfoRef.current?.({
-          distanceText: leg.distance?.text || "", 
-          durationText: leg.duration?.text || "", 
-          distanceMeters: leg.distance?.value || null, 
-          durationSeconds: leg.duration?.value || null, 
-          startAddress: leg.start_address || "", 
-          endAddress: leg.end_address || "", 
-          source: "google", 
-          phase: routePhase 
-        });
+    getGoogleRouteDetails({ origin: originPoint, destination: destinationPoint, city }).then((route) => {
+      if (requestId !== routeRequestIdRef.current) return;
+      if (!route?.path?.length) {
+        showUnavailable();
         return;
-      } else {
-        console.error("[NEXRIDE] Google Directions request failed:", status);
-        if (status === "UNKNOWN_ERROR" || status === "OVER_QUERY_LIMIT") lastRouteRequestRef.current = null;
-        // A Directions failure does not mean the Google map itself failed.
-        onMapStatusRef.current?.("google");
-        onDirectionStepRef.current?.(null);
-        onRouteInfoRef.current?.({ source: "unavailable", phase: routePhase, distanceText: "", durationText: "" });
       }
-    });
+      roadPolylineRef.current?.setPath(route.path);
+      roadPolylineRef.current?.setMap(mapRef.current);
+      setRouteUnavailable(false);
+      onDirectionStepRef.current?.(route.firstStep ?? null);
 
-    // The request ID invalidates stale responses only when a materially new route is requested.
-    // Small GPS updates therefore cannot cancel an in-flight Directions response.
-  }, [ready, showRoute, originPoint, destinationPoint, city, routePhase, boundsBottomPadding, lightMap]);
+      if (routePhase !== lastRouteFitKeyRef.current) {
+        const bounds = new window.google.maps.LatLngBounds();
+        for (const point of route.path) bounds.extend(point);
+        fitRide([driverPoint, riderPoint, pickupPoint, dropoffPoint], bounds);
+        lastRouteFitKeyRef.current = routePhase;
+      }
+      const { distanceText, durationText, distanceMeters, durationSeconds, startAddress, endAddress } = route;
+      onRouteInfoRef.current?.({
+        distanceText, durationText, distanceMeters, durationSeconds, startAddress, endAddress,
+        source: "google", phase: routePhase,
+      });
+    }).catch(showUnavailable);
+  }, [ready, showRoute, originPoint, destinationPoint, city, routePhase, boundsBottomPadding, lightMap, routeRetry]);
 
   if (!hasGoogleMapsApiKey()) return null;
   return (
     <div className="nx-google-map-layer">
       <div ref={mapNodeRef} className="nx-google-map-canvas" />
+      {routeUnavailable && showRoute ? <div className="nx-road-route-status">
+        <span role="status">Road route unavailable</span>
+        <button type="button" onClick={() => {
+          lastRouteRequestRef.current = null;
+          setRouteRetry((attempt) => attempt + 1);
+        }}>Retry</button>
+      </div> : null}
       {!ready ? (<div className="nx-google-map-loading"><strong>Loading Google Maps...</strong><span>Preparing live route...</span></div>) : null}
       {error ? (<div className="nx-google-map-warning"><strong>{error}</strong><span>Fallback map remains active.</span></div>) : null}
     </div>

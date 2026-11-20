@@ -181,7 +181,8 @@ export async function queueNexrideEvent(event = {}) {
   }
 
   /* 2) Optional HTTP forward. */
-  const endpoint = process.env.NEXT_PUBLIC_NEXRIDE_NOTIFY_ENDPOINT || "";
+  const externalEndpoint = process.env.NEXT_PUBLIC_NEXRIDE_NOTIFY_ENDPOINT;
+  const endpoint = externalEndpoint || (base.type.startsWith("school_") ? "" : "/api/ride-alerts");
   if (endpoint && queued && sender && payload.channel === "push") {
     try {
       const token = await sender.getIdToken();
@@ -189,7 +190,7 @@ export async function queueNexrideEvent(event = {}) {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         signal: AbortSignal.timeout(8000),
-        body: JSON.stringify(payload),
+        body: JSON.stringify(externalEndpoint ? payload : { id: queueRef.key }),
         keepalive: true,
       });
       if (res.ok) return { id: queueRef.key, delivered: false, reason: "relay_accepted" };
