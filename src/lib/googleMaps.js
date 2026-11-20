@@ -36,14 +36,13 @@ export function getCityCenter(city) {
 
 export function toLatLng(value) {
   if (!value) return null;
+  // Number(null), Number("") and Number(false) become zero. A partial
+  // Firebase location must never turn into a marker in the Gulf of Guinea.
+  if (value.lat == null || value.lng == null || value.lat === "" || value.lng === "") return null;
   const lat = Number(value.lat);
   const lng = Number(value.lng);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-  
-  // 🚨 THE FIX: Block Null Island (0,0)
-  // If Firebase or GPS drops a 0,0 coordinate, ignore it so it doesn't break the map.
-  if (lat === 0 && lng === 0) return null; 
-  
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180 || (lat === 0 && lng === 0)) return null;
   return { lat, lng };
 }
 

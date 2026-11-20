@@ -26,7 +26,8 @@ function isValidPoint(p) {
   if (!p) return false;
   const lat = Number(p.lat);
   const lng = Number(p.lng);
-  return Number.isFinite(lat) && Number.isFinite(lng);
+  return Number.isFinite(lat) && Number.isFinite(lng) &&
+    Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && !(lat === 0 && lng === 0);
 }
 
 function isStrongPoint(p) {

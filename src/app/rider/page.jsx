@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { get, onValue, ref, remove, set, update, push } from "firebase/database";
+import { get, onValue, ref, remove, set, update, push, runTransaction } from "firebase/database";
 import { auth, db } from "../../lib/firebase";
 import { googleMapsDirectionsUrl } from "../../lib/googleMaps";
 import {
@@ -125,7 +125,9 @@ export default function RiderPage() {
       const nextCity = normalizeCity(detectedCity || currentCity);
       if (!nextCity) return;
 
-      if (nextCity !== currentCity) {
+      if (nextCity !== currentCity && !requestIdRef.current) {
+        // The request is stored under the city where it was posted. A location
+        // update must not switch database listeners to a different city mid-ride.
         setCity(nextCity);
         setRequestData(null);
         setOffers([]);
@@ -133,6 +135,7 @@ export default function RiderPage() {
         setViewCount(0);
       }
 
+      // The detected city is still useful for the user's *next* request.
       saveDetectedCityLocal(nextCity);
       await saveDetectedCity({
         db,
@@ -324,7 +327,7 @@ export default function RiderPage() {
   // Deps include `handleDetectedCity` (stable via useCallback) so
   // the effect never captures a stale handler.
   useEffect(() => {
-    if (!user || !tripId || !tripData) return;
+    if (!user || !tripId || !tripData?.status) return;
     if (!["accepted", "arrived"].includes(tripData.status)) return;
     if (typeof navigator === "undefined" || !navigator.geolocation) return;
 
@@ -356,7 +359,7 @@ export default function RiderPage() {
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [tripData, tripId, user, handleDetectedCity]);
+  }, [tripData?.status, tripId, user?.uid, handleDetectedCity]);
 
   /* ----------------------- Derived toast actors ----------------------- */
   const latestViewer = useMemo(() => {
@@ -529,10 +532,34 @@ export default function RiderPage() {
           createdAt: now,
           updatedAt: now,
           driverLive: liveDriver,
+          riderLive: null,
         };
 
-        // 1. Create the trip
-        await set(tripRef, payload);
+        // 1. Claim the request atomically. Another driver or client may race.
+        const requestNode = ref(db, `rideRequests/${cityKey}/${reqId}`);
+        const claim = await runTransaction(requestNode, (current) => {
+          if (!current || (current.status || "open") !== "open") return;
+          return {
+            ...current,
+            status: "matched",
+            matchedDriverId: offer.driverId,
+            matchedTripId: newTripId,
+            agreedPrice,
+            matchedAt: now,
+            updatedAt: now,
+          };
+        }, { applyLocally: false });
+        if (!claim.committed) throw new Error("This request has already been accepted.");
+        try {
+          await set(tripRef, payload);
+        } catch (error) {
+          await runTransaction(requestNode, (current) => {
+            if (!current || current.matchedTripId !== newTripId) return;
+            const { matchedTripId, matchedDriverId, matchedAt, ...rest } = current;
+            return { ...rest, status: "open", updatedAt: Date.now() };
+          }, { applyLocally: false }).catch(() => {});
+          throw error;
+        }
 
         // 2. Notify the driver (non-blocking on failure)
         try {
@@ -787,7 +814,7 @@ export default function RiderPage() {
   }
 
   return (
-    <MobileShell>
+    <MobileShell className="nx-ride-workspace" decorators={false}>
       <RiderMap
         mode={mode}
         city={city}
@@ -797,7 +824,7 @@ export default function RiderPage() {
         draftRoute={draftRoute}
         viewCount={viewCount}
         offersCount={offers.length}
-        boundsBottomPadding={mode === "request" ? 220 : 160}
+        boundsBottomPadding={92}
         onDriversCountChange={setNearbyDriversCount}
         onRouteInfoChange={setLiveRouteInfo}
         onCityDetected={handleDetectedCity}
@@ -813,51 +840,51 @@ export default function RiderPage() {
         onLogout={handleLogout}
       />
 
-      {latestViewer && requestData && !tripData ? (
-        <div className="nx-view-toast">
-          <div className="nx-view-avatar">
-            {latestViewer.driverPhotoUrl ? (
-              <img src={latestViewer.driverPhotoUrl} alt="" />
-            ) : (
-              "🚘"
-            )}
-          </div>
-          <div>
-            <strong>{latestViewer.driverName || "A driver"}</strong>
-            <span>viewed your ride request</span>
-          </div>
-        </div>
-      ) : null}
-
-      {latestOffer && requestData && !tripData ? (
-        <div className="nx-view-toast nx-offer-toast">
-          <div className="nx-view-avatar">
-            {latestOffer.driverPhotoUrl ? (
-              <img src={latestOffer.driverPhotoUrl} alt="" />
-            ) : (
-              "$"
-            )}
-          </div>
-          <div>
-            <strong>
-              {latestOffer.driverName || "A driver"} offered $
-              {Number(latestOffer.proposedPrice || 0).toFixed(2)}
-            </strong>
-            <span>Tap ride details to choose your driver</span>
-          </div>
-        </div>
-      ) : null}
-
       <BottomSheet
-        height={mode === "request" ? "38vh" : "24vh"}
-        expandedHeight={mode === "request" ? "50vh" : "58vh"}
-        collapsedHeight={mode === "request" ? "178px" : "142px"}
-        defaultCollapsed={mode !== "request"}
+        expandedHeight={mode === "waiting" ? "41dvh" : "53dvh"}
+        collapsedHeight="calc(58px + env(safe-area-inset-bottom))"
         stateKey={mode}
-        title={mode === "request" ? "request form" : "ride details"}
+        title={mode === "request" ? "ride request" : mode === "offers" ? "driver offers" : "ride details"}
       >
         {error ? <div className="nx-alert-error">{error}</div> : null}
         {success ? <div className="nx-alert-success">{success}</div> : null}
+
+        <div className="nx-ride-updates">
+          {!latestOffer && latestViewer && requestData && !tripData ? (
+            <div className="nx-view-toast" role="status">
+              <div className="nx-view-avatar">
+                {latestViewer.driverPhotoUrl ? (
+                  <img src={latestViewer.driverPhotoUrl} alt="" />
+                ) : (
+                  "🚘"
+                )}
+              </div>
+              <div>
+                <strong>{latestViewer.driverName || "A driver"}</strong>
+                <span>viewed your ride request</span>
+              </div>
+            </div>
+          ) : null}
+
+          {latestOffer && requestData && !tripData ? (
+            <div className="nx-view-toast nx-offer-toast" role="status">
+              <div className="nx-view-avatar">
+                {latestOffer.driverPhotoUrl ? (
+                  <img src={latestOffer.driverPhotoUrl} alt="" />
+                ) : (
+                  "$"
+                )}
+              </div>
+              <div>
+                <strong>
+                  {latestOffer.driverName || "A driver"} offered $
+                  {Number(latestOffer.proposedPrice || 0).toFixed(2)}
+                </strong>
+                <span>Review the offer in your ride panel</span>
+              </div>
+            </div>
+          ) : null}
+        </div>
 
         {mode === "request" && (
           <RequestSheet

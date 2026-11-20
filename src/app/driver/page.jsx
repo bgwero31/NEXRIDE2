@@ -101,7 +101,7 @@ export default function DriverPage() {
   // hit the DB N times per snapshot.
   const viewedIdsRef = useRef(new Set());
 
-  // Track last active-trip id we set, to avoid redundant setState calls.
+  // Track trip identity so UI reset only runs for an actual new trip.
   const lastActiveTripIdRef = useRef("");
 
   // Keep fresh city in a ref so GPS callback never captures a stale value.
@@ -248,11 +248,14 @@ export default function DriverPage() {
           .find((trip) => trip.driverId === user.uid) || null;
 
       const mineId = mine?.id || "";
-      if (mineId === lastActiveTripIdRef.current) return;
+      const isNewTrip = mineId !== lastActiveTripIdRef.current;
       lastActiveTripIdRef.current = mineId;
 
+      // Firebase snapshot updates also contain riderLive/driverLive and status.
+      // The trip ID stays unchanged during the whole ride; always accept the
+      // newest snapshot so the driver's map can follow the rider in real time.
       setActiveTrip(mine);
-      if (mine) setCompletedTrip(null);
+      if (isNewTrip && mine) setCompletedTrip(null);
     });
 
     return () => {
@@ -460,7 +463,12 @@ export default function DriverPage() {
               city: detectedCity,
             };
           }
-        } catch {}
+        } catch (gpsError) {
+          throw new Error("Your location is required to go online. Allow GPS permission and try again.");
+        }
+        if (!Number.isFinite(firstGps.lat) || !Number.isFinite(firstGps.lng)) {
+          throw new Error("We could not obtain your location. Check GPS and try again.");
+        }
       }
 
       // If city changed, close old node first.
@@ -496,7 +504,7 @@ export default function DriverPage() {
       );
     } catch (err) {
       console.error("[DriverPage] toggleOnline failed:", err);
-      setError("Failed to update online status.");
+      setError(err?.message || "Failed to update online status.");
     } finally {
       setSavingOnline(false);
     }
@@ -505,12 +513,12 @@ export default function DriverPage() {
   /* -------------------- Create trip from request ------------------ */
   const createTripFromRequest = useCallback(
     async (requestItem, agreedPrice) => {
-      // Fresh check: request must still be open (race guard).
-      const freshSnap = await get(
-        ref(db, `rideRequests/${cityRef.current}/${requestItem.id}`)
-      );
+      // Do not accept a request that has already been matched or cancelled.
+      // A server-side rules check is still required for an adversarial client.
+      const requestNode = ref(db, `rideRequests/${cityRef.current}/${requestItem.id}`);
+      const freshSnap = await get(requestNode);
       const fresh = freshSnap.val() || {};
-      if ((fresh.status || "open") !== "open") {
+      if (!freshSnap.exists() || (fresh.status || "open") !== "open") {
         throw new Error("Request is no longer available.");
       }
 
@@ -583,19 +591,34 @@ export default function DriverPage() {
         createdAt: now,
         updatedAt: now,
         driverLive: liveDriver,
+        riderLive: null,
       };
 
-      // Mark request matched BEFORE writing trip so we don't race another driver.
-      await update(ref(db, `rideRequests/${payload.city}/${requestItem.id}`), {
-        status: "matched",
-        matchedDriverId: user.uid,
-        matchedTripId: tripId,
-        agreedPrice: payload.agreedPrice,
-        matchedAt: now,
-        updatedAt: now,
-      });
-
-      await set(tripRef, payload);
+      // Atomic claim prevents two honest drivers from accepting the same ride.
+      const claim = await runTransaction(requestNode, (current) => {
+        if (!current || (current.status || "open") !== "open") return;
+        return {
+          ...current,
+          status: "matched",
+          matchedDriverId: user.uid,
+          matchedTripId: tripId,
+          agreedPrice: payload.agreedPrice,
+          matchedAt: now,
+          updatedAt: now,
+        };
+      }, { applyLocally: false });
+      if (!claim.committed) throw new Error("Another driver already accepted this ride.");
+      try {
+        await set(tripRef, payload);
+      } catch (error) {
+        // Only undo our own claim if trip creation fails.
+        await runTransaction(requestNode, (current) => {
+          if (!current || current.matchedTripId !== tripId) return;
+          const { matchedDriverId, matchedTripId, matchedAt, ...rest } = current;
+          return { ...rest, status: "open", updatedAt: Date.now() };
+        }, { applyLocally: false }).catch(() => {});
+        throw error;
+      }
 
       queueNexrideEvent({
         type: nexrideNotificationTypes.REQUEST_ACCEPTED,
@@ -768,7 +791,7 @@ export default function DriverPage() {
 
   /* ---------------------------- Render --------------------------- */
   return (
-    <MobileShell>
+    <MobileShell className="nx-ride-workspace" decorators={false}>
       <DriverMap
         mode={mode}
         city={cityKey}
@@ -777,6 +800,7 @@ export default function DriverPage() {
         requests={visibleRequests}
         driverPhotoUrl={profile?.photoUrl || profile?.profilePhotoUrl || ""}
         selfLocation={selfLocation}
+        boundsBottomPadding={92}
         onRouteInfoChange={setLiveRouteInfo}
       />
 
@@ -791,10 +815,8 @@ export default function DriverPage() {
       />
 
       <BottomSheet
-        height={mode === "queue" ? "32vh" : "24vh"}
-        expandedHeight={mode === "trip" ? "58vh" : "52vh"}
-        collapsedHeight={mode === "trip" ? "142px" : "132px"}
-        defaultCollapsed={mode === "trip" || mode === "queue"}
+        expandedHeight={mode === "offline" ? "min(300px, 48dvh)" : "53dvh"}
+        collapsedHeight="calc(58px + env(safe-area-inset-bottom))"
         stateKey={mode}
         title={mode === "trip" ? "trip controls" : "driver panel"}
       >
@@ -805,7 +827,6 @@ export default function DriverPage() {
           <div className="nx-stack">
             <ActionCard className="nx-driver-command">
               <div>
-                <div className="nx-eyebrow">Driver status</div>
                 <h2 className="nx-sheet-title">
                   {online ? "You are online" : "Go online to receive rides"}
                 </h2>
@@ -837,7 +858,6 @@ export default function DriverPage() {
           <div className="nx-stack nx-driver-list">
             <div className="nx-sheet-head compact">
               <div>
-                <div className="nx-eyebrow">NEXRIDE ride marketplace</div>
                 <h2 className="nx-sheet-title">Nearby requests</h2>
               </div>
               <div className="nx-price-badge">{visibleRequests.length}</div>

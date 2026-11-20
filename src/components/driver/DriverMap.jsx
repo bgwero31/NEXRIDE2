@@ -14,7 +14,7 @@ import { normalizeCity } from "../../lib/nexrideCity";
 
 /* ------------------------------ Constants ----------------------------- */
 
-const GPS_ACCURACY_LIMIT_M = 250;
+const GPS_ACCURACY_LIMIT_M = 1200;
 const MAX_REQUEST_PINS = 30;
 
 /* ------------------------------ Helpers ------------------------------- */
@@ -57,6 +57,7 @@ const DriverMap = forwardRef(function DriverMap(
   );
 
   const [internalSelfLocation, setInternalSelfLocation] = useState(null);
+  const [gpsNotice, setGpsNotice] = useState("");
   const [routeInfo, setRouteInfo] = useState(null);
   const [mapStatus, setMapStatus] = useState("loading");
   
@@ -82,7 +83,11 @@ const DriverMap = forwardRef(function DriverMap(
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
         const accuracy = Number(pos.coords.accuracy || 9999);
-        if (accuracy > GPS_ACCURACY_LIMIT_M) return;
+        if (accuracy > GPS_ACCURACY_LIMIT_M) {
+          setGpsNotice("Waiting for accurate driver GPS.");
+          return;
+        }
+        setGpsNotice(accuracy > 250 ? "Approximate driver location" : "");
         setInternalSelfLocation({
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
@@ -90,7 +95,7 @@ const DriverMap = forwardRef(function DriverMap(
           accuracy,
         });
       },
-      () => {},
+      (error) => setGpsNotice(error?.code === 1 ? "Enable location permission to share your driver position." : "Driver GPS unavailable. Check your location services."),
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
     );
 
@@ -119,13 +124,13 @@ const DriverMap = forwardRef(function DriverMap(
   );
 
   const driverLive = useMemo(
-    () => toLatLng(activeTrip?.driverLive) || selfLocation || toLatLng(fallbackPickup),
-    [activeTrip?.driverLive?.lat, activeTrip?.driverLive?.lng, selfLocation, fallbackPickup]
+    () => selfLocation || toLatLng(activeTrip?.driverLive),
+    [activeTrip?.driverLive?.lat, activeTrip?.driverLive?.lng, selfLocation]
   );
 
   const riderLive = useMemo(
-    () => toLatLng(activeTrip?.riderLive) || toLatLng(fallbackPickup),
-    [activeTrip?.riderLive?.lat, activeTrip?.riderLive?.lng, fallbackPickup]
+    () => toLatLng(activeTrip?.riderLive),
+    [activeTrip?.riderLive?.lat, activeTrip?.riderLive?.lng]
   );
   // -------------------------------
 
@@ -257,17 +262,23 @@ const DriverMap = forwardRef(function DriverMap(
               stroke="url(#routeGradientDriver)"
             />
           </svg>
+          <div className="nx-map-offline-hint" role="status">Map loading · Check your connection and Google Maps setup if the map does not appear.</div>
         </>
       ) : null}
 
+      {gpsNotice ? <div className="nx-gps-hint" role="status">{gpsNotice}</div> : null}
       <LiveGoogleMap
+        lightMap
         ref={mapApiRef}
         city={cityKey}
         role="driver"
         origin={routeOrigin}
         destination={routeDestination}
         driverLocation={driverLive}
-        riderLocation={riderLive}
+        riderLocation={activeTrip ? riderLive : null}
+        pickupLocation={recordPoint(routeRecord, "pickup", "Pickup")}
+        dropoffLocation={recordPoint(routeRecord, "dropoff", "Drop-off")}
+        markers={requestMarkers}
         driverPhotoUrl={
           driverPhotoUrl ||
           activeTrip?.driverPhotoUrl ||
@@ -275,7 +286,6 @@ const DriverMap = forwardRef(function DriverMap(
           ""
         }
         riderPhotoUrl={activeTrip?.riderPhotoUrl || completedTrip?.riderPhotoUrl || ""}
-        markers={requestMarkers}
         showRoute={showRoute}
         followTarget={
           completedTrip ? "route" : activeTrip ? "driver" : "driver"
@@ -302,7 +312,6 @@ const DriverMap = forwardRef(function DriverMap(
         }`}
       >
         <div>
-          <span className="nx-eyebrow">Driver command center</span>
           <h3>{modeCopy(mode)}</h3>
           <p>
             {cityLabel(cityKey)} • {requests.length} open request

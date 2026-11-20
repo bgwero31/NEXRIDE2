@@ -242,7 +242,7 @@ export default function FloatingTopBar({
         aria-label="Main menu"
         aria-hidden={!open}
         // Ensure the drawer is not focusable while hidden
-        {...(!open ? { inert: "" } : {})}
+        inert={!open}
       >
         {/* Header: avatar + name + role badge */}
         <div className="nx-drawer-profile">

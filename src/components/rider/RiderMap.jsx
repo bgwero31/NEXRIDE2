@@ -18,7 +18,7 @@ import {
 } from "../../lib/nexrideCity";
 
 const DRIVER_STALE_MS = 90_000;
-const GPS_ACCURACY_LIMIT_M = 250;
+const GPS_ACCURACY_LIMIT_M = 1200;
 
 function modeCopy(mode) {
   switch (mode) {
@@ -55,6 +55,7 @@ export default function RiderMap({
 
   const [drivers, setDrivers] = useState([]);
   const [riderCurrentLocation, setRiderCurrentLocation] = useState(null);
+  const [gpsNotice, setGpsNotice] = useState("");
   const [routeInfo, setRouteInfo] = useState(null);
   const [mapStatus, setMapStatus] = useState("loading");
   const [directionStep, setDirectionStep] = useState(null);
@@ -85,7 +86,7 @@ export default function RiderMap({
           if (!Number.isFinite(Number(item.lat))) return false;
           if (!Number.isFinite(Number(item.lng))) return false;
           const seen = Number(item.lastSeen || item.updatedAt || 0);
-          if (!seen) return true;
+          if (!seen) return false;
           return now - seen <= DRIVER_STALE_MS;
         });
 
@@ -102,7 +103,11 @@ export default function RiderMap({
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
         const accuracy = Number(pos.coords.accuracy || 9999);
-        if (accuracy > GPS_ACCURACY_LIMIT_M) return;
+        if (accuracy > GPS_ACCURACY_LIMIT_M) {
+          setGpsNotice("Waiting for a more accurate GPS location. Move outdoors if possible.");
+          return;
+        }
+        setGpsNotice(accuracy > 250 ? "Approximate GPS location" : "");
 
         const gpsPoint = buildGpsPointFromPosition(pos);
         if (!gpsPoint) return;
@@ -124,7 +129,7 @@ export default function RiderMap({
           label: "My live location",
         });
       },
-      () => {},
+      (error) => setGpsNotice(error?.code === 1 ? "Location permission is off. Enable it to show your live rider pin." : "GPS is unavailable. Check location services and try again."),
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
     );
 
@@ -168,10 +173,11 @@ export default function RiderMap({
     [tripData, pickup]
   );
 
-  const driverLive = tripDriverLive || matchedDriverLatLng || toLatLng(fallbackPickup);
-  
+  // A pickup coordinate is not the driver's position: only show a car when
+  // Firebase has an actual driver location.
+  const driverLive = tripDriverLive || matchedDriverLatLng;
   const riderLive = useMemo(
-    () => toLatLng(tripData?.riderLive) || riderCurrentLocation || toLatLng(fallbackPickup),
+    () => riderCurrentLocation || toLatLng(tripData?.riderLive) || toLatLng(fallbackPickup),
     [tripData?.riderLive?.lat, tripData?.riderLive?.lng, riderCurrentLocation, fallbackPickup]
   );
   // -------------------------------
@@ -192,14 +198,14 @@ export default function RiderMap({
   }, [completedTrip, draftRoute, driverLive, pickup, requestData, riderLive, tripData]);
 
   const mapDestination = useMemo(() => {
-    if (tripData && routeTargetMode === "pickup") return recordPoint(tripData, "pickup", tripData.pickupName || pickup);
+    if (tripData && routeTargetMode === "pickup") return riderLive || recordPoint(tripData, "pickup", tripData.pickupName || pickup);
     if (tripData) return recordPoint(tripData, "dropoff", tripData.dropoffName || dropoff);
     if (completedTrip) return recordPoint(completedTrip, "dropoff", completedTrip.dropoffName || dropoff);
     if (requestData) return recordPoint(requestData, "dropoff", requestData?.dropoffName || dropoff);
     
     if (draftRoute?.dropoffCoords) return { ...draftRoute.dropoffCoords, label: draftRoute.dropoffName || dropoff };
     return null; 
-  }, [completedTrip, draftRoute, dropoff, pickup, requestData, routeTargetMode, tripData]);
+  }, [completedTrip, draftRoute, dropoff, pickup, requestData, riderLive, routeTargetMode, tripData]);
 
   const driverMarkers = useMemo(
     () =>
@@ -246,7 +252,7 @@ export default function RiderMap({
     <section className="nx-live-map rider-map">
       
       {/* THE HEAD SOUTH NAVIGATION BANNER */}
-      {directionStep && showRoute && (
+      {directionStep && showRoute && tripData && (
         <div className="nx-map-nav-banner">
           <div className="nx-map-nav-icon">
             {directionStep.maneuver === "turn-right" ? "➡️" : 
@@ -272,12 +278,13 @@ export default function RiderMap({
             <path className="nx-route-shadow" d="M76 590 C176 520 94 430 207 355 C316 283 236 205 328 128" />
             <path className="nx-route-path" d="M76 590 C176 520 94 430 207 355 C316 283 236 205 328 128" stroke="url(#routeGradientRider)" />
           </svg>
-          <div className="nx-map-pin pickup" style={{ left: "18%", top: "76%" }}>●</div>
-          <div className="nx-map-pin destination" style={{ left: "80%", top: "16%" }}>●</div>
+          <div className="nx-map-offline-hint">Map preview · Enable GPS and Google Maps to view your live position</div>
         </>
       ) : null}
 
+      {gpsNotice ? <div className="nx-gps-hint" role="status">{gpsNotice}</div> : null}
       <LiveGoogleMap
+        lightMap
         ref={mapApiRef}
         city={cityKey}
         role="rider"
@@ -285,7 +292,9 @@ export default function RiderMap({
         destination={mapDestination}
         riderLocation={riderCurrentLocation}
         driverLocation={tripData ? driverLive : null}
-        nearbyDrivers={drivers}
+        pickupLocation={recordPoint(routeRecord, "pickup", "Pickup")}
+        dropoffLocation={recordPoint(routeRecord, "dropoff", "Drop-off")}
+        nearbyDrivers={tripData ? drivers.filter(d => d.id !== tripData.driverId) : drivers}
         showRoute={showRoute}
         cameraFollow={true}
         followTarget={tripData ? "driver" : mapDestination ? "route" : "rider"}

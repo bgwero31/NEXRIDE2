@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test:smoke": "node qa/verify-ride-cycle.mjs"
   },
   "dependencies": {
     "firebase": "^11.6.1",

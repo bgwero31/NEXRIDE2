@@ -359,7 +359,6 @@ export default function RequestSheet({
       {/* Header — single line */}
       <div className="nx-rs-head">
         <h2 className="nx-rs-title">Where to?</h2>
-        <span className="nx-rs-badge">${price(offerPrice)}</span>
       </div>
 
       {error ? <div className="nx-alert-error nx-rs-alert">{error}</div> : null}
@@ -372,12 +371,13 @@ export default function RequestSheet({
             ref={pickupInputRef}
             className="nx-rs-input"
             type="text"
+            aria-label="Pickup location"
             placeholder="Pickup"
             value={pickupName}
             onChange={(e) => { setPickupName(e.target.value); if (!e.target.value.trim()) setPickupCoords(null); }}
             autoComplete="off"
           />
-          <button type="button" className="nx-rs-gps" onClick={useCurrentLocation} disabled={locating} aria-label="Use GPS">
+          <button type="button" className="nx-rs-gps" onClick={useCurrentLocation} disabled={locating} aria-label="Use my current location">
             {locating ? "…" : "📍"}
           </button>
         </div>
@@ -388,7 +388,8 @@ export default function RequestSheet({
             ref={dropoffInputRef}
             className="nx-rs-input"
             type="text"
-            placeholder="Where to?"
+            aria-label="Destination"
+            placeholder="Destination"
             value={dropoffName}
             onChange={(e) => { setDropoffName(e.target.value); setDropoffCoords(null); }}
             autoComplete="off"
@@ -398,14 +399,14 @@ export default function RequestSheet({
 
       {/* Route info + city — one compact row */}
       <div className="nx-rs-info">
-        <select className="nx-rs-city" value={city} onChange={(e) => setCity(e.target.value)}>
+        <select aria-label="City" className="nx-rs-city" value={city} onChange={(e) => setCity(e.target.value)}>
           {cityOptions.map((c) => <option key={c} value={c}>{cityLabel(c)}</option>)}
         </select>
         <span className="nx-rs-sep">•</span>
         <span className="nx-rs-pax">
-          <button type="button" onClick={() => setPeople((p) => String(Math.max(1, Number(p) - 1)))} aria-label="Fewer">−</button>
-          <span>{people} pax</span>
-          <button type="button" onClick={() => setPeople((p) => String(Math.min(8, Number(p) + 1)))} aria-label="More">+</button>
+          <button type="button" onClick={() => setPeople((p) => String(Math.max(1, Number(p) - 1)))} aria-label="Remove one passenger">−</button>
+          <span>{people} {Number(people) === 1 ? "rider" : "riders"}</span>
+          <button type="button" onClick={() => setPeople((p) => String(Math.min(8, Number(p) + 1)))} aria-label="Add one passenger">+</button>
         </span>
         {routePreview ? (
           <>
@@ -418,9 +419,9 @@ export default function RequestSheet({
       {/* Fare — compact stepper row */}
       <div className="nx-rs-fare">
         <span className="nx-rs-fare-label">Fare</span>
-        <button type="button" className="nx-rs-step" onClick={() => bumpFare(-0.5)} aria-label="Lower">−</button>
+        <button type="button" className="nx-rs-step" onClick={() => bumpFare(-0.5)} aria-label="Lower offered fare">−</button>
         <div className="nx-rs-fare-display">${price(offerPrice)}</div>
-        <button type="button" className="nx-rs-step" onClick={() => bumpFare(0.5)} aria-label="Raise">+</button>
+        <button type="button" className="nx-rs-step" onClick={() => bumpFare(0.5)} aria-label="Raise offered fare">+</button>
         {suggested && Number(offerPrice) !== suggested ? (
           <button type="button" className="nx-rs-suggest" onClick={() => setOfferPrice(suggested.toFixed(2))}>
             ${suggested.toFixed(2)}
@@ -434,6 +435,7 @@ export default function RequestSheet({
           <button
             key={p.value}
             type="button"
+            aria-pressed={preferredPayment === p.value}
             className={`nx-rs-chip ${preferredPayment === p.value ? "is-active" : ""}`}
             onClick={() => setPreferredPayment(p.value)}
           >
@@ -448,6 +450,7 @@ export default function RequestSheet({
           <button
             key={r.value}
             type="button"
+            aria-pressed={rideMode === r.value}
             className={`nx-rs-chip ${rideMode === r.value ? "is-active" : ""}`}
             onClick={() => setRideMode(r.value)}
           >
@@ -460,6 +463,7 @@ export default function RequestSheet({
       {notesOpen ? (
         <input
           className="nx-rs-input nx-rs-notes"
+          aria-label="Note for driver"
           placeholder="Note for driver (luggage, gate…)"
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
@@ -471,9 +475,11 @@ export default function RequestSheet({
       )}
 
       {/* CTA */}
-      <PremiumButton type="submit" disabled={!canSubmit} loading={saving}>
-        {saving ? "Posting…" : "Find drivers"}
-      </PremiumButton>
+      <div className="nx-rs-submit">
+        <PremiumButton type="submit" disabled={!canSubmit} loading={saving}>
+          {saving ? "Posting…" : "Find drivers"}
+        </PremiumButton>
+      </div>
     </form>
   );
 }

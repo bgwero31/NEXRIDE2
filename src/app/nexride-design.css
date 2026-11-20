@@ -1,0 +1,191 @@
+/* NEXRIDE / Evergreen system · 2026
+   Rider, driver, account and operations surfaces share one restrained design.
+   The road map is intentionally dark; controls are accessible and high-contrast.
+   No translucent blue gradients, decorative orbs or mock route geometry. */
+:root {
+  --bg: #091610;
+  --bg2: #10251a;
+  --ink: #f8faf6;
+  --soft: #b0c3b6;
+  --soft2: #d7e5da;
+  --line: rgba(199, 224, 204, .16);
+  --line2: rgba(41, 205, 113, .22);
+  --glass: #12291d;
+  --glass2: #1c3927;
+  --cyan: #49dc8e;
+  --blue: #1b9153;
+  --blue2: #136e41;
+  --green: #35d579;
+  --shadow: 0 10px 34px rgba(0, 10, 4, .18);
+  color-scheme: dark;
+}
+html, body { background: #091610; }
+body { background: #091610; color: var(--ink); }
+.nx-shell {
+  background: #091610;
+  isolation: isolate;
+}
+.nx-shell::before, .nx-shell .nx-orb, .nx-map-glow, .nx-map-grid { display: none !important; }
+.nx-phone-frame { max-width: 600px; background: #091610; }
+.nx-brand-mark, .nx-brand-mark.has-photo {
+  background: #e8f5e8;
+  border: 1px solid rgba(22, 92, 52, .18);
+  box-shadow: none;
+  border-radius: 14px;
+}
+.nx-brand-mark img { filter: none; }
+.nx-brand-text {
+  color: #fff; background: none; -webkit-text-fill-color: currentColor;
+  filter: none; animation: none; font-weight: 800;
+  letter-spacing: -.035em;
+}
+.nx-brand-subtitle { color: #b8d0c0; }
+.nx-topbar {
+  border-radius: 21px;
+  background: #12291e;
+  box-shadow: 0 8px 25px rgba(4, 15, 9, .29);
+  border: 1px solid rgba(234, 255, 242, .16);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  overflow: visible;
+}
+.nx-topbar::after { display: none; }
+.nx-icon-btn, .nx-topbar-btn, .nx-mini-btn { background: #254531; border-color: #416e50; box-shadow: none; border-radius: 13px; }
+.nx-icon-btn:focus-visible, .nx-topbar-btn:focus-visible, button:focus-visible, a:focus-visible {
+  outline: 3px solid #5eed9c; outline-offset: 2px;
+}
+.nx-app-drawer { background: #102217; }
+.nx-drawer-avatar, .nx-profile-avatar-large, .nx-driver-avatar {
+  background: #1b9454; box-shadow: none; border-radius: 16px;
+}
+.nx-drawer-link.active { background: #1b5135; border-color: #286b45; }
+.nx-drawer-link.active .nx-drawer-icon, .nx-drawer-link.active .nx-drawer-chevron { color: #63eca4; filter: none; }
+.nx-drawer-mode { background: #26bc68; box-shadow: none; color: #072213; }
+.nx-bottom-sheet {
+  background: #10251a;
+  border: 1px solid rgba(174, 222, 189, .15);
+  border-bottom: 0;
+  border-radius: 26px 26px 0 0;
+  box-shadow: 0 -14px 40px rgba(0, 0, 0, .25);
+  backdrop-filter: none;
+}
+.nx-bottom-sheet::before, .nx-glass-panel::before, .nx-card-pro::before, .nx-auth-card::before { display: none !important; }
+.nx-sheet-toggle { color: #c3dccc; font-weight: 750; letter-spacing: .055em; }
+.nx-sheet-handle { background: #466d53; box-shadow: none; width: 36px; }
+.nx-sheet-title { color: #f4fff6; letter-spacing: -.037em; font-weight: 800; line-height: 1.1; }
+.nx-card-title { color: #effaf1; font-weight: 760; }
+.nx-sheet-copy, .nx-soft-text { color: #b8c9bc; line-height: 1.5; }
+.nx-eyebrow { color: #5ae18e; letter-spacing: .09em; font-weight: 800; }
+.nx-glass-panel, .nx-card, .nx-card-pro, .nx-auth-card, .nx-setting-row, .nx-tab-card, .nx-page-link-card, .nx-history-item, .nx-school-list-item, .nx-school-mode-card {
+  background: #173322;
+  border: 1px solid rgba(193, 228, 198, .14);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  color: #f3fcf5;
+  border-radius: 19px;
+}
+.nx-input, .nx-route-input {
+  background: #091c12; border: 1px solid #365744; border-radius: 13px;
+  box-shadow: none; color: #f6fff6; min-height: 46px;
+}
+.nx-input::placeholder, .nx-route-input::placeholder { color: #98b3a0; }
+.nx-input:focus, .nx-route-input:focus { border-color: #41d57e; box-shadow: 0 0 0 3px rgba(55, 212, 121, .15); }
+.nx-field > span { color: #dcece0; }
+.nx-map-chip, .nx-price-badge, .nx-status-pill, .nx-pill { border-color: #306c48; background: #1c5535; color: #daffe4; font-weight: 750; }
+.nx-map-open-link, .nx-request-metrics a { background: #176b42; color: #edfff3; border: 1px solid #278653; box-shadow: none; }
+.nx-map-metrics span { border: 1px solid #31543c; color: #d4f7da; background: #1a422c; }
+.nx-map-metrics span:first-child, .nx-map-metrics span:nth-child(2) { color: #e1ffe5; background: #1d5435; border-color: #2c794b; }
+.nx-online-pill.on { color: #c4ffd6; }
+.nx-live-map { background: #14251f; }
+.nx-google-map-canvas { filter: saturate(.78) contrast(1.06) brightness(.98) !important; }
+.nx-google-map-layer::after { display: none; }
+.nx-google-map-loading, .nx-google-map-warning { background: #163322; border-color: #3b6b4b; border-radius: 17px; }
+.nx-live-follow-badge { background: #e8f6e8; color: #14502f; border-color: #b5d9be; box-shadow: 0 5px 15px rgba(5, 19, 9, .15); }
+.nx-map-card { background: #f5fbf4; border: 1px solid #cfdfd2; color: #102618; backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: 0 10px 32px rgba(5, 18, 10, .2); border-radius: 19px; }
+.nx-map-status-card { width: min(228px, calc(100% - 110px)); padding: 10px 12px; }
+.nx-map-status-card h3 { color: #102b1a; font-size: 16px; }
+.nx-map-status-card p { color: #506958; }
+.nx-map-status-card .nx-map-chip, .nx-map-card .nx-map-metrics span { background: #ddf4e4; color: #175035; border-color: #c5e5d0; }
+.nx-map-card .nx-eyebrow { color: #1a8150; }
+.nx-map-route-card { padding: 12px 13px; gap: 7px; bottom: 150px; }
+.nx-map-route-card .nx-route-mini-row { font-size: 12px; color: #183526; }
+.nx-map-route-card .nx-map-metrics span { color: #236241; font-weight: 720; }
+.nx-map-route-card .nx-map-open-link { min-height: 34px; background: #218451; color: white; border: 0; }
+.nx-map-control-stack { right: 13px; bottom: 270px; }
+.nx-map-control { min-width: 43px; width: 43px; height: 43px; background: #f9fefa; color: #14402a; border-color: #c6ddca; border-radius: 13px; box-shadow: 0 4px 16px rgba(0,0,0,.15); }
+.nx-gmap-marker-label { background: #fff; color: #123520; border: 1px solid #b9d7c3; box-shadow: 0 2px 10px rgba(0,0,0,.12); padding: 6px 10px; font-size: 11px; font-weight: 800; }
+.nx-gmap-arrow-svg { filter: drop-shadow(0 3px 6px rgba(0,0,0,.28)); }
+.nx-gmap-rider-dot { width: 32px; height: 32px; }
+.nx-rider-pulse { background: rgba(43, 174, 93, .32); }
+.nx-rider-core { width: 20px; height: 20px; background: #fff; border: 5px solid #24bd69; box-shadow: 0 0 0 2px white, 0 3px 10px rgba(0,0,0,.35); }
+.nx-gmap-place-marker { pointer-events: none; }
+.nx-gmap-place-pin { position: relative; display: grid; justify-items: center; gap: 4px; }
+.nx-gmap-place-glyph { display: grid; place-items: center; color: #fff; background: #1eaa5c; width: 33px; height: 33px; border-radius: 50% 50% 50% 6px; border: 3px solid #fff; transform: rotate(-45deg); box-shadow: 0 4px 12px rgba(0,0,0,.22); font-size: 10px; }
+.nx-gmap-place-glyph::first-letter { color: transparent; }
+.nx-gmap-place-label { background: white; color: #143724; padding: 5px 9px; border-radius: 999px; font-size: 10px; font-weight: 800; white-space: nowrap; box-shadow: 0 3px 10px rgba(0,0,0,.18); }
+.nx-gmap-place-destination .nx-gmap-place-glyph { background: #12422c; border-radius: 10px 10px 10px 2px; }
+.nx-gmap-place-request .nx-gmap-place-glyph { background: #31aa69; }
+.nx-map-nav-banner { background: #176c44; color: #fff; border: 1px solid #3f9f6c; box-shadow: 0 8px 24px rgba(0,0,0,.2); }
+.nx-alert-error { color: #ffe1e4; }
+.nx-alert-success { color: #cdffe2; }
+.nx-profile-photo-preview, .nx-school-log { background: #193426; border-color: #31533b; }
+.nx-school-hero, .nx-profile-hero { background: #153723; border: 1px solid #2a5839; }
+.nx-school-hero h1 { color: #f2fff4; }
+.nx-school-mode-card .nx-school-icon, .nx-school-badge, .nx-kbd { background: #1c7346; box-shadow: none; border: 0; }
+.nx-school-kid-tabs button.active, .nx-voice-toggle.active { background: #29bd70; color: #092f1b; box-shadow: none; border-color: #47d589; }
+.nx-map-offline-hint { position: absolute; top: 45%; left: 12%; right: 12%; text-align: center; color: #edf8f0; background: rgba(10, 32, 18, .85); padding: 12px; border-radius: 12px; font-size: 12px; }
+.nx-center-loader .nx-glass-panel, .nx-center-loader .nx-card { box-shadow: none; }
+/* Reduce decorative animation and maintain readable touch targets */
+@media (prefers-reduced-motion: reduce) { .nx-rider-pulse, .nx-map-status-card.is-searching .nx-map-chip { animation: none !important; } }
+@media (max-width: 390px) {
+  .nx-map-route-card { left: 11px; right: 11px; bottom: 150px; }
+  .nx-map-control-stack { bottom: 290px; }
+  .nx-map-status-card { top: calc(89px + env(safe-area-inset-top)); }
+}
+/* Permission onboarding: styled without Tailwind. */
+.nx-permissions-overlay { position: fixed; inset: 0; z-index: 99998; display: grid; place-items: center; padding: 22px; background: rgba(4,18,10,.96); overflow-y: auto; }
+.nx-permissions-card { width: min(100%, 420px); background: #142e1e; border-radius: 25px; border: 1px solid #385b45; padding: 26px; box-shadow: 0 22px 60px rgba(0,0,0,.3); }
+.nx-permissions-symbol { display: grid; place-items: center; width: 58px; height: 58px; border-radius: 18px; background: #30c474; color: #082818; font-size: 34px; font-weight: 900; margin-bottom: 20px; }
+.nx-permissions-card h1 { margin: 10px 0 12px; line-height: 1.12; font-size: clamp(23px,6vw,32px); letter-spacing: -.04em; }
+.nx-permissions-copy { color: #bdd3c2; font-size: 14px; line-height: 1.55; }
+.nx-permissions-actions { display: grid; gap: 9px; margin: 24px 0 14px; }
+.nx-permissions-actions button, .nx-permissions-skip { width: 100%; min-height: 48px; padding: 12px; border-radius: 13px; font-size: 14px; font-weight: 800; }
+.nx-permissions-primary { color: #092616; background: #35d579; }
+.nx-permissions-secondary { color: #e6f9eb; background: #274a34; border: 1px solid #3b7151; }
+.nx-permissions-feedback { color: #b2d8bf; border-radius: 10px; background: #0d2416; padding: 12px; font-size: 12px; line-height: 1.5; }
+.nx-permissions-skip { margin-top: 14px; background: transparent; border: 1px solid #638272; color: #e1f2e5; }
+.nx-permissions-footnote { text-align: center; color: #89a694; font-size: 11px; margin-top: 13px; }
+.nx-gps-hint { position: absolute; left: 15px; right: 15px; z-index: 9; top: calc(160px + env(safe-area-inset-top)); padding: 8px 12px; background: #153c26; border: 1px solid #3d8053; box-shadow: 0 5px 17px rgba(0,0,0,.2); border-radius: 13px; font-size: 11px; color: #e2fce8; max-width: 350px; }
+
+/* Route and fare inputs, sign-in and driver settings are the same product. */
+.nx-rs-v3-route-box { background: #142c1e; border: 1px solid #2c5037; border-radius: 18px; }
+.nx-rs-v3-fare-box { background: #1b3d29; border: 1px solid #366a4a; box-shadow: none; border-radius: 18px; }
+.nx-rs-v3-input::placeholder { color: #a0baa8; }
+.nx-rs-v3-gps { background: #26553a; color: #e5ffed; border: 1px solid #457a53; }
+.nx-login-container { background: #091610; }
+.nx-login-bg-overlay { background: linear-gradient(180deg, rgba(7,21,12,.1) 0%, rgba(7,21,12,.16) 36%, rgba(7,21,12,.85) 79%, #091610 100%) !important; }
+.nx-login-sheet {
+  background: #11291c !important;
+  background-color: #11291c !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-top: 1px solid #3c6b4a !important;
+  border-left: 0 !important;
+  border-right: 0 !important;
+  border-top-left-radius: 26px;
+  border-top-right-radius: 26px;
+  box-shadow: 0 -20px 60px rgba(0, 15, 5, .24);
+}
+.nx-auth-input { background: #0b2116; border-color: #36563e; box-shadow: none; }
+.nx-auth-input:focus { border-color: #3cd882; background: #0d2b1c; }
+.nx-auth-sheet-title { font-weight: 800; letter-spacing: -.035em; }
+.nx-permission-3d-card { background: #132f20; border: 1px solid #417653; box-shadow: 0 14px 30px rgba(0,0,0,.24); }
+.nx-pill-btn { background: #275037; border-color: #3c7150; }
+.nx-splash-overlay { background-image: none; background: #10291b; }
+.nx-splash-overlay::before { display: none; }
+.nx-splash-car svg path { stroke: #30cd77; }
+.nx-splash-text { color: #f1fff3; filter: none; text-shadow: none; }
+.nx-splash-sub { color: #b6d5c3; }
+/* Hide legacy illustrative curves: a non-working map must never masquerade as a real trip route. */
+.nx-route-svg, .nx-map-pin { display: none !important; }

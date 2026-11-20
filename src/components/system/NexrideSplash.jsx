@@ -1,30 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { speakNexride } from "../../lib/nexrideVoice";
 
 export default function NexrideSplash() {
   const [isDone, setIsDone] = useState(false);
 
   useEffect(() => {
-    // 1. Play the voice when splash mounts
-    const voiceTimer = setTimeout(() => {
-      try {
-        speakNexride("Welcome to NEXRIDE", { force: true });
-      } catch (err) {
-        console.warn("Splash voice failed", err);
+    // One short branded intro per tab session; avoid unprompted speech/audio.
+    try {
+      if (sessionStorage.getItem("nexride-splash-seen") === "yes") {
+        setIsDone(true);
+        return;
       }
-    }, 300);
-
-    // 2. Hide the splash after 2.8 seconds
-    const hideTimer = setTimeout(() => {
-      setIsDone(true);
-    }, 2800);
-
-    return () => {
-      clearTimeout(voiceTimer);
-      clearTimeout(hideTimer);
-    };
+      sessionStorage.setItem("nexride-splash-seen", "yes");
+    } catch {}
+    const timer = setTimeout(() => setIsDone(true), 900);
+    return () => clearTimeout(timer);
   }, []);
 
   return (
@@ -38,14 +29,14 @@ export default function NexrideSplash() {
           <circle cx="32" cy="32" r="22" fill="#ffffff"/>
           <path
             d="M32 12 L48 48 L32 40 L16 48 Z"
-            fill="#0b6dff"
-            stroke="#0b6dff"
+            fill="#1bb469"
+            stroke="#1bb469"
             strokeWidth="1"
             strokeLinejoin="round"
           />
           <path
             d="M32 12 L46 44"
-            stroke="#00d4ff"
+            stroke="#a8ffd0"
             strokeWidth="1.4"
             strokeLinecap="round"
             fill="none"

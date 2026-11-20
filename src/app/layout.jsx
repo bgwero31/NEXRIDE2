@@ -1,4 +1,6 @@
 import "./globals.css";
+import "./nexride-design.css";
+import "./ride-workspace.css";
 import NexrideNativeInit from "@/components/system/NexrideNativeInit";
 import NexridePermissionGate from "@/components/system/NexridePermissionGate";
 import NexrideSplash from "@/components/system/NexrideSplash"; // <-- Import it here

@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
 /* ------------------------------ Constants ----------------------------- */
 
@@ -26,6 +26,9 @@ export default function BottomSheet({
 }) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const sheetRef = useRef(null);
+  const contentRef = useRef(null);
+  const contentId = useId();
+  const suppressClickRef = useRef(false);
 
   // Gesture tracking
   const dragRef = useRef({
@@ -41,6 +44,7 @@ export default function BottomSheet({
     if (stateKey !== lastStateKeyRef.current) {
       lastStateKeyRef.current = stateKey;
       setCollapsed(defaultCollapsed);
+      if (contentRef.current) contentRef.current.scrollTop = 0;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stateKey]);
@@ -55,14 +59,16 @@ export default function BottomSheet({
     setCollapsed(next);
   }, []);
 
-  const toggle = useCallback(() => {
+  const toggle = useCallback((event) => {
+    if (event.detail && suppressClickRef.current) return;
     setCollapsed((v) => !v);
   }, []);
 
   /* ------------------------ Swipe gestures -------------------------- */
   const onPointerDown = useCallback((e) => {
     // Only left button / touch / pen
-    if (e.button !== undefined && e.button !== 0) return;
+    if (!e.isPrimary || e.button !== 0) return;
+    suppressClickRef.current = false;
     dragRef.current = {
       active: true,
       startY: e.clientY,
@@ -76,12 +82,16 @@ export default function BottomSheet({
     if (!dragRef.current.active) return;
     const delta = e.clientY - dragRef.current.startY;
     dragRef.current.moved = delta;
+    if (Math.abs(delta) > 8) suppressClickRef.current = true;
 
     // Live feedback: slight translate while dragging
-    if (sheetRef.current && delta > 0 && !collapsed) {
+    if (!sheetRef.current) return;
+    if (delta > 0 && !collapsed) {
       sheetRef.current.style.transform = `translateY(${Math.min(delta * 0.4, 24)}px)`;
-    } else if (sheetRef.current && delta < 0 && collapsed) {
+    } else if (delta < 0 && collapsed) {
       sheetRef.current.style.transform = `translateY(${Math.max(delta * 0.4, -16)}px)`;
+    } else {
+      sheetRef.current.style.transform = "";
     }
   }, [collapsed]);
 
@@ -117,7 +127,7 @@ export default function BottomSheet({
     [collapsed, collapsedHeight, expandedHeight, height]
   );
 
-  const toggleLabel = collapsed ? `Show ${title}` : "Hide details to see map";
+  const toggleLabel = collapsed ? `Show ${title}` : `Collapse ${title}`;
 
   /* ---------------------------- Render ---------------------------- */
   return (
@@ -140,11 +150,12 @@ export default function BottomSheet({
           className="nx-sheet-toggle"
           onClick={toggle}
           aria-expanded={!collapsed}
-          aria-controls="nx-bottom-sheet-content"
+          aria-controls={contentId}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerCancel}
+          onLostPointerCapture={onPointerCancel}
         >
           <span className="nx-sheet-handle" aria-hidden="true" />
           <span>{toggleLabel}</span>
@@ -155,7 +166,9 @@ export default function BottomSheet({
       </div>
 
       <div
-        id="nx-bottom-sheet-content"
+        id={contentId}
+        ref={contentRef}
+        inert={collapsed}
         className="nx-bottom-sheet-content"
         // Prevent scroll chaining to the page
         style={{ overscrollBehavior: "contain" }}
