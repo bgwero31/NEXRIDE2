@@ -283,8 +283,11 @@ export default function RiderMap({
         role="rider"
         origin={mapOrigin}
         destination={mapDestination}
+        riderLocation={riderCurrentLocation}
+        driverLocation={tripData ? driverLive : null}
         nearbyDrivers={drivers}
         showRoute={showRoute}
+        cameraFollow={true}
         followTarget={tripData ? "driver" : mapDestination ? "route" : "rider"}
         routePhase={isCompletedMap ? "completed" : tripData ? routeTargetMode : "request"}
         boundsBottomPadding={boundsBottomPadding}
