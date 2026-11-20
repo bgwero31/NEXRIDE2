@@ -7,7 +7,7 @@ import { useParams, useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { get, onValue, ref, update } from "firebase/database";
 import { auth, db } from "../../../../lib/firebase";
-import { googleMapsDirectionsUrl, pointFromRecord, toLatLng } from "../../../../lib/googleMaps";
+import { pointFromRecord, toLatLng } from "../../../../lib/googleMaps";
 import { speakNexrideStage } from "../../../../lib/nexrideVoice";
 import LiveGoogleMap from "../../../../components/maps/LiveGoogleMap";
 
@@ -93,23 +93,26 @@ export default function TripNavigatePage() {
   const phase = phaseFor(liveTrip?.status || "accepted");
   const city = liveTrip?.city || profile?.city || "harare";
 
+  const participantId = role === "driver" ? trip?.driverId : trip?.riderId;
+  const trackingTripId = trip ? tripId : null;
+  const userId = user?.uid;
   useEffect(() => {
-    if (!user || !trip || typeof navigator === "undefined" || !navigator.geolocation) return;
+    if (!userId || !trackingTripId || participantId !== userId || typeof navigator === "undefined" || !navigator.geolocation) return;
     const watchId = navigator.geolocation.watchPosition(
       async (pos) => {
         const point = safeLocation(pos);
         if (!point) return;
         setSelfLocation(point);
         try {
-          if (role === "driver") await update(ref(db, `activeTrips/${trip.tripId}/driverLive`), point);
-          if (role === "rider" && ["accepted", "arrived"].includes(trip.status)) await update(ref(db, `activeTrips/${trip.tripId}/riderLive`), point);
+          const locationKey = role === "driver" ? "driverLive" : "riderLive";
+          await update(ref(db, `activeTrips/${trackingTripId}/${locationKey}`), point);
         } catch {}
       },
       () => {},
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
     );
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [role, trip, user]);
+  }, [participantId, role, trackingTripId, userId]);
 
   useEffect(() => {
     if (!liveTrip?.status) return;
@@ -117,12 +120,12 @@ export default function TripNavigatePage() {
   }, [liveTrip?.status, role]);
 
   const driverLive = toLatLng(trip?.driverLive) || (role === "driver" ? selfLocation : null);
-  const riderLive = toLatLng(trip?.riderLive) || (role === "rider" ? selfLocation : null);
+  const riderLive = (role === "rider" ? selfLocation : null) || toLatLng(trip?.riderLive);
 
   const origin = useMemo(() => {
     if (!liveTrip) return null;
     if (completedTrip) return recordPoint(completedTrip, "pickup", completedTrip.pickupName || "Pickup");
-    if (phase === "pickup") return driverLive || recordPoint(liveTrip, "pickup", liveTrip.pickupName || "Pickup");
+    if (phase === "pickup") return driverLive;
     return driverLive || riderLive || recordPoint(liveTrip, "pickup", liveTrip.pickupName || "Pickup");
   }, [completedTrip, driverLive, liveTrip, phase, riderLive]);
 
@@ -132,11 +135,6 @@ export default function TripNavigatePage() {
     if (phase === "pickup") return riderLive || recordPoint(liveTrip, "pickup", liveTrip.pickupName || "Pickup");
     return recordPoint(liveTrip, "dropoff", liveTrip.dropoffName || "Destination");
   }, [completedTrip, liveTrip, phase, riderLive]);
-
-  const mapsUrl = useMemo(() => {
-    if (!origin || !destination) return "";
-    return googleMapsDirectionsUrl({ origin, destination, city });
-  }, [city, destination, origin]);
 
   if (!authReady || !liveTrip) {
     return (
@@ -149,18 +147,21 @@ export default function TripNavigatePage() {
   return (
     <main className="nx-nav-page">
       <LiveGoogleMap
+        lightMap
         city={city}
         role={role}
         origin={origin}
         destination={destination}
         driverLocation={driverLive}
         riderLocation={riderLive}
+        pickupLocation={pointFromRecord(liveTrip, "pickup")}
+        dropoffLocation={pointFromRecord(liveTrip, "dropoff")}
         driverPhotoUrl={liveTrip.driverPhotoUrl || ""}
         riderPhotoUrl={liveTrip.riderPhotoUrl || ""}
         markers={[]}
         showRoute={Boolean(origin && destination)}
         cameraFollow
-        followTarget={phase === "pickup" || role === "driver" ? "driver" : "route"}
+        followTarget="route"
         routePhase={phase}
         onRouteInfo={setRouteInfo}
       />
@@ -181,7 +182,6 @@ export default function TripNavigatePage() {
           <span>{routeInfo?.distanceText || liveTrip.distanceText || "Distance loading"} • {liveTrip.dropoffName || "Destination"}</span>
         </div>
         <div className="nx-nav-actions">
-          <a href={mapsUrl} target="_blank" rel="noreferrer">Open Google</a>
           <button type="button" onClick={() => router.back()}>Details</button>
         </div>
       </section>

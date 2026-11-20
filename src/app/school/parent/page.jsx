@@ -72,6 +72,7 @@ export default function SchoolParentPage() {
   return (
     <div className="nx-school-map-shell">
       <LiveGoogleMap
+        lightMap
         city={school?.city || "Zvishavane"}
         role="rider"
         origin={vehiclePoint(vehicle)}

@@ -33,6 +33,7 @@
   position: relative;
   inset: auto;
   grid-row: 1;
+  grid-column: 1;
   min-width: 0;
   min-height: 0;
   padding: calc(8px + env(safe-area-inset-top)) 14px 8px;
@@ -97,7 +98,7 @@
 }
 
 .nx-ride-workspace .nx-map-open-link { background: var(--ride-accent); }
-.nx-ride-workspace .nx-gps-hint { top: 79px; }
+.nx-ride-workspace .nx-gps-hint { top: 12px; }
 .nx-ride-workspace .nx-map-offline-hint { z-index: 2; }
 
 .nx-ride-workspace .nx-bottom-sheet {
@@ -199,7 +200,7 @@
 .nx-ride-workspace .nx-bottom-sheet .nx-btn:disabled { opacity: .55; cursor: default; }
 .nx-ride-workspace .nx-rs-submit { position: sticky; bottom: 0; z-index: 2; padding: 8px 0 2px; background: var(--ride-paper); }
 .nx-ride-workspace .nx-bottom-sheet .nx-alert-error { color: #832522; background: #fbe9e5; }
-.nx-ride-workspace .nx-bottom-sheet .nx-alert-success { color: #174b36; background: #dff3e5; }
+.nx-ride-workspace .nx-bottom-sheet .nx-alert-success { color: #172d4b; background: #dfe7f3; }
 
 @media (min-width: 850px) and (min-height: 520px) {
   .nx-ride-workspace > .nx-phone-frame { grid-template: auto minmax(0, 1fr) / minmax(0, 1fr) minmax(340px, 410px); }
@@ -249,7 +250,7 @@
 }
 .nx-ride-workspace .nx-bottom-sheet .nx-voice-card { background: var(--ride-field) !important; border-color: var(--ride-border) !important; }
 .nx-ride-workspace .nx-offer-rating { color: #775708; }
-.nx-ride-workspace :is(.nx-offer-tag-best, .nx-offer-tag-cheap) { color: #13533b; background: #d9ede1; }
+.nx-ride-workspace :is(.nx-offer-tag-best, .nx-offer-tag-cheap) { color: #132e53; background: #d9e1ed; }
 .nx-ride-workspace .nx-offer-tag-top { color: #775708; background: #f6eed6; }
 .nx-ride-workspace .nx-trip-step { padding: 9px 11px; }
 .nx-ride-workspace .nx-trip-step span { background: #d1e0f2; box-shadow: none; }
@@ -275,11 +276,26 @@
 }
 
 .nx-ride-workspace .nx-online-pill.on {
-  color: #125736;
-  background: #e3f4eb;
-  border-color: #c7e6d5;
+  color: #122f57;
+  background: #e3eaf4;
+  border-color: #c7d4e6;
 }
 
 .nx-ride-workspace .nx-map-control { color: var(--ride-accent); border-color: var(--ride-border); }
 .nx-ride-workspace .nx-app-drawer { background: #132843; }
 .nx-ride-workspace .nx-drawer-mode { background: #b9d6ff; color: #142844; }
+
+
+/* Keep both actors legible when GPS puts them at the same point. */
+.nx-gmap-rider-marker.is-with-driver .nx-gmap-rider-dot {
+  width: 52px;
+  height: 52px;
+  border: 2px solid #2565b8;
+  border-radius: 50%;
+}
+.nx-gmap-rider-marker.is-with-driver .nx-rider-core,
+.nx-gmap-rider-marker.is-with-driver .nx-rider-pulse { display: none; }
+.nx-gmap-rider-marker.is-with-driver .nx-gmap-marker-label {
+  top: auto;
+  bottom: calc(100% + 5px);
+}

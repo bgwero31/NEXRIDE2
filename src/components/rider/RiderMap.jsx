@@ -3,11 +3,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { onValue, ref } from "firebase/database";
-import { db } from "../../lib/firebase";
+import { onValue, ref, update } from "firebase/database";
+import { auth, db } from "../../lib/firebase";
 import LiveGoogleMap from "../maps/LiveGoogleMap";
 import {
-  googleMapsDirectionsUrl,
   pointFromRecord,
   toLatLng,
 } from "../../lib/googleMaps";
@@ -20,17 +19,6 @@ import {
 const DRIVER_STALE_MS = 90_000;
 const GPS_ACCURACY_LIMIT_M = 1200;
 
-function modeCopy(mode) {
-  switch (mode) {
-    case "request": return "Where to?";
-    case "waiting": return "Searching";
-    case "offers": return "Offers ready";
-    case "trip": return "Trip live";
-    case "completed": return "Completed";
-    default: return "Live";
-  }
-}
-
 function recordPoint(record, prefix, fallbackLabel) {
   const coords = pointFromRecord(record, prefix);
   if (coords) return { ...coords, label: fallbackLabel };
@@ -38,14 +26,12 @@ function recordPoint(record, prefix, fallbackLabel) {
 }
 
 export default function RiderMap({
-  mode,
   city,
   requestData,
   tripData,
+  tripId,
   completedTrip,
   draftRoute = null,
-  viewCount = 0,
-  offersCount = 0,
   boundsBottomPadding = 180,
   onDriversCountChange,
   onRouteInfoChange,
@@ -58,7 +44,6 @@ export default function RiderMap({
   const [gpsNotice, setGpsNotice] = useState("");
   const [routeInfo, setRouteInfo] = useState(null);
   const [mapStatus, setMapStatus] = useState("loading");
-  const [directionStep, setDirectionStep] = useState(null);
 
   const onDriversCountChangeRef = useRef(onDriversCountChange);
   const onRouteInfoChangeRef = useRef(onRouteInfoChange);
@@ -100,40 +85,40 @@ export default function RiderMap({
   useEffect(() => {
     if (typeof navigator === "undefined" || !navigator.geolocation) return;
 
-    const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        const accuracy = Number(pos.coords.accuracy || 9999);
-        if (accuracy > GPS_ACCURACY_LIMIT_M) {
-          setGpsNotice("Waiting for a more accurate GPS location. Move outdoors if possible.");
-          return;
-        }
-        setGpsNotice(accuracy > 250 ? "Approximate GPS location" : "");
+    let active = true;
+    let latestTimestamp = 0;
 
-        const gpsPoint = buildGpsPointFromPosition(pos);
-        if (!gpsPoint) return;
+    function receivePosition(position) {
+      if (!active || position.timestamp < latestTimestamp) return;
+      const point = buildGpsPointFromPosition(position);
+      if (!point) return;
 
-        const detected = getNearestCityFromPoint(gpsPoint);
-        const detectedKey = detected?.cityKey || "";
+      latestTimestamp = position.timestamp;
+      const detected = point.accuracy <= GPS_ACCURACY_LIMIT_M ? getNearestCityFromPoint(point) : null;
+      const detectedKey = detected?.cityKey || "";
+      if (detectedKey && detectedKey !== lastAnnouncedCityRef.current) {
+        lastAnnouncedCityRef.current = detectedKey;
+        onCityDetectedRef.current?.(detectedKey, detected);
+      }
+      setGpsNotice(point.accuracy > 250 ? "Showing approximate location while GPS improves." : "");
+      setRiderCurrentLocation({ ...point, city: detectedKey || cityKey, updatedAt: position.timestamp });
+    }
 
-        if (detectedKey && detectedKey !== lastAnnouncedCityRef.current) {
-          lastAnnouncedCityRef.current = detectedKey;
-          onCityDetectedRef.current?.(detectedKey, detected);
-        }
-
-        setRiderCurrentLocation({
-          lat: gpsPoint.lat,
-          lng: gpsPoint.lng,
-          heading: gpsPoint.heading,
-          accuracy,
-          city: detectedKey || cityKey,
-          label: "My live location",
-        });
+    const gps = navigator.geolocation;
+    gps.getCurrentPosition(receivePosition, () => {}, { maximumAge: 15000, timeout: 5000 });
+    const watchId = gps.watchPosition(
+      receivePosition,
+      (error) => {
+        if (!active) return;
+        setGpsNotice(error?.code === 1 ? "Enable location to show your rider marker." : "Waiting for an updated GPS fix.");
       },
-      (error) => setGpsNotice(error?.code === 1 ? "Location permission is off. Enable it to show your live rider pin." : "GPS is unavailable. Check location services and try again."),
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
     );
 
-    return () => navigator.geolocation.clearWatch(watchId);
+    return () => {
+      active = false;
+      gps.clearWatch(watchId);
+    };
   }, [cityKey]);
 
   useEffect(() => {
@@ -143,7 +128,7 @@ export default function RiderMap({
   const routeRecord = tripData || requestData || completedTrip || draftRoute || null;
   const pickup = routeRecord?.pickupName || "My live location";
   const dropoff = routeRecord?.dropoffName || "Choose destination";
-  const activeDriver = tripData?.driverName || completedTrip?.driverName || "Nearby drivers";
+
 
   const tripDriverLive = useMemo(
     () => toLatLng(tripData?.driverLive),
@@ -167,20 +152,24 @@ export default function RiderMap({
     [matchedOnlineDriver?.lat, matchedOnlineDriver?.lng]
   );
 
-  // --- THE NEW FALLBACK LOGIC ---
-  const fallbackPickup = useMemo(
-    () => recordPoint(tripData, "pickup", "Pickup"),
-    [tripData, pickup]
-  );
-
-  // A pickup coordinate is not the driver's position: only show a car when
-  // Firebase has an actual driver location.
   const driverLive = tripDriverLive || matchedDriverLatLng;
-  const riderLive = useMemo(
-    () => riderCurrentLocation || toLatLng(tripData?.riderLive) || toLatLng(fallbackPickup),
-    [tripData?.riderLive?.lat, tripData?.riderLive?.lng, riderCurrentLocation, fallbackPickup]
-  );
-  // -------------------------------
+  const sharedRiderLocation = toLatLng(tripData?.riderLive);
+  const riderLive = riderCurrentLocation || sharedRiderLocation;
+  const riderId = tripData?.riderId;
+  const sharingLocation = ["accepted", "arrived", "picked", "enroute"].includes(tripData?.status);
+  const lastSharedFix = useRef("");
+
+  useEffect(() => {
+    if (!tripId || !sharingLocation || !riderCurrentLocation || !riderId || auth.currentUser?.uid !== riderId) return;
+    const fix = `${tripId}:${riderCurrentLocation.updatedAt}`;
+    if (lastSharedFix.current === fix) return;
+    lastSharedFix.current = fix;
+    const { lat, lng, heading, accuracy, city, updatedAt } = riderCurrentLocation;
+    update(ref(db, `activeTrips/${tripId}/riderLive`), { lat, lng, heading, accuracy, city, updatedAt })
+      .catch(() => {
+        if (lastSharedFix.current === fix) lastSharedFix.current = "";
+      });
+  }, [riderCurrentLocation, riderId, sharingLocation, tripId]);
 
   const routeTargetMode =
     tripData?.status === "accepted" || tripData?.status === "arrived"
@@ -190,12 +179,13 @@ export default function RiderMap({
 
   const mapOrigin = useMemo(() => {
     if (tripData && driverLive) return { ...driverLive, label: "Driver live location" };
+    if (tripData && routeTargetMode === "pickup") return null;
     if (tripData) return riderLive || recordPoint(tripData, "pickup", tripData.pickupName || pickup);
     if (completedTrip) return recordPoint(completedTrip, "pickup", completedTrip.pickupName || pickup);
     if (requestData) return recordPoint(requestData, "pickup", requestData?.pickupName || pickup) || riderLive;
     if (draftRoute?.pickupCoords) return { ...draftRoute.pickupCoords, label: draftRoute.pickupName || "My live location" };
     return riderLive || recordPoint(draftRoute, "pickup", draftRoute?.pickupName || pickup);
-  }, [completedTrip, draftRoute, driverLive, pickup, requestData, riderLive, tripData]);
+  }, [completedTrip, draftRoute, driverLive, pickup, requestData, riderLive, routeTargetMode, tripData]);
 
   const mapDestination = useMemo(() => {
     if (tripData && routeTargetMode === "pickup") return riderLive || recordPoint(tripData, "pickup", tripData.pickupName || pickup);
@@ -207,36 +197,7 @@ export default function RiderMap({
     return null; 
   }, [completedTrip, draftRoute, dropoff, pickup, requestData, riderLive, routeTargetMode, tripData]);
 
-  const driverMarkers = useMemo(
-    () =>
-      drivers
-        .map((driver) => ({
-          ...driver,
-          type: "driver",
-          title: driver.name || "Driver",
-          label: "",
-        }))
-        .filter(
-          (driver) =>
-            Number.isFinite(Number(driver.lat)) &&
-            Number.isFinite(Number(driver.lng))
-        ),
-    [drivers]
-  );
-
-  const openMapsUrl = useMemo(() => {
-    if (!mapOrigin || !mapDestination) return "";
-    return googleMapsDirectionsUrl({
-      origin: mapOrigin,
-      destination: mapDestination,
-      city: cityKey,
-    });
-  }, [cityKey, mapDestination, mapOrigin]);
-
-  const isSearching = mode === "waiting";
-  const isRequestMode = mode === "request";
-  const showRouteCard = Boolean(requestData || tripData || completedTrip || draftRoute?.dropoffName);
-  const showFallbackSkeleton = mapStatus !== "google" && !tripData;
+  const showFallbackSkeleton = mapStatus !== "google";
 
   const zoomIn = () => mapApiRef.current?.zoomIn?.();
   const zoomOut = () => mapApiRef.current?.zoomOut?.();
@@ -251,20 +212,6 @@ export default function RiderMap({
   return (
     <section className="nx-live-map rider-map">
       
-      {/* THE HEAD SOUTH NAVIGATION BANNER */}
-      {directionStep && showRoute && tripData && (
-        <div className="nx-map-nav-banner">
-          <div className="nx-map-nav-icon">
-            {directionStep.maneuver === "turn-right" ? "➡️" : 
-             directionStep.maneuver === "turn-left" ? "⬅️" : "⬆️"}
-          </div>
-          <div className="nx-map-nav-text">
-            <strong>{directionStep.text}</strong>
-            {directionStep.distance && <span>In {directionStep.distance}</span>}
-          </div>
-        </div>
-      )}
-
       {showFallbackSkeleton ? (
         <>
           <svg className="nx-route-svg" viewBox="0 0 400 760" preserveAspectRatio="none" aria-hidden="true">
@@ -290,60 +237,19 @@ export default function RiderMap({
         role="rider"
         origin={mapOrigin}
         destination={mapDestination}
-        riderLocation={riderCurrentLocation}
+        riderLocation={riderLive}
         driverLocation={tripData ? driverLive : null}
         pickupLocation={recordPoint(routeRecord, "pickup", "Pickup")}
         dropoffLocation={recordPoint(routeRecord, "dropoff", "Drop-off")}
         nearbyDrivers={tripData ? drivers.filter(d => d.id !== tripData.driverId) : drivers}
         showRoute={showRoute}
         cameraFollow={true}
-        followTarget={tripData ? "driver" : mapDestination ? "route" : "rider"}
+        followTarget={showRoute ? "route" : "rider"}
         routePhase={isCompletedMap ? "completed" : tripData ? routeTargetMode : "request"}
         boundsBottomPadding={boundsBottomPadding}
         onRouteInfo={setRouteInfo}
         onMapStatus={setMapStatus}
-        onDirectionStep={setDirectionStep}
       />
-
-      {!isRequestMode ? (
-        <div className={`nx-map-card nx-map-status-card ${isSearching ? "is-searching" : ""}`}>
-          <div>
-            <h3>{modeCopy(mode)}</h3>
-            <p>{activeDriver}</p>
-          </div>
-          {drivers.length > 0 ? (
-            <div className="nx-map-chip">{drivers.length} nearby</div>
-          ) : null}
-        </div>
-      ) : null}
-
-      {showRouteCard ? (
-        <div className="nx-map-card nx-map-route-card">
-          <div className="nx-route-mini-row">
-            <span className="nx-dot nx-dot-pickup" />
-            {pickup}
-          </div>
-          <div className="nx-route-mini-row">
-            <span className="nx-dot nx-dot-destination" />
-            {dropoff}
-          </div>
-          <div className="nx-map-metrics">
-            <span>{routeInfo?.distanceText || routeRecord?.distanceText || "—"}</span>
-            <span>{routeInfo?.durationText || routeRecord?.durationText || "—"}</span>
-            <span>
-              {completedTrip ? "Final route" : tripData ? routeTargetMode === "pickup" ? "Driver to pickup" : "To destination" : requestData ? `${viewCount} viewed` : "Preview"}
-            </span>
-            {requestData && !tripData ? (
-              <span>{offersCount} offer{offersCount === 1 ? "" : "s"}</span>
-            ) : null}
-          </div>
-          {openMapsUrl ? (
-            <a className="nx-map-open-link" href={openMapsUrl} target="_blank" rel="noreferrer">
-              Open in Google Maps
-            </a>
-          ) : null}
-        </div>
-      ) : null}
 
       <div className="nx-map-control-stack">
         <button type="button" className="nx-map-control" onClick={zoomIn} aria-label="Zoom in">＋</button>

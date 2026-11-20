@@ -11,8 +11,7 @@ import { auth, db } from "../../../lib/firebase";
 import MobileShell from "../../../components/ui/MobileShell";
 import FloatingTopBar from "../../../components/ui/FloatingTopBar";
 import BottomSheet from "../../../components/ui/BottomSheet";
-import LiveGoogleMap from "../../../components/maps/LiveGoogleMap";
-import { googleMapsDirectionsUrl, pointFromRecord, toLatLng } from "../../../lib/googleMaps";
+import RiderMap from "../../../components/rider/RiderMap";
 import ActionCard from "../../../components/ui/ActionCard";
 
 function cityLabel(city) {
@@ -55,9 +54,9 @@ function tripStatusStyle(status) {
   if (status === "picked" || status === "enroute") {
     return {
       ...base,
-      color: "#e7ffe9",
-      background: "rgba(31,214,122,0.12)",
-      border: "1px solid rgba(31,214,122,0.22)",
+      color: "#eaf1fc",
+      background: "rgba(31, 107, 214,0.12)",
+      border: "1px solid rgba(31, 107, 214,0.22)",
     };
   }
 
@@ -192,16 +191,6 @@ export default function TripPage() {
     router.push("/rider");
   };
 
-  const driverPoint = toLatLng(trip?.driverLive);
-  const navigatingToPickup = trip?.status === "accepted" || trip?.status === "arrived";
-  const routeOrigin = driverPoint || pointFromRecord(trip, "pickup") || (trip?.pickupName ? { label: trip.pickupName } : null);
-  const routeDestination = navigatingToPickup
-    ? pointFromRecord(trip, "pickup") || (trip?.pickupName ? { label: trip.pickupName } : null)
-    : pointFromRecord(trip, "dropoff") || (trip?.dropoffName ? { label: trip.dropoffName } : null);
-  const mapsHref = trip
-    ? googleMapsDirectionsUrl({ origin: routeOrigin || trip.pickupName, destination: routeDestination || trip.dropoffName, city: trip.city || "harare" })
-    : "";
-
   if (!authReady || loadingProfile || loadingTrip) {
     return (
       <MobileShell>
@@ -229,43 +218,7 @@ export default function TripPage() {
 
   return (
     <MobileShell>
-      <section className="nx-live-map rider-map">
-        <div className="nx-map-grid" />
-        <div className="nx-map-glow one" />
-        <div className="nx-map-glow two" />
-        <LiveGoogleMap
-          city={trip?.city || "harare"}
-          role="rider"
-          origin={routeOrigin}
-          destination={routeDestination}
-          driverLocation={driverPoint}
-          riderLocation={toLatLng(trip?.riderLive)}
-          showRoute={Boolean(trip && routeOrigin && routeDestination)}
-          followTarget="driver"
-          routePhase={navigatingToPickup ? "pickup" : "destination"}
-          onRouteInfo={setRouteInfo}
-        />
-        <div className="nx-map-card nx-map-status-card">
-          <div>
-            <span className="nx-eyebrow">Live trip route</span>
-            <h3>{trip ? statusMessage(trip.status) : "Trip"}</h3>
-            <p>{trip?.driverName || "Driver"} • {trip?.city || "NEXRIDE"}</p>
-          </div>
-          <div className="nx-map-chip">Google live</div>
-        </div>
-        {trip ? (
-          <div className="nx-map-card nx-map-route-card">
-            <div className="nx-route-mini-row"><span className="nx-dot nx-dot-pickup" />{trip.pickupName || "Pickup"}</div>
-            <div className="nx-route-mini-row"><span className="nx-dot nx-dot-destination" />{trip.dropoffName || "Destination"}</div>
-            <div className="nx-map-metrics">
-              <span>{routeInfo?.distanceText || trip.distanceText || "Distance loading"}</span>
-              <span>{routeInfo?.durationText || trip.durationText || "ETA loading"}</span>
-              <span>{navigatingToPickup ? "Driver to pickup" : "To destination"}</span>
-            </div>
-            <a className="nx-map-open-link" href={mapsHref} target="_blank" rel="noreferrer">Open in Google Maps</a>
-          </div>
-        ) : null}
-      </section>
+      <RiderMap city={trip?.city} tripData={trip} tripId={tripId} onRouteInfoChange={setRouteInfo} />
 
       <FloatingTopBar
         title="NEXRIDE"
@@ -314,9 +267,9 @@ export default function TripPage() {
               style={{
                 padding: 12,
                 borderRadius: 14,
-                background: "rgba(31, 214, 122, 0.08)",
-                border: "1px solid rgba(31, 214, 122, 0.18)",
-                color: "#d5ffe7",
+                background: "rgba(31, 107, 214, 0.08)",
+                border: "1px solid rgba(31, 107, 214, 0.18)",
+                color: "#dae7fa",
                 fontSize: 13,
                 fontWeight: 700,
               }}
@@ -362,7 +315,6 @@ export default function TripPage() {
                   <div className="nx-map-metrics nx-request-metrics">
                     <span>{routeInfo?.distanceText || trip.distanceText || "Distance loading"}</span>
                     <span>{routeInfo?.durationText || trip.durationText || "ETA loading"}</span>
-                    <a href={mapsHref} target="_blank" rel="noreferrer">Open map</a>
                   </div>
 
                   <div style={{ fontSize: 13, color: "#9fb3c8" }}>

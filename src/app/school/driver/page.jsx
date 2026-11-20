@@ -33,7 +33,7 @@ export default function SchoolDriverPage() {
     return onValue(ref(db, "nexrideSchool/schools"), (snap) => {
       const all = rows(snap);
       setSchools(all);
-      if (!schoolId && all[0]?.id) setSchoolId(all[0].id);
+      setSchoolId((current) => all.some((school) => school.id === current) ? current : all[0]?.id || "");
     });
   }, []);
 
@@ -43,7 +43,7 @@ export default function SchoolDriverPage() {
     const offVehicles = onValue(ref(db, `nexrideSchool/vehicles/${schoolId}`), (snap) => {
       const all = rows(snap);
       setVehicles(all);
-      if (!vehicleId && all[0]?.id) setVehicleId(all[0].id);
+      setVehicleId((current) => all.some((vehicle) => vehicle.id === current) ? current : all[0]?.id || "");
     });
     const offStudents = onValue(ref(db, `nexrideSchool/students/${schoolId}`), (snap) => setStudents(rows(snap)));
     return () => { offVehicles(); offStudents(); };
@@ -57,7 +57,7 @@ export default function SchoolDriverPage() {
   const assignedKids = useMemo(() => students.filter((kid) => !vehicleId || kid.vehicleId === vehicleId), [students, vehicleId]);
 
   const startRoute = async () => {
-    if (!schoolId || !vehicleId) return;
+    if (!school || !vehicle || tracking) return;
     const tripRef = push(ref(db, `nexrideSchool/trips/${schoolId}`));
     const initialLoc = await getNexrideLocation({ allowWeak: true });
     const payload = { id: tripRef.key, schoolId, vehicleId, type: tripType, status: "started", startedAt: now(), updatedAt: now(), routeName: tripType === "morning" ? "Morning pickup" : "Afternoon drop-off" };
@@ -98,7 +98,7 @@ export default function SchoolDriverPage() {
 
   return (
     <div className="nx-school-map-shell">
-      <LiveGoogleMap city={school?.city || "Zvishavane"} role="driver" origin={live} destination={assignedKids[0]?.pickupPoint || school?.name} driverLocation={live} routePhase="school" cameraFollow followTarget="driver" />
+      <LiveGoogleMap lightMap city={school?.city || "Zvishavane"} role="driver" origin={live} destination={assignedKids[0]?.pickupPoint || school?.name} driverLocation={live} routePhase="school" cameraFollow followTarget="driver" />
       <FloatingTopBar title="NEXRIDE" subtitle="School driver" role="driver" />
       <main className="nx-school-driver-panel nx-bottom-sheet">
         <div className="nx-sheet-handle" />
@@ -106,9 +106,9 @@ export default function SchoolDriverPage() {
           <div><div className="nx-eyebrow">School driver mode</div><h1 className="nx-sheet-title">Live kombi tracking</h1><p className="nx-sheet-copy">Start a route so parents can track the kombi and receive child safety alerts.</p></div>
           <span className="nx-status-pill">{tracking ? "LIVE" : "OFFLINE"}</span>
         </div>
-        <div className="nx-field-grid two"><label className="nx-field"><span>School</span><select className="nx-input" value={schoolId} onChange={(e) => setSchoolId(e.target.value)}>{schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label><label className="nx-field"><span>Kombi</span><select className="nx-input" value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}>{vehicles.map((v) => <option key={v.id} value={v.id}>{v.name} • {v.plate}</option>)}</select></label></div>
-        <div className="nx-field-grid two"><label className="nx-field"><span>Trip type</span><select className="nx-input" value={tripType} onChange={(e) => setTripType(e.target.value)}><option value="morning">Morning pickup</option><option value="afternoon">Afternoon drop-off</option></select></label><div className="nx-color-preview small" style={{ background: vehicle?.color || "#0066ff" }}><span>{vehicle?.colorName || "NEX blue"}</span><strong>{vehicle?.plate || "No plate"}</strong></div></div>
-        <div className="nx-button-grid two"><PremiumButton type="button" onClick={startRoute} disabled={tracking}>Start route</PremiumButton><button className="nx-btn nx-btn-secondary" type="button" onClick={() => stopRoute("completed")} disabled={!tracking}>Complete</button></div>
+        <div className="nx-field-grid two"><label className="nx-field"><span>School</span><select className="nx-input" value={schoolId} disabled={tracking} onChange={(e) => setSchoolId(e.target.value)}>{schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label><label className="nx-field"><span>Kombi</span><select className="nx-input" value={vehicleId} disabled={tracking} onChange={(e) => setVehicleId(e.target.value)}>{vehicles.map((v) => <option key={v.id} value={v.id}>{v.name} • {v.plate}</option>)}</select></label></div>
+        <div className="nx-field-grid two"><label className="nx-field"><span>Trip type</span><select className="nx-input" value={tripType} disabled={tracking} onChange={(e) => setTripType(e.target.value)}><option value="morning">Morning pickup</option><option value="afternoon">Afternoon drop-off</option></select></label><div className="nx-color-preview small" style={{ background: vehicle?.color || "#0066ff" }}><span>{vehicle?.colorName || "NEX blue"}</span><strong>{vehicle?.plate || "No plate"}</strong></div></div>
+        <div className="nx-button-grid two"><PremiumButton type="button" onClick={startRoute} disabled={tracking || !school || !vehicle}>Start route</PremiumButton><button className="nx-btn nx-btn-secondary" type="button" onClick={() => stopRoute("completed")} disabled={!tracking}>Complete</button></div>
         <section className="nx-school-kid-list"><div className="nx-eyebrow">Assigned kids</div>{assignedKids.map((kid) => <div key={kid.id} className="nx-school-list-item"><span className="nx-school-badge">🎒</span><div><strong>{kid.childName}</strong><small>{kid.pickupPoint || "Pickup point"} • {kid.parentPhone || "No parent phone"}</small></div><div className="nx-kid-actions"><button onClick={() => markKid(kid, "boarded")}>Boarded</button><button onClick={() => markKid(kid, "dropped")}>Dropped</button><button onClick={() => markKid(kid, "absent")}>Absent</button></div></div>)}</section>
       </main>
     </div>

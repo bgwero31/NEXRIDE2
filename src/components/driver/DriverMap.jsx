@@ -5,8 +5,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import LiveGoogleMap from "../maps/LiveGoogleMap";
 import {
-  cityLabel,
-  googleMapsDirectionsUrl,
   pointFromRecord,
   toLatLng,
 } from "../../lib/googleMaps";
@@ -18,16 +16,6 @@ const GPS_ACCURACY_LIMIT_M = 1200;
 const MAX_REQUEST_PINS = 30;
 
 /* ------------------------------ Helpers ------------------------------- */
-
-function modeCopy(mode) {
-  switch (mode) {
-    case "offline": return "Go online";
-    case "queue": return "Requests near you";
-    case "trip": return "Active trip";
-    case "completed": return "Trip complete";
-    default: return "Driver map";
-  }
-}
 
 function recordPoint(record, prefix, fallbackLabel) {
   const coords = pointFromRecord(record, prefix);
@@ -117,12 +105,6 @@ const DriverMap = forwardRef(function DriverMap(
     mode === "queue" ? "Tap a request to view route" : "Open request marketplace"
   );
 
-  // --- THE NEW FALLBACK LOGIC ---
-  const fallbackPickup = useMemo(
-    () => recordPoint(activeTrip, "pickup", "Pickup"),
-    [activeTrip]
-  );
-
   const driverLive = useMemo(
     () => selfLocation || toLatLng(activeTrip?.driverLive),
     [activeTrip?.driverLive?.lat, activeTrip?.driverLive?.lng, selfLocation]
@@ -141,10 +123,10 @@ const DriverMap = forwardRef(function DriverMap(
 
   const routeOrigin = useMemo(() => {
     if (driverLive && activeTrip) return { ...driverLive, label: "My live location" };
-    if (activeTrip) return recordPoint(activeTrip, "pickup", activeTrip.pickupName || pickup);
+    if (activeTrip && routeTargetMode === "destination") return riderLive || recordPoint(activeTrip, "pickup", activeTrip.pickupName || pickup);
     if (completedTrip) return recordPoint(completedTrip, "pickup", completedTrip.pickupName || pickup);
     return null;
-  }, [activeTrip, completedTrip, driverLive, pickup]);
+  }, [activeTrip, completedTrip, driverLive, pickup, riderLive, routeTargetMode]);
 
   const routeDestination = useMemo(() => {
     if (activeTrip && routeTargetMode === "pickup" && riderLive) {
@@ -182,16 +164,6 @@ const DriverMap = forwardRef(function DriverMap(
       );
   }, [requests, activeTrip, completedTrip]);
 
-  /* -------------------------- Directions URL ------------------------- */
-  const openMapsUrl = useMemo(() => {
-    if (!routeOrigin || !routeDestination) return "";
-    return googleMapsDirectionsUrl({
-      origin: routeOrigin,
-      destination: routeDestination,
-      city: cityKey,
-    });
-  }, [cityKey, routeDestination, routeOrigin]);
-
   /* ------------------ Imperative API for parent ---------------------- */
   useImperativeHandle(
     ref,
@@ -205,9 +177,7 @@ const DriverMap = forwardRef(function DriverMap(
   );
 
   /* ---------------------------- Derived ------------------------------ */
-  const isSearching = mode === "queue" || mode === "offline";
-  const showRouteCard = Boolean(activeTrip || completedTrip);
-  const showFallbackSkeleton = mapStatus !== "google" && !activeTrip;
+  const showFallbackSkeleton = mapStatus !== "google";
   
   // Helper to check if route is active
   const showRoute = Boolean(
@@ -287,9 +257,7 @@ const DriverMap = forwardRef(function DriverMap(
         }
         riderPhotoUrl={activeTrip?.riderPhotoUrl || completedTrip?.riderPhotoUrl || ""}
         showRoute={showRoute}
-        followTarget={
-          completedTrip ? "route" : activeTrip ? "driver" : "driver"
-        }
+        followTarget={showRoute ? "route" : "driver"}
         routePhase={
           completedTrip
             ? "completed"
@@ -304,59 +272,6 @@ const DriverMap = forwardRef(function DriverMap(
         onMapStatus={setMapStatus}
         onDirectionStep={setDirectionStep}
       />
-
-      {/* Status card */}
-      <div
-        className={`nx-map-card nx-map-status-card ${
-          isSearching ? "is-searching" : ""
-        }`}
-      >
-        <div>
-          <h3>{modeCopy(mode)}</h3>
-          <p>
-            {cityLabel(cityKey)} • {requests.length} open request
-            {requests.length === 1 ? "" : "s"}
-          </p>
-        </div>
-        <div className="nx-map-chip">
-          {mapStatus === "google" ? "Google live" : "Loading…"}
-        </div>
-      </div>
-
-      {/* Route card — only when a trip is active */}
-      {showRouteCard ? (
-        <div className="nx-map-card nx-map-route-card">
-          <div className="nx-route-mini-row">
-            <span className="nx-dot nx-dot-pickup" />
-            {pickup}
-          </div>
-          <div className="nx-route-mini-row">
-            <span className="nx-dot nx-dot-destination" />
-            {dropoff}
-          </div>
-          <div className="nx-map-metrics">
-            <span>{routeInfo?.distanceText || routeRecord?.distanceText || "—"}</span>
-            <span>{routeInfo?.durationText || routeRecord?.durationText || "—"}</span>
-            <span>
-              {completedTrip
-                ? "Final route"
-                : routeTargetMode === "pickup"
-                ? "Navigate to pickup"
-                : "Navigate to destination"}
-            </span>
-          </div>
-          {openMapsUrl ? (
-            <a
-              className="nx-map-open-link"
-              href={openMapsUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Open in Google Maps
-            </a>
-          ) : null}
-        </div>
-      ) : null}
 
       {/* Map controls */}
       <div className="nx-map-control-stack">

@@ -29,14 +29,14 @@ export default function NexrideSplash() {
           <circle cx="32" cy="32" r="22" fill="#ffffff"/>
           <path
             d="M32 12 L48 48 L32 40 L16 48 Z"
-            fill="#1bb469"
-            stroke="#1bb469"
+            fill="#1b5bb4"
+            stroke="#1b5bb4"
             strokeWidth="1"
             strokeLinejoin="round"
           />
           <path
             d="M32 12 L46 44"
-            stroke="#a8ffd0"
+            stroke="#b2cef5"
             strokeWidth="1.4"
             strokeLinecap="round"
             fill="none"

@@ -47,9 +47,9 @@ function statusPill(status) {
   if (status === "open") {
     return {
       ...base,
-      color: "#eaffdc",
-      background: "rgba(45,200,95,0.12)",
-      border: "1px solid rgba(45,200,95,0.22)",
+      color: "#e0ebfb",
+      background: "rgba(45, 110, 200,0.12)",
+      border: "1px solid rgba(45, 110, 200,0.22)",
     };
   }
 

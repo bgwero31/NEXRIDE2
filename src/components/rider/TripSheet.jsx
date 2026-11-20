@@ -2,10 +2,9 @@
 
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ActionCard from "../ui/ActionCard";
 import PremiumButton from "../ui/PremiumButton";
-import { googleMapsDirectionsUrl, toLatLng } from "../../lib/googleMaps";
 import {
   isNexrideVoiceEnabled,
   muteNexrideVoice,
@@ -92,24 +91,7 @@ export default function TripSheet({
   const isCancelled = tripStatus === "cancelled";
   const activeIndex = activeStepIndex(tripStatus);
 
-  const driverLive = useMemo(
-    () => (tripData ? toLatLng(tripData.driverLive) : null),
-    [tripData?.driverLive]
-  );
-
-  const navigatingToPickup =
-    tripStatus === "accepted" || tripStatus === "arrived";
-
-  const mapsHref = useMemo(() => {
-    if (!tripData) return "#";
-    return googleMapsDirectionsUrl({
-      origin: driverLive || tripData.pickupName || "Pickup",
-      destination: navigatingToPickup
-        ? tripData.pickupName || "Pickup"
-        : tripData.dropoffName || "Destination",
-      city: tripData.city || "harare",
-    });
-  }, [driverLive, navigatingToPickup, tripData]);
+  const navigatingToPickup = tripStatus === "accepted" || tripStatus === "arrived";
 
   const eta = etaText(liveRouteInfo, tripData);
   const driverPhoneOk = hasPhone(tripData?.driverPhone);
@@ -294,15 +276,6 @@ export default function TripSheet({
               NEXRIDE nav
             </a>
           </div>
-
-          <a
-            className="nx-btn nx-btn-secondary"
-            href={mapsHref}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Open in Google Maps
-          </a>
 
           {confirmCancel ? (
             <div className="nx-confirm-row">

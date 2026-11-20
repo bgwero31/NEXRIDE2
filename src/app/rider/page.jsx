@@ -9,8 +9,6 @@ import { get, onValue, ref, remove, set, update, push, runTransaction } from "fi
 import { auth, db } from "../../lib/firebase";
 import { googleMapsDirectionsUrl } from "../../lib/googleMaps";
 import {
-  buildGpsPointFromPosition,
-  getNearestCityFromPoint,
   normalizeCity,
   saveDetectedCity,
   saveDetectedCityLocal,
@@ -322,44 +320,6 @@ export default function RiderPage() {
 
     return teardown;
   }, [tripId]);
-
-  /* ------------- Rider live GPS broadcast during active trip ---------- */
-  // Deps include `handleDetectedCity` (stable via useCallback) so
-  // the effect never captures a stale handler.
-  useEffect(() => {
-    if (!user || !tripId || !tripData?.status) return;
-    if (!["accepted", "arrived"].includes(tripData.status)) return;
-    if (typeof navigator === "undefined" || !navigator.geolocation) return;
-
-    const watchId = navigator.geolocation.watchPosition(
-      async (pos) => {
-        try {
-          const gpsPoint = buildGpsPointFromPosition(pos);
-          if (!gpsPoint) return;
-
-          const detected = getNearestCityFromPoint(gpsPoint);
-          const liveCity = detected?.cityKey || cityRef.current;
-          if (detected?.cityKey) await handleDetectedCity(detected.cityKey);
-
-          await update(ref(db, `activeTrips/${tripId}/riderLive`), {
-            lat: gpsPoint.lat,
-            lng: gpsPoint.lng,
-            heading: gpsPoint.heading,
-            city: liveCity,
-            updatedAt: Date.now(),
-          });
-        } catch (err) {
-          if (process.env.NODE_ENV !== "production") {
-            console.warn("[RiderPage] rider GPS broadcast failed:", err);
-          }
-        }
-      },
-      () => {},
-      { enableHighAccuracy: true, maximumAge: 15000, timeout: 12000 }
-    );
-
-    return () => navigator.geolocation.clearWatch(watchId);
-  }, [tripData?.status, tripId, user?.uid, handleDetectedCity]);
 
   /* ----------------------- Derived toast actors ----------------------- */
   const latestViewer = useMemo(() => {
@@ -818,14 +778,12 @@ export default function RiderPage() {
   return (
     <MobileShell className="nx-ride-workspace" decorators={false}>
       <RiderMap
-        mode={mode}
         city={city}
         requestData={requestData}
         tripData={tripData}
+        tripId={tripId}
         completedTrip={completedTrip}
         draftRoute={draftRoute}
-        viewCount={viewCount}
-        offersCount={offers.length}
         boundsBottomPadding={92}
         onDriversCountChange={setNearbyDriversCount}
         onRouteInfoChange={setLiveRouteInfo}

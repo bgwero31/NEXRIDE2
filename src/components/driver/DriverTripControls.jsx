@@ -5,7 +5,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ref, remove, runTransaction, set, update } from "firebase/database";
 import { db } from "../../lib/firebase";
-import { googleMapsDirectionsUrl, toLatLng } from "../../lib/googleMaps";
 import {
   nexrideNotificationTypes,
   queueNexrideEvent,
@@ -114,18 +113,6 @@ export default function DriverTripControls({
     tripStatus === "accepted" || tripStatus === "arrived";
 
   /* ---------- Directions URL (recomputes when driver moves) ---------- */
-  const driverLive = useMemo(() => toLatLng(trip?.driverLive), [trip?.driverLive]);
-
-  const navigateHref = useMemo(() => {
-    if (!trip) return "#";
-    return googleMapsDirectionsUrl({
-      origin: driverLive || trip.pickupName || "My location",
-      destination: navigatingToPickup
-        ? trip.pickupName || "Pickup"
-        : trip.dropoffName || "Destination",
-      city: trip.city || "harare",
-    });
-  }, [driverLive, navigatingToPickup, trip]);
 
   /* -------------------- Status update (guarded) -------------------- */
   const updateStatus = useCallback(
@@ -499,14 +486,6 @@ export default function DriverTripControls({
       <div className="nx-button-grid two">
         <a className="nx-btn" href={`/trip/${tripId}/navigate`}>
           NEXRIDE nav
-        </a>
-        <a
-          className="nx-btn nx-btn-secondary"
-          href={navigateHref}
-          target="_blank"
-          rel="noreferrer"
-        >
-          Open Google
         </a>
 
         {riderPhoneOk ? (

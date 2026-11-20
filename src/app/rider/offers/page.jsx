@@ -46,9 +46,9 @@ function statusPill(status) {
   if (status === "accepted") {
     return {
       ...base,
-      color: "#eaffdc",
-      background: "rgba(45,200,95,0.12)",
-      border: "1px solid rgba(45,200,95,0.22)",
+      color: "#e0ebfb",
+      background: "rgba(45, 110, 200,0.12)",
+      border: "1px solid rgba(45, 110, 200,0.22)",
     };
   }
 
@@ -426,9 +426,9 @@ export default function RiderOffersPage() {
               style={{
                 padding: 12,
                 borderRadius: 14,
-                background: "rgba(31, 214, 122, 0.08)",
-                border: "1px solid rgba(31, 214, 122, 0.18)",
-                color: "#d5ffe7",
+                background: "rgba(31, 107, 214, 0.08)",
+                border: "1px solid rgba(31, 107, 214, 0.18)",
+                color: "#dae7fa",
                 fontSize: 13,
                 fontWeight: 700,
               }}
