@@ -8,6 +8,7 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import { get, onValue, push, ref, remove, set, update } from "firebase/database";
 import { auth, db } from "../../../lib/firebase";
 
+import { queueNexrideEvent, nexrideNotificationTypes } from "../../../lib/nexrideNotifications";
 import MobileShell from "../../../components/ui/MobileShell";
 import FloatingTopBar from "../../../components/ui/FloatingTopBar";
 import BottomSheet from "../../../components/ui/BottomSheet";
@@ -250,6 +251,15 @@ export default function RiderOffersPage() {
         matchedAt: now,
       });
 
+      void queueNexrideEvent({
+        type: nexrideNotificationTypes.OFFER_ACCEPTED,
+        city,
+        targetUid: offer.driverId,
+        title: "Your offer was accepted",
+        message: "Your rider accepted your fare. Open NEXRIDE to view the pickup.",
+        url: "/driver",
+        data: { tripId, requestId: latestRequestId },
+      });
       setActiveTrip(payload);
       setSuccess("Driver accepted successfully.");
 

@@ -1,8 +1,7 @@
 // File: src/lib/nexrideNotifications.js
 /**
  * NEXRIDE notification bus.
- * Writes events to Firebase RTDB, forwards to an optional HTTP endpoint,
- * and triggers an optional native device notification (Android/iOS wrapper).
+ * Writes events to Firebase RTDB and forwards them to an authenticated push relay.
  *
  * Design goals:
  *  - Never throw into the caller. Notifications are best-effort.
@@ -11,9 +10,8 @@
  *  - Fully documented + tree-shakeable constants.
  */
 
-import { push, ref, set, update } from "firebase/database";
-import { db } from "./firebase";
-import { nexrideDeviceNotify } from "./nexrideNative";
+import { push, ref, set } from "firebase/database";
+import { auth, db } from "./firebase";
 
 /* ------------------------------ Constants ----------------------------- */
 
@@ -50,8 +48,6 @@ export const nexrideNotificationTypes = Object.freeze({
 });
 
 /* ------------------------------ Utilities ----------------------------- */
-
-const isBrowser = typeof window !== "undefined";
 
 /**
  * Deep-clone a value while replacing `undefined` with `null`.
@@ -96,11 +92,12 @@ function truncate(str, max) {
   return s.length > max ? s.slice(0, max - 1) + "…" : s;
 }
 
-/** In-memory dedupe cache: key = type|targetUid|title|message. */
+/** In-memory dedupe cache scoped to the ride and recipients. */
 const recentKeys = new Map();
 
 function dedupeKey(evt) {
-  return [evt.type, evt.targetUid, evt.city, evt.title, evt.message].join("|");
+  return JSON.stringify([evt.type, evt.targetRole, evt.targetUid, evt.targetUids, evt.city,
+    evt.data?.tripId, evt.data?.requestId, evt.title, evt.message]);
 }
 
 function isDuplicate(key) {
@@ -151,54 +148,51 @@ export async function queueNexrideEvent(event = {}) {
     targetUid: event.targetUid || "",
     targetUids: Array.isArray(event.targetUids) ? event.targetUids.filter(Boolean) : [],
     url: event.url || "/",
+    data: event.data || {},
   };
 
   if (isDuplicate(dedupeKey(base))) {
     return { id: null, delivered: false, reason: "duplicate" };
   }
 
+  const sender = auth.currentUser;
   const queueRef = push(ref(db, QUEUE_PATH));
   const payload = sanitizeForFirebase({
     id: queueRef.key,
     app: "nexride",
     channel: event.channel || "push",
     ...base,
-    data: event.data || {},
+    senderUid: sender?.uid || "",
     status: "queued",
     createdAt: now,
     updatedAt: now,
   });
 
   /* 1) Write to RTDB queue (primary channel). */
+  let queued = false;
   try {
     await set(queueRef, payload);
+    queued = true;
   } catch (err) {
     if (process.env.NODE_ENV !== "production") {
       console.warn("[nexrideNotifications] RTDB write failed:", err?.message || err);
     }
-    // Continue — endpoint/native may still work.
+    recentKeys.delete(dedupeKey(base));
   }
 
   /* 2) Optional HTTP forward. */
   const endpoint = process.env.NEXT_PUBLIC_NEXRIDE_NOTIFY_ENDPOINT || "";
-  if (endpoint) {
+  if (endpoint && queued && sender && payload.channel === "push") {
     try {
+      const token = await sender.getIdToken();
       const res = await fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(8000),
         body: JSON.stringify(payload),
         keepalive: true,
       });
-      if (res.ok) {
-        try {
-          await update(ref(db, `${QUEUE_PATH}/${queueRef.key}`), {
-            status: "sent_to_endpoint",
-            updatedAt: Date.now(),
-          });
-        } catch {
-          // Non-fatal.
-        }
-      }
+      if (res.ok) return { id: queueRef.key, delivered: false, reason: "relay_accepted" };
     } catch (err) {
       if (process.env.NODE_ENV !== "production") {
         console.warn("[nexrideNotifications] endpoint failed:", err?.message || err);
@@ -206,16 +200,5 @@ export async function queueNexrideEvent(event = {}) {
     }
   }
 
-  /* 3) Native device notification (Android wrapper). Fire-and-forget — don't block. */
-  if (isBrowser) {
-    Promise.resolve()
-      .then(() => nexrideDeviceNotify?.(payload.title, payload.message, payload.data))
-      .catch((err) => {
-        if (process.env.NODE_ENV !== "production") {
-          console.warn("[nexrideNotifications] native notify failed:", err?.message || err);
-        }
-      });
-  }
-
-  return { id: queueRef.key, delivered: true };
+  return { id: queued ? queueRef.key : null, delivered: false, reason: queued ? "queued" : "queue_failed" };
 }

@@ -137,7 +137,7 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
             map: mapRef.current, 
             suppressMarkers: true, 
             preserveViewport: true, 
-            polylineOptions: { strokeColor: lightMap ? "#087965" : "#20e28a", strokeOpacity: 1, strokeWeight: 7, zIndex: 50 }
+            polylineOptions: { strokeColor: lightMap ? "#2262bb" : "#20e28a", strokeOpacity: 1, strokeWeight: 7, zIndex: 50 }
           });
         }
         setReady(true); setError(""); onMapStatusRef.current?.("google");
@@ -254,7 +254,7 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
     if (p1 && p2) {
       fallbackPolylineRef.current = new google.maps.Polyline({ 
         path: [p1, p2], 
-        strokeColor: lightMap ? "#087965" : "#20e28a",
+        strokeColor: lightMap ? "#2262bb" : "#20e28a",
         strokeOpacity: 0.5, 
         strokeWeight: 6, 
         map: mapRef.current 

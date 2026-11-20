@@ -640,23 +640,25 @@ export default function RiderPage() {
     setSuccess("");
 
     try {
-      try {
-        await queueNexrideEvent({
+      const requestPath = `rideRequests/${city}/${requestId}`;
+      const cancelled = await runTransaction(ref(db, requestPath), (current) => {
+        if (!current || current.status !== "open" || current.riderId !== user?.uid) return;
+        return { ...current, status: "cancelled", updatedAt: Date.now() };
+      }, { applyLocally: false });
+      if (!cancelled.committed) throw new Error("This request is no longer open.");
+
+      const affectedDrivers = [...new Set([...offers, ...viewers].map((item) => item.driverId).filter(Boolean))];
+      if (affectedDrivers.length) {
+        void queueNexrideEvent({
           type: nexrideNotificationTypes.REQUEST_CANCELLED,
           city,
-          targetRole: "driver",
+          targetUids: affectedDrivers,
           title: "Ride request cancelled",
-          message: `${profile?.fullName || "A rider"} cancelled a NEXRIDE request.`,
+          message: "A ride request you viewed or made an offer on was cancelled.",
           url: "/driver",
           data: { requestId, city },
         });
-      } catch {}
-
-      await Promise.allSettled([
-        remove(ref(db, `rideRequests/${city}/${requestId}`)),
-        remove(ref(db, `rideOffers/${requestId}`)),
-        remove(ref(db, `rideViews/${requestId}`)),
-      ]);
+      }
 
       setRequestData(null);
       setOffers([]);
@@ -672,7 +674,7 @@ export default function RiderPage() {
       console.error("[RiderPage] cancel request failed:", err);
       setError("Failed to cancel request.");
     }
-  }, [requestId, city, profile?.fullName]);
+  }, [requestId, city, user?.uid, offers, viewers]);
 
   const handleCancelTrip = useCallback(async () => {
     if (!tripId || !tripData) {

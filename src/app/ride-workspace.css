@@ -1,61 +1,68 @@
 /* The map and ride panel share the available viewport on phones and desktops. */
 .nx-ride-workspace {
-  --ride-paper: #fffefa;
-  --ride-field: #f2f4ee;
-  --ride-border: #dce4da;
-  --ride-text: #162e27;
-  --ride-muted: #4e6359;
-  --ride-accent: #075c50;
-  background: #edf0e9;
+  --ride-paper: #ffffff;
+  --ride-field: #f3f7fc;
+  --ride-border: #d5e2f1;
+  --ride-text: #142844;
+  --ride-muted: #4c6079;
+  --ride-accent: #1654a5;
+  background: #eaf1fa;
 }
 
 .nx-ride-workspace > .nx-phone-frame {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   height: 100vh;
   height: 100dvh;
   min-height: 0;
   max-width: none;
-  background: #edf0e9;
+  background: #eaf1fa;
 }
 
 .nx-ride-workspace .nx-live-map {
   position: relative;
-  grid-row: 1;
+  grid-row: 2;
   min-height: 0;
-  background: #e4ebe2;
+  background: #e5edf7;
 }
 
-.nx-ride-workspace .nx-google-map-layer { background: #edf0e9; }
+.nx-ride-workspace .nx-google-map-layer { background: #eaf1fa; }
 .nx-ride-workspace .nx-google-map-canvas { filter: none !important; }
 
 .nx-ride-workspace .nx-topbar {
-  top: calc(10px + env(safe-area-inset-top));
-  left: 14px;
-  right: 14px;
-  min-height: auto;
-  padding: 6px 8px 6px 10px;
-  border-radius: 16px;
-  background: #17362e;
-  border-color: #29483d;
-  box-shadow: 0 4px 14px #15362c24;
+  position: relative;
+  inset: auto;
+  grid-row: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: calc(8px + env(safe-area-inset-top)) 14px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--ride-border);
+  border-radius: 0;
+  background: #eef5ff;
+  box-shadow: 0 2px 8px #163b6814;
 }
 
+.nx-ride-workspace .nx-brand-text { color: var(--ride-text); }
+.nx-ride-workspace .nx-brand-subtitle { color: var(--ride-muted); }
+.nx-ride-workspace .nx-brand-mark { background: #fff; border-color: var(--ride-border); }
 .nx-ride-workspace .nx-menu-btn {
   width: 44px;
   height: 44px;
-  background: #294b40;
+  color: var(--ride-accent);
+  background: #dceaff;
+  border-color: #c9dcf6;
 }
 
 .nx-ride-workspace .nx-map-card {
   border-radius: 14px;
   border-color: var(--ride-border);
   background: var(--ride-paper);
-  box-shadow: 0 3px 12px #15362c1a;
+  box-shadow: 0 3px 12px #163b681a;
 }
 
 .nx-ride-workspace .nx-map-status-card {
-  top: calc(78px + env(safe-area-inset-top));
+  top: 12px;
   left: 14px;
   width: max-content;
   max-width: calc(100% - 28px);
@@ -63,9 +70,9 @@
 
 .nx-ride-workspace .nx-live-map:has(.nx-map-nav-banner) .nx-map-status-card { display: none; }
 .nx-ride-workspace .nx-map-nav-banner {
-  top: calc(78px + env(safe-area-inset-top));
+  top: 12px;
   background: var(--ride-accent);
-  box-shadow: 0 3px 12px #15362c26;
+  box-shadow: 0 3px 12px #163b6826;
 }
 
 .nx-ride-workspace .nx-map-route-card {
@@ -86,22 +93,22 @@
 
 .nx-ride-workspace .nx-map-control {
   border-radius: 12px;
-  box-shadow: 0 2px 8px #15362c23;
+  box-shadow: 0 2px 8px #163b6823;
 }
 
 .nx-ride-workspace .nx-map-open-link { background: var(--ride-accent); }
-.nx-ride-workspace .nx-gps-hint { top: calc(146px + env(safe-area-inset-top)); }
+.nx-ride-workspace .nx-gps-hint { top: 79px; }
 .nx-ride-workspace .nx-map-offline-hint { z-index: 2; }
 
 .nx-ride-workspace .nx-bottom-sheet {
   position: relative;
-  grid-row: 2;
+  grid-row: 3;
   max-height: 65dvh;
   margin-top: -12px;
   border-color: var(--ride-border);
   border-radius: 24px 24px 0 0;
   background: var(--ride-paper);
-  box-shadow: 0 -5px 20px #15362c19;
+  box-shadow: 0 -5px 20px #163b6819;
   color: var(--ride-text);
   color-scheme: light;
   --ink: var(--ride-text);
@@ -130,7 +137,7 @@
   letter-spacing: 0;
   font-size: 12px;
 }
-.nx-ride-workspace .nx-sheet-handle { background: #a9baae; }
+.nx-ride-workspace .nx-sheet-handle { background: #9ab0ca; }
 
 .nx-ride-workspace .nx-bottom-sheet :is(.nx-sheet-title, .nx-rs-title, .nx-card-title, .nx-rs-fare-display, .nx-offer-price, .nx-otp-box strong, .nx-live-copy strong, .nx-stat-card strong) {
   color: var(--ride-text);
@@ -146,9 +153,9 @@
   border-radius: 15px;
   box-shadow: none;
 }
-.nx-ride-workspace .nx-bottom-sheet .nx-offer-card.is-best { background: #edf6ef; border-color: #99c8ad; }
+.nx-ride-workspace .nx-bottom-sheet .nx-offer-card.is-best { background: #eef5ff; border-color: #a4c4ee; }
 .nx-ride-workspace .nx-rs-route { padding: 4px 12px; }
-.nx-ride-workspace .nx-rs-route-line { background: #9db2a5; }
+.nx-ride-workspace .nx-rs-route-line { background: #93b0d0; }
 .nx-ride-workspace .nx-rs-fare { padding: 6px 10px; flex-wrap: wrap; }
 
 .nx-ride-workspace .nx-bottom-sheet :is(.nx-input, .nx-rs-input, .nx-rs-city) {
@@ -162,13 +169,13 @@
   border-radius: 10px;
 }
 .nx-ride-workspace .nx-rs-route .nx-rs-input { background: transparent; min-width: 0; }
-.nx-ride-workspace .nx-bottom-sheet :is(.nx-input, .nx-rs-input)::placeholder { color: #566b60; }
+.nx-ride-workspace .nx-bottom-sheet :is(.nx-input, .nx-rs-input)::placeholder { color: #536984; }
 
 .nx-ride-workspace .nx-bottom-sheet :is(.nx-rs-step, .nx-rs-gps, .nx-rs-pax button) {
   min-width: 44px;
   min-height: 44px;
   color: var(--ride-accent);
-  background: #e1ece3;
+  background: #e6effb;
   border: 1px solid var(--ride-border);
   border-radius: 10px;
 }
@@ -195,12 +202,12 @@
 .nx-ride-workspace .nx-bottom-sheet .nx-alert-success { color: #174b36; background: #dff3e5; }
 
 @media (min-width: 850px) and (min-height: 520px) {
-  .nx-ride-workspace > .nx-phone-frame { grid-template: minmax(0, 1fr) / minmax(0, 1fr) minmax(340px, 410px); }
+  .nx-ride-workspace > .nx-phone-frame { grid-template: auto minmax(0, 1fr) / minmax(0, 1fr) minmax(340px, 410px); }
   .nx-ride-workspace .nx-live-map { grid-column: 1; }
-  .nx-ride-workspace .nx-topbar { right: auto; width: min(370px, calc(100% - 430px)); }
+  .nx-ride-workspace .nx-topbar { grid-column: 1 / -1; }
   .nx-ride-workspace .nx-bottom-sheet {
     grid-column: 2;
-    grid-row: 1;
+    grid-row: 2;
     height: 100% !important;
     max-height: none;
     margin: 0;
@@ -229,7 +236,7 @@
   gap: 10px;
   padding: 10px;
   margin-bottom: 12px;
-  background: #eaf2e9;
+  background: #eaf3ff;
   border: 1px solid var(--ride-border);
   border-radius: 12px;
   font-size: 13px;
@@ -245,8 +252,8 @@
 .nx-ride-workspace :is(.nx-offer-tag-best, .nx-offer-tag-cheap) { color: #13533b; background: #d9ede1; }
 .nx-ride-workspace .nx-offer-tag-top { color: #775708; background: #f6eed6; }
 .nx-ride-workspace .nx-trip-step { padding: 9px 11px; }
-.nx-ride-workspace .nx-trip-step span { background: #d1ded4; box-shadow: none; }
-.nx-ride-workspace .nx-trip-step.active { color: var(--ride-accent); border-color: #78aa91; }
+.nx-ride-workspace .nx-trip-step span { background: #d1e0f2; box-shadow: none; }
+.nx-ride-workspace .nx-trip-step.active { color: var(--ride-accent); border-color: #82a9dd; }
 .nx-ride-workspace .nx-trip-step.active span,
 .nx-ride-workspace .nx-trip-step.done span { background: var(--ride-accent); box-shadow: none; animation: none; }
 
@@ -260,3 +267,19 @@
   }
   .nx-ride-workspace .nx-phone-frame:has(.nx-bottom-sheet.is-collapsed) :is(.nx-map-control-stack, .nx-map-route-card) { bottom: 76px; }
 }
+
+.nx-ride-workspace :is(.nx-map-chip, .nx-price-badge, .nx-status-pill, .nx-request-metrics span) {
+  background: #e1edff;
+  border-color: #ccdffb;
+  color: #184b89;
+}
+
+.nx-ride-workspace .nx-online-pill.on {
+  color: #125736;
+  background: #e3f4eb;
+  border-color: #c7e6d5;
+}
+
+.nx-ride-workspace .nx-map-control { color: var(--ride-accent); border-color: var(--ride-border); }
+.nx-ride-workspace .nx-app-drawer { background: #132843; }
+.nx-ride-workspace .nx-drawer-mode { background: #b9d6ff; color: #142844; }
