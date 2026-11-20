@@ -2,15 +2,22 @@
 
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  buildGoogleDirectionsPoint,
-  fallbackRouteEstimate,
-  getCityCenter,
-  hasGoogleMapsApiKey,
-  loadGoogleMapsApi,
-  toLatLng,
-} from "../../lib/googleMaps";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { buildGoogleDirectionsPoint, fallbackRouteEstimate, getCityCenter, hasGoogleMapsApiKey, loadGoogleMapsApi, toLatLng } from "../../lib/googleMaps";
+
+const CAMERA_THROTTLE_MS = 400;
+const BOUNDS_THROTTLE_MS = 700;
+const USER_INTERACTION_PAUSE_MS = 4000;
+const ROUTE_REFRESH_MIN_METERS = 120;
+
+function distanceMeters(a, b) {
+  const p1 = toLatLng(a); const p2 = toLatLng(b);
+  if (!p1 || !p2) return Infinity;
+  const rad = (v) => (v * Math.PI) / 180;
+  const dLat = rad(p2.lat - p1.lat); const dLng = rad(p2.lng - p1.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(p1.lat)) * Math.cos(rad(p2.lat)) * Math.sin(dLng / 2) ** 2;
+  return 6371000 * 2 * Math.asin(Math.sqrt(h));
+}
 
 const mapStyles = [
   { elementType: "geometry", stylers: [{ color: "#edf2f7" }] },
@@ -33,589 +40,225 @@ const mapStyles = [
   { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#7a93ad" }] },
 ];
 
-function cleanNumber(value, fallback = 0) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
-}
-
-function markerIcon(google, type = "default", heading = null) {
-  const color =
-    type === "pickup" ? "#00d4ff" :
-    type === "destination" ? "#20e28a" :
-    type === "driver" ? "#0066ff" :
-    type === "rider" ? "#ffb020" :
-    type === "request" ? "#ffb020" : "#ffffff";
-
-  if (type === "driver") {
-    return {
-      path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-      scale: 6.2,
-      rotation: cleanNumber(heading, 0),
-      fillColor: color,
-      fillOpacity: 1,
-      strokeColor: "#eaffff",
-      strokeWeight: 2.2,
-    };
-  }
-
-  return {
-    path: google.maps.SymbolPath.CIRCLE,
-    scale: type === "request" ? 9 : 8,
-    fillColor: color,
-    fillOpacity: 1,
-    strokeColor: "#ffffff",
-    strokeWeight: 2.5,
-  };
-}
-
-function resolvePoint(value) {
-  if (!value) return null;
-  const coords = toLatLng(value);
-  if (coords) return coords;
-  if (typeof value === "string" && value.trim()) return value.trim();
-  if (value.label) return value.label;
-  return null;
-}
-
-function positionFromRouteLocation(location) {
-  if (!location) return null;
-  if (typeof location.lat === "function" && typeof location.lng === "function") {
-    return { lat: location.lat(), lng: location.lng() };
-  }
-  return toLatLng(location);
-}
-
-function pointKey(point) {
-  const coords = toLatLng(point);
-  if (!coords) return typeof point === "string" ? point : point?.label || "";
-  return `${coords.lat.toFixed(5)},${coords.lng.toFixed(5)}`;
-}
+function cleanNumber(value, fallback = 0) { const n = Number(value); return Number.isFinite(n) ? n : fallback; }
+function resolvePoint(value) { if (!value) return null; const coords = toLatLng(value); if (coords) return coords; if (typeof value === "string" && value.trim()) return value.trim(); if (value.label) return value.label; return null; }
+function pointKey(point) { const coords = toLatLng(point); if (!coords) return typeof point === "string" ? point : point?.label || ""; return `${coords.lat.toFixed(5)},${coords.lng.toFixed(5)}`; }
 
 function createHtmlOverlay(google, map, position, className, render, title = "", zIndex = 1000) {
-  const point = toLatLng(position);
-  if (!point) return null;
-
+  const point = toLatLng(position); if (!point) return null;
   const overlay = new google.maps.OverlayView();
   overlay.onAdd = function onAdd() {
-    const div = document.createElement("div");
-    div.className = className;
-    div.style.position = "absolute";
-    div.style.zIndex = String(zIndex);
-    div.style.transform = "translate(-50%, -50%)";
-    div.style.pointerEvents = "auto";
-    if (title) div.title = title;
-    render(div);
-    this.div = div;
-    this.getPanes().overlayMouseTarget.appendChild(div);
+    const div = document.createElement("div"); div.className = className; div.style.position = "absolute"; div.style.zIndex = String(zIndex); div.style.transform = "translate(-50%, -50%)"; div.style.pointerEvents = "none"; if (title) div.title = title; render(div); this.div = div; this.getPanes().overlayMouseTarget.appendChild(div);
   };
-  overlay.draw = function draw() {
-    const projection = this.getProjection();
-    if (!projection || !this.div) return;
-    const pixel = projection.fromLatLngToDivPixel(new google.maps.LatLng(point.lat, point.lng));
-    if (!pixel) return;
-    this.div.style.left = `${pixel.x}px`;
-    this.div.style.top = `${pixel.y}px`;
-  };
-  overlay.onRemove = function onRemove() {
-    if (this.div?.parentNode) this.div.parentNode.removeChild(this.div);
-    this.div = null;
-  };
-  overlay.setMap(map);
-  return overlay;
+  overlay.draw = function draw() { const projection = this.getProjection(); if (!projection || !this.div) return; const pixel = projection.fromLatLngToDivPixel(new google.maps.LatLng(point.lat, point.lng)); if (!pixel) return; this.div.style.left = `${pixel.x}px`; this.div.style.top = `${pixel.y}px`; };
+  overlay.onRemove = function onRemove() { if (this.div?.parentNode) this.div.parentNode.removeChild(this.div); this.div = null; };
+  overlay.setMap(map); return overlay;
 }
 
 function renderCar(div, { heading = 0, photoUrl = "", label = "" } = {}) {
-  const car = document.createElement("div");
-  car.className = "nx-gmap-car-marker-inner";
-  car.style.transform = `rotate(${cleanNumber(heading, 0)}deg)`;
-  car.innerHTML = `
-    <svg viewBox="0 0 64 64" aria-hidden="true" class="nx-gmap-car-svg">
-      <path d="M18 39h28c3.8 0 7-3.1 7-7v-6.2c0-2.4-1.5-4.6-3.8-5.5l-7.7-3.2A17.5 17.5 0 0 0 34.8 16h-5.6c-2.3 0-4.6.5-6.7 1.4l-7.7 3.2a5.9 5.9 0 0 0-3.8 5.5V32c0 3.9 3.1 7 7 7Z" />
-      <path d="M22 22h20l5.5 4H16.5L22 22Z" class="nx-gmap-car-window" />
-      <circle cx="20" cy="40" r="4" />
-      <circle cx="44" cy="40" r="4" />
-      <path d="M32 5l6 9H26l6-9Z" class="nx-gmap-car-nose" />
-    </svg>`;
-  div.appendChild(car);
-
-  if (photoUrl) {
-    const badge = document.createElement("img");
-    badge.className = "nx-gmap-car-photo";
-    badge.src = photoUrl;
-    badge.alt = "";
-    div.appendChild(badge);
-  }
-
-  if (label) {
-    const chip = document.createElement("span");
-    chip.className = "nx-gmap-marker-label";
-    chip.textContent = label;
-    div.appendChild(chip);
-  }
+  const arrow = document.createElement("div"); arrow.className = "nx-gmap-arrow-marker"; arrow.style.transform = `rotate(${cleanNumber(heading, 0)}deg)`;
+  arrow.innerHTML = `<svg viewBox="0 0 64 64" aria-hidden="true" class="nx-gmap-arrow-svg"><ellipse cx="32" cy="58" rx="10" ry="3" fill="#06152b" opacity="0.22"/><circle cx="32" cy="32" r="22" fill="#ffffff"/><path d="M32 12 L48 48 L32 40 L16 48 Z" fill="#0b6dff" stroke="#0b6dff" stroke-width="1" stroke-linejoin="round" /><path d="M32 12 L46 44" stroke="#00d4ff" stroke-width="1.4" stroke-linecap="round" fill="none" opacity="0.75" /></svg>`;
+  div.appendChild(arrow);
+  if (photoUrl) { const badge = document.createElement("img"); badge.className = "nx-gmap-car-photo"; badge.src = photoUrl; badge.alt = ""; div.appendChild(badge); }
+  if (label) { const chip = document.createElement("span"); chip.className = "nx-gmap-marker-label"; chip.textContent = label; div.appendChild(chip); }
 }
 
-function renderPhoto(div, { photoUrl = "", fallback = "R", label = "" } = {}) {
-  const frame = document.createElement("div");
-  frame.className = "nx-gmap-photo-frame";
-  if (photoUrl) {
-    const img = document.createElement("img");
-    img.src = photoUrl;
-    img.alt = "";
-    frame.appendChild(img);
-  } else {
-    frame.textContent = fallback;
-  }
-  div.appendChild(frame);
-  if (label) {
-    const chip = document.createElement("span");
-    chip.className = "nx-gmap-marker-label";
-    chip.textContent = label;
-    div.appendChild(chip);
-  }
+function renderRiderDot(div) {
+  const dot = document.createElement("div"); dot.className = "nx-gmap-rider-dot";
+  dot.innerHTML = `<div class="nx-rider-pulse"></div><div class="nx-rider-core"></div>`;
+  div.appendChild(dot);
 }
 
-function renderDestination(div) {
-  const glow = document.createElement("div");
-  glow.className = "nx-gmap-destination-glow";
-  glow.innerHTML = `
-    <span class="nx-gmap-destination-pulse"></span>
-    <svg viewBox="0 0 54 68" class="nx-gmap-destination-pin" aria-hidden="true">
-      <path d="M27 65C27 65 7 42.4 7 25.9C7 14.9 15.9 6 27 6C38.1 6 47 14.9 47 25.9C47 42.4 27 65 27 65Z"/>
-      <circle cx="27" cy="25" r="10"/>
-    </svg>`;
-  div.appendChild(glow);
-}
+const LiveGoogleMap = forwardRef(function LiveGoogleMap(
+  { city = "harare", role = "rider", origin = null, destination = null, driverLocation = null, riderLocation = null, driverPhotoUrl = "", showRoute = true, cameraFollow = true, routePhase = "route", boundsBottomPadding = 220, onRouteInfo, onMapStatus, onDirectionStep },
+  ref
+) {
+  const mapNodeRef = useRef(null); const mapRef = useRef(null); const directionsRendererRef = useRef(null); const fallbackPolylineRef = useRef(null); const overlayRefs = useRef([]);
+  const lastBoundsAtRef = useRef(0); const lastRouteFitKeyRef = useRef(""); const lastRouteRequestRef = useRef(null); const routeRequestIdRef = useRef(0); const lastCameraAtRef = useRef(0); const lastCameraKeyRef = useRef(""); const userInteractionUntilRef = useRef(0);
 
-function routeCopy(phase) {
-  if (phase === "pickup") return "Following pickup route";
-  if (phase === "destination") return "Following destination route";
-  if (phase === "completed") return "Final route summary";
-  if (phase === "request") return "Preview route";
-  return "Live follow";
-}
+  const onRouteInfoRef = useRef(onRouteInfo); const onMapStatusRef = useRef(onMapStatus); const onDirectionStepRef = useRef(onDirectionStep);
+  useEffect(() => { onRouteInfoRef.current = onRouteInfo; }, [onRouteInfo]);
+  useEffect(() => { onMapStatusRef.current = onMapStatus; }, [onMapStatus]);
+  useEffect(() => { onDirectionStepRef.current = onDirectionStep; }, [onDirectionStep]);
 
-export default function LiveGoogleMap({
-  city = "harare",
-  role = "rider",
-  origin = null,
-  destination = null,
-  driverLocation = null,
-  riderLocation = null,
-  driverPhotoUrl = "",
-  riderPhotoUrl = "",
-  markers = [],
-  showRoute = true,
-  cameraFollow = true,
-  followTarget = "driver",
-  routePhase = "route",
-  onRouteInfo,
-  onMapStatus,
-}) {
-  const mapNodeRef = useRef(null);
-  const mapRef = useRef(null);
-  const directionsRendererRef = useRef(null);
-  const routeHaloRef = useRef(null);
-  const routeLineRef = useRef(null);
-  const routeShineRef = useRef(null);
-  const routeArrowRef = useRef(null);
-  const routeMarkerRefs = useRef([]);
-  const markerRefs = useRef([]);
-  const overlayRefs = useRef([]);
-  const lastBoundsAtRef = useRef(0);
-  const lastRouteFitKeyRef = useRef("");
-  const [ready, setReady] = useState(false);
-  const [error, setError] = useState("");
-
+  const [ready, setReady] = useState(false); const [error, setError] = useState("");
   const center = useMemo(() => getCityCenter(city), [city]);
   const originPoint = useMemo(() => resolvePoint(origin), [origin]);
   const destinationPoint = useMemo(() => resolvePoint(destination), [destination]);
   const driverPoint = useMemo(() => toLatLng(driverLocation), [driverLocation]);
   const riderPoint = useMemo(() => toLatLng(riderLocation), [riderLocation]);
 
+  useImperativeHandle(ref, () => ({
+      zoomIn: () => { const map = mapRef.current; if (!map) return; userInteractionUntilRef.current = Date.now() + USER_INTERACTION_PAUSE_MS; map.setZoom(Math.min(21, (map.getZoom() || 14) + 1)); },
+      zoomOut: () => { const map = mapRef.current; if (!map) return; userInteractionUntilRef.current = Date.now() + USER_INTERACTION_PAUSE_MS; map.setZoom(Math.max(4, (map.getZoom() || 14) - 1)); },
+      recenter: () => { const map = mapRef.current; if (!map) return; userInteractionUntilRef.current = Date.now() + USER_INTERACTION_PAUSE_MS; const target = driverPoint || riderPoint || toLatLng(originPoint) || center; if (target) map.panTo(target); },
+      getMap: () => mapRef.current,
+  }), [center, driverPoint, originPoint, riderPoint]);
+
   useEffect(() => {
     let cancelled = false;
-
-    if (!hasGoogleMapsApiKey()) {
-      setError("Missing Google Maps key");
-      onMapStatus?.("fallback");
-      return;
-    }
-
-    loadGoogleMapsApi()
-      .then((google) => {
+    if (!hasGoogleMapsApiKey()) { setError("Missing Google Maps key"); onMapStatusRef.current?.("fallback"); return; }
+    loadGoogleMapsApi().then((google) => {
         if (cancelled || !mapNodeRef.current) return;
-
         if (!mapRef.current) {
-          mapRef.current = new google.maps.Map(mapNodeRef.current, {
-            center,
-            zoom: 16,
-            minZoom: 4,
-            maxZoom: 21,
-            disableDefaultUI: true,
-            clickableIcons: false,
-            gestureHandling: "greedy",
-            styles: [],
-            backgroundColor: "#f5f7fb",
-            heading: 0,
-            tilt: 0,
-          });
-
-          directionsRendererRef.current = new google.maps.DirectionsRenderer({
-            map: mapRef.current,
-            suppressMarkers: true,
-            preserveViewport: true,
-            polylineOptions: {
-              strokeColor: "#006dff",
-              strokeOpacity: 0,
-              strokeWeight: 0,
-              zIndex: 50,
-            },
+          mapRef.current = new google.maps.Map(mapNodeRef.current, { center, zoom: 15, minZoom: 4, maxZoom: 21, disableDefaultUI: true, clickableIcons: false, gestureHandling: "greedy", styles: mapStyles, backgroundColor: "#f5f7fb", heading: 0, tilt: 0 });
+          
+          // 🔥 FIXED: Changed the line color from Purple (#6100FF) to your Green (#20e28a)
+          directionsRendererRef.current = new google.maps.DirectionsRenderer({ 
+            map: mapRef.current, 
+            suppressMarkers: true, 
+            preserveViewport: true, 
+            polylineOptions: { strokeColor: "#20e28a", strokeOpacity: 1, strokeWeight: 8, zIndex: 50 } 
           });
         }
+        setReady(true); setError(""); onMapStatusRef.current?.("google");
+    }).catch((err) => { if (!cancelled) { setError("Google Maps failed to load"); onMapStatusRef.current?.("fallback"); } });
+    return () => { cancelled = true; };
+  }, [center]);
 
-        setReady(true);
-        setError("");
-        onMapStatus?.("google");
-      })
-      .catch((err) => {
-        console.error(err);
-        if (!cancelled) {
-          setError("Google Maps failed to load");
-          onMapStatus?.("fallback");
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [center, onMapStatus]);
+  useEffect(() => { return () => { routeRequestIdRef.current += 1; try { overlayRefs.current.forEach((o) => o.setMap(null)); fallbackPolylineRef.current?.setMap(null); directionsRendererRef.current?.setMap(null); } catch {} overlayRefs.current = []; }; }, []);
 
   useEffect(() => {
-    if (!ready || !mapRef.current || typeof window === "undefined" || !window.google?.maps) return;
-    if (originPoint || destinationPoint || driverPoint || riderPoint || markers.length) return;
-    mapRef.current.setCenter(center);
-  }, [ready, center, originPoint, destinationPoint, driverPoint, riderPoint, markers.length]);
-
-  useEffect(() => {
-    if (!ready || !mapRef.current || typeof window === "undefined" || !window.google?.maps) return;
-    const google = window.google;
-    const map = mapRef.current;
-
-    markerRefs.current.forEach((marker) => marker.setMap(null));
-    markerRefs.current = [];
-    overlayRefs.current.forEach((overlay) => overlay.setMap(null));
-    overlayRefs.current = [];
-
-    const addMarker = ({ position, type, title, label, heading }) => {
-      const point = toLatLng(position);
-      if (!point) return null;
-      const marker = new google.maps.Marker({
-        position: point,
-        map,
-        title: title || label || type,
-        optimized: false,
-        zIndex: type === "pickup" || type === "destination" ? 800 : 700,
-        label: label ? { text: String(label), color: "#ffffff", fontWeight: "900", fontSize: "11px" } : undefined,
-        icon: markerIcon(google, type, heading),
-      });
-      markerRefs.current.push(marker);
-      return marker;
-    };
-
-    addMarker({ position: originPoint, type: "pickup", title: routePhase === "pickup" ? "Pickup" : "Route start" });
-
-    if (destinationPoint) {
-      const destinationOverlay = createHtmlOverlay(
-        google,
-        map,
-        destinationPoint,
-        "nx-gmap-destination-marker",
-        renderDestination,
-        routePhase === "pickup" ? "Pickup" : "Destination",
-        970
-      );
-      if (destinationOverlay) overlayRefs.current.push(destinationOverlay);
-    }
+    if (!ready || !mapRef.current || !window.google?.maps) return;
+    const google = window.google; const map = mapRef.current;
+    overlayRefs.current.forEach((overlay) => overlay.setMap(null)); overlayRefs.current = [];
 
     if (driverPoint) {
-      const driverOverlay = createHtmlOverlay(
-        google,
-        map,
-        driverPoint,
-        "nx-gmap-car-marker",
-        (div) => renderCar(div, {
-          heading: driverLocation?.heading,
-          photoUrl: driverPhotoUrl,
-          label: role === "driver" ? "You" : "Driver",
-        }),
-        role === "driver" ? "Your live car" : "Driver live car",
-        1005
-      );
-      if (driverOverlay) overlayRefs.current.push(driverOverlay);
+      const overlay = createHtmlOverlay(google, map, driverPoint, "nx-gmap-car-marker", (div) => renderCar(div, { heading: driverLocation?.heading, photoUrl: driverPhotoUrl, label: role === "driver" ? "You" : "Driver" }), "Driver", 1005);
+      if (overlay) overlayRefs.current.push(overlay);
     }
-
     if (riderPoint) {
-      const riderOverlay = createHtmlOverlay(
-        google,
-        map,
-        riderPoint,
-        "nx-gmap-rider-marker",
-        (div) => renderPhoto(div, {
-          photoUrl: riderPhotoUrl,
-          fallback: role === "rider" ? "You" : "R",
-          label: role === "rider" ? "You" : "Rider",
-        }),
-        role === "rider" ? "Your live pickup" : "Rider live pickup",
-        1000
-      );
-      if (riderOverlay) overlayRefs.current.push(riderOverlay);
+      const overlay = createHtmlOverlay(google, map, riderPoint, "nx-gmap-rider-marker", renderRiderDot, "Rider", 1000);
+      if (overlay) overlayRefs.current.push(overlay);
     }
-
-    markers.forEach((marker) => {
-      const point = toLatLng(marker);
-      if (!point) return;
-
-      if (marker.type === "driver") {
-        const driverOverlay = createHtmlOverlay(
-          google,
-          map,
-          point,
-          "nx-gmap-car-marker is-nearby",
-          (div) => renderCar(div, {
-            heading: marker.heading,
-            photoUrl: marker.driverPhotoUrl || marker.photoUrl || "",
-            label: "",
-          }),
-          marker.title || marker.name || "Nearby driver",
-          880
-        );
-        if (driverOverlay) overlayRefs.current.push(driverOverlay);
-        return;
-      }
-
-      addMarker({
-        position: marker,
-        type: marker.type || "default",
-        title: marker.title || marker.label,
-        label: marker.price ? `$${Number(marker.price || 0).toFixed(0)}` : marker.label,
-        heading: marker.heading,
-      });
-    });
-
-    const bounds = new google.maps.LatLngBounds();
-    const allPoints = [originPoint, destinationPoint, driverPoint, riderPoint, ...markers].map(toLatLng).filter(Boolean);
-    allPoints.forEach((point) => bounds.extend(point));
-    if (!showRoute && allPoints.length > 1 && !bounds.isEmpty()) map.fitBounds(bounds, 76);
-  }, [ready, originPoint, destinationPoint, driverPoint, riderPoint, markers, role, showRoute, driverLocation?.heading, driverPhotoUrl, riderPhotoUrl, routePhase]);
+  }, [ready, driverPoint, riderPoint, driverLocation?.heading, driverPhotoUrl, role]);
 
   useEffect(() => {
-    if (!ready || !cameraFollow || !mapRef.current || typeof window === "undefined" || !window.google?.maps) return;
-
-    const target =
-      followTarget === "rider" ? riderPoint :
-      followTarget === "origin" ? toLatLng(originPoint) :
-      followTarget === "destination" ? toLatLng(destinationPoint) :
-      followTarget === "route" ? null :
-      driverPoint || riderPoint || toLatLng(originPoint) || toLatLng(destinationPoint);
-
+    if (!ready || !cameraFollow || !mapRef.current || !window.google?.maps) return;
+    
+    // FIX: If we just drew a route, do NOT snap back to the driver immediately!
+    // Let the user see the route for 5 seconds.
+    if (Date.now() < userInteractionUntilRef.current) return;
+    
+    const target = driverPoint || riderPoint || toLatLng(originPoint) || toLatLng(destinationPoint);
     if (!target) return;
-
-    const currentZoom = mapRef.current.getZoom?.() || 14;
-    const desiredZoom = routePhase === "pickup" || routePhase === "destination" ? 17 : 15;
-    const heading = cleanNumber(driverLocation?.heading, 0);
-
-    if (typeof mapRef.current.moveCamera === "function") {
-      mapRef.current.moveCamera({
-        center: target,
-        zoom: Math.max(currentZoom, desiredZoom),
-        heading: Number.isFinite(heading) ? heading : 0,
-        tilt: routePhase === "pickup" || routePhase === "destination" ? 35 : 0,
-      });
-    } else {
-      mapRef.current.panTo(target);
-      if (currentZoom < desiredZoom) mapRef.current.setZoom(desiredZoom);
-      if (Number.isFinite(heading) && typeof mapRef.current.setHeading === "function") mapRef.current.setHeading(heading);
-      if (typeof mapRef.current.setTilt === "function") mapRef.current.setTilt(routePhase === "pickup" || routePhase === "destination" ? 35 : 0);
-    }
-  }, [cameraFollow, destinationPoint, driverPoint, followTarget, originPoint, ready, riderPoint, routePhase]);
+    const now = Date.now(); const key = pointKey(target);
+    if (now - lastCameraAtRef.current < CAMERA_THROTTLE_MS && key === lastCameraKeyRef.current) return;
+    lastCameraAtRef.current = now; lastCameraKeyRef.current = key;
+    const currentZoom = mapRef.current.getZoom?.() || 14; const desiredZoom = routePhase === "pickup" || routePhase === "destination" ? 16 : 15;
+    mapRef.current.panTo(target); if (currentZoom < desiredZoom) mapRef.current.setZoom(desiredZoom);
+    if (typeof mapRef.current.setTilt === "function") mapRef.current.setTilt(routePhase === "pickup" || routePhase === "destination" ? 45 : 0);
+  }, [cameraFollow, destinationPoint, driverPoint, originPoint, ready, riderPoint, routePhase]);
 
   useEffect(() => {
-    if (!ready || showRoute) return;
-    directionsRendererRef.current?.set("directions", null);
-    routeHaloRef.current?.setMap(null);
-    routeHaloRef.current = null;
-    routeLineRef.current?.setMap(null);
-    routeLineRef.current = null;
-    routeShineRef.current?.setMap(null);
-    routeShineRef.current = null;
-    routeArrowRef.current?.setMap(null);
-    routeArrowRef.current = null;
-  }, [ready, showRoute]);
+    if (!ready || !mapRef.current || !window.google?.maps) return;
+    const map = mapRef.current;
+    const markInteraction = () => { userInteractionUntilRef.current = Date.now() + USER_INTERACTION_PAUSE_MS; };
+    const listeners = [map.addListener("dragstart", markInteraction), map.addListener("zoom_changed", () => { if (Date.now() < userInteractionUntilRef.current) return; markInteraction(); })];
+    return () => { listeners.forEach((l) => { try { l?.remove?.(); } catch {} }); };
+  }, [ready]);
 
   useEffect(() => {
-    if (!ready || !showRoute || !originPoint || !destinationPoint || typeof window === "undefined" || !window.google?.maps) {
+    if (!ready || !showRoute || !originPoint || !destinationPoint || !window.google?.maps) {
+      directionsRendererRef.current?.set("directions", null);
+      fallbackPolylineRef.current?.setMap(null);
+      lastRouteRequestRef.current = null;
       return;
     }
 
-    let cancelled = false;
     const google = window.google;
+    const routeFitKey = `${routePhase}:${pointKey(destinationPoint)}`;
+    const previous = lastRouteRequestRef.current;
+    const sameTarget = previous?.targetKey === routeFitKey;
+    const movedMeters = previous ? distanceMeters(previous.origin, originPoint) : Infinity;
+
+    // Driver GPS can update every few seconds. Keep the live vehicle marker moving,
+    // but do not spend a Directions request for every tiny GPS change.
+    if (sameTarget && movedMeters < ROUTE_REFRESH_MIN_METERS) return;
+
     const service = new google.maps.DirectionsService();
-    const routeFitKey = `${routePhase}:${pointKey(originPoint)}:${pointKey(destinationPoint)}`;
+    const requestId = ++routeRequestIdRef.current;
+    lastRouteRequestRef.current = { targetKey: routeFitKey, origin: toLatLng(originPoint) };
 
-    service.route(
-      {
-        origin: buildGoogleDirectionsPoint(google, originPoint, city),
-        destination: buildGoogleDirectionsPoint(google, destinationPoint, city),
-        travelMode: google.maps.TravelMode.DRIVING,
-        drivingOptions: {
-          departureTime: new Date(),
-          trafficModel: google.maps.TrafficModel.BEST_GUESS,
-        },
-        provideRouteAlternatives: false,
-        region: "ZW",
-      },
-      (result, status) => {
-        if (cancelled) return;
+    // 1. DRAW AN INSTANT STRAIGHT LINE while Google resolves the road route.
+    const p1 = toLatLng(originPoint); const p2 = toLatLng(destinationPoint);
+    fallbackPolylineRef.current?.setMap(null);
+    if (p1 && p2) {
+      fallbackPolylineRef.current = new google.maps.Polyline({ 
+        path: [p1, p2], 
+        strokeColor: "#20e28a", // Changed to your brand green!
+        strokeOpacity: 0.5, 
+        strokeWeight: 6, 
+        map: mapRef.current 
+      });
+    }
 
-        routeHaloRef.current?.setMap(null);
-        routeHaloRef.current = null;
-        routeLineRef.current?.setMap(null);
-        routeLineRef.current = null;
-        routeShineRef.current?.setMap(null);
-        routeShineRef.current = null;
-        routeArrowRef.current?.setMap(null);
-        routeArrowRef.current = null;
-        routeMarkerRefs.current.forEach((marker) => marker.setMap(null));
-        routeMarkerRefs.current = [];
+    // 2. ASK GOOGLE FOR THE SNAPPED ROUTE
+    service.route({ 
+      origin: buildGoogleDirectionsPoint(google, originPoint, city), 
+      destination: buildGoogleDirectionsPoint(google, destinationPoint, city), 
+      travelMode: google.maps.TravelMode.DRIVING, 
+      provideRouteAlternatives: false, 
+      region: "ZW" 
+    }, (result, status) => {
+      if (requestId !== routeRequestIdRef.current) return;
 
-        if (status === "OK" && result?.routes?.[0]?.legs?.[0]) {
-          directionsRendererRef.current?.setDirections(result);
+      // Remove the fallback line no matter what happens
+      fallbackPolylineRef.current?.setMap(null);
+      directionsRendererRef.current?.set("directions", null);
 
-          const overviewPath = result.routes[0].overview_path || [];
-          routeHaloRef.current = new google.maps.Polyline({
-            path: overviewPath,
-            map: mapRef.current,
-            strokeColor: "#071225",
-            strokeOpacity: 0.92,
-            strokeWeight: 15,
-            zIndex: 610,
+      if (status === "OK" && result?.routes?.[0]?.legs?.[0]) {
+        directionsRendererRef.current?.setDirections(result);
+        const leg = result.routes[0].legs[0];
+        const firstStep = leg.steps?.[0];
+        
+        if (firstStep && firstStep.instructions) {
+          onDirectionStepRef.current?.({
+            text: firstStep.instructions.replace(/<[^>]+>/g, ''), 
+            distance: firstStep.distance?.text || "", 
+            maneuver: firstStep.maneuver || "straight" 
           });
-          routeLineRef.current = new google.maps.Polyline({
-            path: overviewPath,
-            map: mapRef.current,
-            strokeColor: "#2d18ff",
-            strokeOpacity: 1,
-            strokeWeight: 9,
-            zIndex: 630,
-          });
-          routeShineRef.current = new google.maps.Polyline({
-            path: overviewPath,
-            map: mapRef.current,
-            strokeColor: "#14d8ff",
-            strokeOpacity: 0.90,
-            strokeWeight: 4,
-            zIndex: 640,
-          });
-          routeArrowRef.current = new google.maps.Polyline({
-            path: overviewPath,
-            map: mapRef.current,
-            strokeOpacity: 0,
-            zIndex: 660,
-            icons: [
-              {
-                icon: {
-                  path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-                  scale: 4.7,
-                  fillColor: "#ffffff",
-                  fillOpacity: 1,
-                  strokeColor: "#06152b",
-                  strokeWeight: 2,
-                },
-                offset: "11%",
-                repeat: "74px",
-              },
-            ],
-          });
-
-          const leg = result.routes[0].legs[0];
-          const startCoords = positionFromRouteLocation(leg.start_location);
-          const endCoords = positionFromRouteLocation(leg.end_location);
-
-          if (mapRef.current) {
-            if (startCoords) {
-              routeMarkerRefs.current.push(new google.maps.Marker({
-                position: startCoords,
-                map: mapRef.current,
-                title: routePhase === "pickup" ? "Driver live location" : "Route start",
-                optimized: false,
-                zIndex: 930,
-                icon: markerIcon(google, routePhase === "pickup" || role === "driver" ? "driver" : "pickup", driverLocation?.heading),
-                label: routePhase === "pickup" && role === "driver" ? { text: "ME", color: "#ffffff", fontWeight: "900", fontSize: "11px" } : undefined,
-              }));
-            }
-
-            const now = Date.now();
-            const shouldFitRoute = routeFitKey !== lastRouteFitKeyRef.current || routePhase === "completed";
-            if (shouldFitRoute && now - lastBoundsAtRef.current > 700) {
-              const bounds = new google.maps.LatLngBounds();
-              overviewPath.forEach((point) => bounds.extend(point));
-              if (!bounds.isEmpty()) {
-                mapRef.current.fitBounds(bounds, {
-                  top: 96,
-                  left: 42,
-                  right: 42,
-                  bottom: routePhase === "completed" ? 170 : 220,
-                });
-              }
-              lastBoundsAtRef.current = now;
-              lastRouteFitKeyRef.current = routeFitKey;
-            }
-          }
-
-          onRouteInfo?.({
-            distanceText: leg.distance?.text || "",
-            durationText: leg.duration_in_traffic?.text || leg.duration?.text || "",
-            distanceMeters: leg.distance?.value || null,
-            durationSeconds: leg.duration_in_traffic?.value || leg.duration?.value || null,
-            startAddress: leg.start_address || "",
-            endAddress: leg.end_address || "",
-            pickupCoords: startCoords,
-            dropoffCoords: endCoords,
-            source: "google",
-            phase: routePhase,
-          });
-          return;
         }
 
-        directionsRendererRef.current?.set("directions", null);
-        const estimate = fallbackRouteEstimate(originPoint, destinationPoint);
-        if (estimate) onRouteInfo?.({ ...estimate, phase: routePhase });
+        const now = Date.now();
+        if ((routeFitKey !== lastRouteFitKeyRef.current) && (now - lastBoundsAtRef.current > BOUNDS_THROTTLE_MS)) {
+            userInteractionUntilRef.current = Date.now() + 5000;
+            mapRef.current?.fitBounds(leg.bounds, { top: 130, left: 50, right: 50, bottom: Math.max(160, Number(boundsBottomPadding) || 260) });
+            lastBoundsAtRef.current = now; 
+            lastRouteFitKeyRef.current = routeFitKey;
+        }
+        
+        onRouteInfoRef.current?.({
+          distanceText: leg.distance?.text || "", 
+          durationText: leg.duration?.text || "", 
+          distanceMeters: leg.distance?.value || null, 
+          durationSeconds: leg.duration?.value || null, 
+          startAddress: leg.start_address || "", 
+          endAddress: leg.end_address || "", 
+          source: "google", 
+          phase: routePhase 
+        });
+        return;
+      } else {
+        console.error("[NEXRIDE] Google Directions request failed:", status);
+        onMapStatusRef.current?.("route-error");
+        onRouteInfoRef.current?.({ source: "unavailable", phase: routePhase, distanceText: "", durationText: "" });
       }
-    );
+    });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [ready, showRoute, originPoint, destinationPoint, city, onRouteInfo, routePhase, role, driverLocation?.heading]);
+    // The request ID invalidates stale responses only when a materially new route is requested.
+    // Small GPS updates therefore cannot cancel an in-flight Directions response.
+  }, [ready, showRoute, originPoint, destinationPoint, city, routePhase, boundsBottomPadding]);
 
   if (!hasGoogleMapsApiKey()) return null;
-
   return (
     <div className="nx-google-map-layer">
       <div ref={mapNodeRef} className="nx-google-map-canvas" />
-      <div className="nx-live-follow-badge">⌖ {routeCopy(routePhase)}</div>
-      {!ready ? (
-        <div className="nx-google-map-loading">
-          <strong>Loading Google Maps...</strong>
-          <span>Preparing live route, distance and ETA.</span>
-        </div>
-      ) : null}
-      {error ? (
-        <div className="nx-google-map-warning">
-          <strong>{error}</strong>
-          <span>Fallback map remains active.</span>
-        </div>
-      ) : null}
+      {!ready ? (<div className="nx-google-map-loading"><strong>Loading Google Maps...</strong><span>Preparing live route...</span></div>) : null}
+      {error ? (<div className="nx-google-map-warning"><strong>{error}</strong><span>Fallback map remains active.</span></div>) : null}
     </div>
   );
-}
+});
+
+LiveGoogleMap.displayName = "LiveGoogleMap";
+export default LiveGoogleMap;

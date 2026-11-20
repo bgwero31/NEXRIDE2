@@ -8,23 +8,40 @@ import { useRouter } from "next/navigation";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { get, ref } from "firebase/database";
 import { auth, db } from "../../lib/firebase";
-import NexrideBrand from "../../components/ui/NexrideBrand";
 import PremiumButton from "../../components/ui/PremiumButton";
+import { unlockNexrideVoice } from "../../lib/nexrideVoice";
 
 export default function LoginPage() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => setMounted(true), []);
+  // Permissions Popup State
+  const [showPermissions, setShowPermissions] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    
+    // Check if user has already seen the permissions popup
+    const hasSeenPerms = localStorage.getItem("nexride-perms-shown");
+    if (!hasSeenPerms) {
+      setShowPermissions(true);
+    }
+  }, []);
+
+  const handleContinue = () => {
+    localStorage.setItem("nexride-perms-shown", "true");
+    setShowPermissions(false);
+    try { unlockNexrideVoice("rider"); } catch {}
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
-
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = password.trim();
 
@@ -35,6 +52,8 @@ export default function LoginPage() {
 
     try {
       setLoading(true);
+      try { unlockNexrideVoice("rider"); } catch {}
+
       const cred = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
       const [profileSnap, userSnap] = await Promise.all([
         get(ref(db, `profiles/${cred.user.uid}`)),
@@ -51,40 +70,100 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="nx-auth-shell">
-      <div className="nx-auth-bg" />
-      <section className={`nx-auth-card ${mounted ? "mounted" : ""}`}>
-        <NexrideBrand subtitle="Ride smarter. Negotiate better." />
+    <main className="nx-login-container">
+      {/* FULL BACKGROUND IMAGE */}
+      <div className="nx-login-bg">
+        <div className="nx-login-bg-overlay" />
+      </div>
 
-        <div className="nx-hero-word" aria-label="NEXRIDE">
-          {"NEXRIDE".split("").map((letter, index) => (
-            <span key={`${letter}-${index}`} style={{ animationDelay: `${index * 90}ms` }}>{letter}</span>
-          ))}
+      {/* 3D PERMISSIONS POPUP */}
+      {showPermissions && (
+        <div className="nx-permission-backdrop">
+          <div className="nx-permission-3d-card">
+            <h2>Enable NEXRIDE</h2>
+            <p>Turn on GPS, alerts, and voice for live rides.</p>
+            
+            <div className="nx-permission-actions">
+              <button className="nx-pill-btn">📍 Enable GPS</button>
+              <button className="nx-pill-btn">🔔 Notifications</button>
+              <button className="nx-pill-btn">🔊 Test Voice</button>
+            </div>
+
+            <div className="nx-status-ready">🟢 Ready</div>
+
+            <button 
+              className="nx-btn nx-btn-primary nx-btn-block" 
+              onClick={handleContinue}
+            >
+              Continue to NEXRIDE
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* GLASS LOGIN SHEET */}
+      <section className={`nx-login-sheet ${mounted ? "mounted" : ""}`}>
+        {/* FIXED: Changed to nx-sheet-handle to match the CSS */}
+        <div className="nx-sheet-handle" style={{ margin: "0 auto 20px" }} />
+        
+        <div className="nx-login-brand-mini">
+          <img src="/nexridebackground10.jpg" alt="NEXRIDE" className="nx-mini-logo" />
+          <div>
+            <h1 className="nx-mini-title">NEXRIDE</h1>
+            {/* MOTTO HERE */}
+            <p className="nx-mini-sub">Where Every Ride Feels Right</p>
+          </div>
         </div>
 
-        <p className="nx-auth-copy">A blue-black premium NEXRIDE experience with live tracking, smart fare offers, and trusted local drivers.</p>
+        <h2 className="nx-auth-sheet-title" style={{ marginTop: 24 }}>Welcome</h2>
+        <p className="nx-auth-sheet-subtitle">Log in to continue.</p>
 
-        <form onSubmit={handleLogin} className="nx-stack">
-          <label className="nx-field">
-            <span>Email address</span>
-            <input className="nx-input" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <form onSubmit={handleLogin} className="nx-auth-form">
+          <label className="nx-auth-input-group">
+            <input
+              type="email"
+              className="nx-auth-input"
+              placeholder=" "
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+            <span className="nx-auth-label">Email address</span>
           </label>
-          <label className="nx-field">
-            <span>Password</span>
-            <input className="nx-input" type="password" placeholder="Your password" value={password} onChange={(e) => setPassword(e.target.value)} />
+
+          <label className="nx-auth-input-group">
+            <input
+              type={showPassword ? "text" : "password"}
+              className="nx-auth-input"
+              placeholder=" "
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <span className="nx-auth-label">Password</span>
+            <button
+              type="button"
+              className="nx-auth-eye"
+              onClick={() => setShowPassword(!showPassword)}
+            >
+              {showPassword ? "Hide" : "Show"}
+            </button>
           </label>
 
           {error ? <div className="nx-alert-error">{error}</div> : null}
 
-          <PremiumButton type="submit" disabled={loading}>{loading ? "Opening app..." : "Login to NEXRIDE"}</PremiumButton>
-          <Link href="/signup" className="nx-btn nx-btn-secondary">Create account</Link>
+          <div className="nx-auth-actions">
+            <PremiumButton type="submit" loading={loading} fullWidth>
+              Log In
+            </PremiumButton>
+          </div>
         </form>
 
-        <div className="nx-auth-pills">
-          <span>Map-first</span>
-          <span>Driver offers</span>
-          <span>OTP pickup</span>
+        <div className="nx-auth-divider">
+          <span>New to NEXRIDE?</span>
         </div>
+
+        <Link href="/signup" className="nx-btn nx-btn-secondary nx-btn-block">
+          Create an account
+        </Link>
       </section>
     </main>
   );
