@@ -299,26 +299,3 @@
   top: auto;
   bottom: calc(100% + 5px);
 }
-
-.nx-road-route-status {
-  position: absolute;
-  top: 12px;
-  left: 14px;
-  max-width: calc(100% - 80px);
-  z-index: 2;
-  margin: 0;
-  padding: 7px 10px;
-  border-radius: 8px;
-  background: #fff;
-  color: #365373;
-  font-size: 13px;
-}
-.nx-road-route-status button {
-  min-height: 36px;
-  margin-left: 8px;
-  padding: 0 9px;
-  border-radius: 6px;
-  background: #e8f2ff;
-  color: #1654a5;
-  font-weight: 700;
-}

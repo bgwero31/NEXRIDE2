@@ -160,6 +160,8 @@ export async function geocodeAddress(address, city = "harare") {
 export async function getGoogleRouteDetails({ origin, destination, city = "harare", withTraffic = false }) {
   if (!origin || !destination || !hasGoogleMapsApiKey()) return null;
   const google = await loadGoogleMapsApi();
+  const service = new google.maps.DirectionsService();
+
   const request = {
     origin: buildGoogleDirectionsPoint(google, origin, city),
     destination: buildGoogleDirectionsPoint(google, destination, city),
@@ -168,42 +170,6 @@ export async function getGoogleRouteDetails({ origin, destination, city = "harar
     region: "ZW",
   };
 
-  // The current Routes library works with projects that cannot enable legacy Directions.
-  try {
-    const { Route } = await google.maps.importLibrary("routes");
-    const { routes } = await Route.computeRoutes({
-      origin: request.origin,
-      destination: request.destination,
-      travelMode: "DRIVING",
-      region: "ZW",
-      routingPreference: withTraffic ? "TRAFFIC_AWARE" : "TRAFFIC_UNAWARE",
-      fields: ["path", "distanceMeters", "durationMillis", "legs"],
-    });
-    const route = routes?.[0];
-    const path = (route?.path || []).map((point) => toLatLng(point.toJSON?.() || point)).filter(Boolean);
-    if (path.length > 1) {
-      const step = route.legs?.[0]?.steps?.[0];
-      const distanceMeters = route.distanceMeters ?? null;
-      const durationSeconds = route.durationMillis == null ? null : Math.round(route.durationMillis / 1000);
-      return {
-        path,
-        distanceMeters,
-        durationSeconds,
-        distanceText: distanceMeters == null ? "" : `${(distanceMeters / 1000).toFixed(1)} km`,
-        durationText: durationSeconds == null ? "" : `${Math.max(1, Math.round(durationSeconds / 60))} min`,
-        pickupCoords: path[0],
-        dropoffCoords: path.at(-1),
-        firstStep: step?.instructions
-          ? { text: step.instructions, maneuver: step.maneuver }
-          : null,
-        source: "google",
-      };
-    }
-  } catch {
-    // Existing deployments may still be configured for Directions API (Legacy).
-  }
-
-  const service = new google.maps.DirectionsService();
   if (withTraffic) {
     request.drivingOptions = {
       departureTime: new Date(),
@@ -219,14 +185,7 @@ export async function getGoogleRouteDetails({ origin, destination, city = "harar
       }
       const route = result.routes[0];
       const leg = route.legs[0];
-      const step = leg.steps?.[0];
       resolve({
-        path: route.overview_path,
-        firstStep: step?.instructions ? {
-          text: step.instructions.replace(/<[^>]+>/g, ""),
-          distance: step.distance?.text || "",
-          maneuver: step.maneuver || "straight",
-        } : null,
         distanceText: leg.distance?.text || "",
         durationText: leg.duration_in_traffic?.text || leg.duration?.text || "",
         distanceMeters: leg.distance?.value || null,

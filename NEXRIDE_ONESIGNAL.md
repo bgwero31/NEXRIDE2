@@ -16,4 +16,4 @@ The Next.js application provides `POST /api/ride-alerts`. Leave `NEXT_PUBLIC_NEX
 
 The built-in relay handles ride events. It checks the signed-in sender, the current ride state, and recent timestamps, then derives recipient IDs and message content on the server. Configure Realtime Database rules so only authorized participants can write the corresponding ride records and event records. The endpoint reports provider acceptance. Confirm device delivery separately. This endpoint processes live requests and does not drain historical queue entries.
 
-For road routing, enable Routes API alongside Maps JavaScript API and allow both on the browser key used by NEXRIDE. Projects that already support Directions API (Legacy) can use that service as a fallback. When neither returns road geometry, NEXRIDE shows a retry action instead of a straight line.
+The live map displays a blue dotted connection while it requests road geometry from Google Directions. A solid blue line appears when Google returns a driving route. The dotted line indicates the direction to the next stop.
