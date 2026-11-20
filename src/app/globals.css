@@ -438,9 +438,9 @@ select option { background: #071421; color: #fff; }
 .nx-map-glow { position: absolute; width: 260px; height: 260px; border-radius: 999px; filter: blur(34px); opacity: 0.55; }
 .nx-map-glow.one { left: -90px; top: 150px; background: rgba(0,212,255,0.24); }
 .nx-map-glow.two { right: -120px; top: 330px; background: rgba(0,102,255,0.25); }
-.nx-google-map-layer { position: absolute; inset: 0; z-index: 1; overflow: hidden; background: #edf2f7; }
-.nx-google-map-canvas { position: absolute; inset: 0; width: 100%; height: 100%; filter: saturate(1.08) contrast(1.01) brightness(1.03); }
-.nx-google-map-layer::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, rgba(255,255,255,0.04), transparent 18%, transparent 78%, rgba(255,255,255,0.08)), radial-gradient(circle at 50% 55%, transparent 0%, rgba(0,102,255,0.035) 82%, rgba(0,102,255,0.08) 100%); }
+.nx-google-map-layer { position: absolute; inset: 0; z-index: 1; overflow: hidden; background: #14251f; }
+.nx-google-map-canvas { position: absolute; inset: 0; width: 100%; height: 100%; filter: saturate(0.92) contrast(1.06) brightness(0.92); }
+.nx-google-map-layer::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, rgba(5,20,13,0.12), transparent 18%, transparent 78%, rgba(5,20,13,0.18)), radial-gradient(circle at 50% 55%, transparent 0%, rgba(32,226,138,0.025) 82%, rgba(5,30,18,0.12) 100%); }
 .nx-google-map-canvas .gm-style { font-family: inherit; }
 .nx-google-map-loading, .nx-google-map-warning { position: absolute; left: 16px; right: 16px; top: 180px; z-index: 3; display: grid; gap: 4px; padding: 14px; border-radius: 22px; background: rgba(3, 13, 30, 0.76); border: 1px solid rgba(255,255,255,0.14); backdrop-filter: blur(18px); color: #fff; box-shadow: 0 18px 50px rgba(0,0,0,0.26); }
 .nx-google-map-loading span, .nx-google-map-warning span { color: var(--soft); font-size: 12px; font-weight: 800; }
@@ -1040,3 +1040,8 @@ select option { background: #071421; color: #fff; }
 
 .nx-rs-v3-alert { margin: 0; }   
 }
+
+/* NEXRIDE dark-green navigation map and nearby-driver pins */
+.nx-gmap-car-marker.is-nearby { filter: drop-shadow(0 4px 10px rgba(0,0,0,.65)); }
+.nx-gmap-car-marker.is-nearby .nx-gmap-arrow-svg circle { fill: #eafff1; stroke: #20e28a; stroke-width: 2; }
+.nx-gmap-car-marker.is-nearby .nx-gmap-arrow-svg path { fill: #087b49; stroke: #087b49; }

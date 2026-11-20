@@ -283,6 +283,7 @@ export default function RiderMap({
         role="rider"
         origin={mapOrigin}
         destination={mapDestination}
+        nearbyDrivers={drivers}
         showRoute={showRoute}
         followTarget={tripData ? "driver" : mapDestination ? "route" : "rider"}
         routePhase={isCompletedMap ? "completed" : tripData ? routeTargetMode : "request"}

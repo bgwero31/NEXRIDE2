@@ -20,24 +20,24 @@ function distanceMeters(a, b) {
 }
 
 const mapStyles = [
-  { elementType: "geometry", stylers: [{ color: "#edf2f7" }] },
+  { elementType: "geometry", stylers: [{ color: "#14251f" }] },
   { elementType: "labels.icon", stylers: [{ visibility: "on" }, { saturation: -45 }, { lightness: 18 }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#667085" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }, { weight: 3 }] },
-  { featureType: "administrative", elementType: "geometry.stroke", stylers: [{ color: "#d7dee8" }] },
-  { featureType: "landscape", elementType: "geometry", stylers: [{ color: "#eef3f8" }] },
-  { featureType: "landscape.natural", elementType: "geometry", stylers: [{ color: "#e6edf5" }] },
-  { featureType: "poi", elementType: "geometry", stylers: [{ color: "#e8edf3" }] },
-  { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#7b8794" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
-  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#dbe5f0" }, { weight: 1.1 }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#bcd3ff" }] },
-  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#7da7ff" }, { weight: 1.6 }] },
-  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#f8fbff" }] },
-  { featureType: "road.local", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#b8c9be" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#263c32" }, { weight: 3 }] },
+  { featureType: "administrative", elementType: "geometry.stroke", stylers: [{ color: "#496354" }] },
+  { featureType: "landscape", elementType: "geometry", stylers: [{ color: "#1b3027" }] },
+  { featureType: "landscape.natural", elementType: "geometry", stylers: [{ color: "#20382d" }] },
+  { featureType: "poi", elementType: "geometry", stylers: [{ color: "#294236" }] },
+  { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#b2c4b8" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#263c32" }] },
+  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#526b5d" }, { weight: 1.1 }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#41624e" }] },
+  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#6f9a78" }, { weight: 1.6 }] },
+  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#344e40" }] },
+  { featureType: "road.local", elementType: "geometry", stylers: [{ color: "#263c32" }] },
   { featureType: "transit", stylers: [{ visibility: "off" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#d9e9ff" }] },
-  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#7a93ad" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#244d58" }] },
+  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#b0c8c7" }] },
 ];
 
 function cleanNumber(value, fallback = 0) { const n = Number(value); return Number.isFinite(n) ? n : fallback; }
@@ -70,7 +70,7 @@ function renderRiderDot(div) {
 }
 
 const LiveGoogleMap = forwardRef(function LiveGoogleMap(
-  { city = "harare", role = "rider", origin = null, destination = null, driverLocation = null, riderLocation = null, driverPhotoUrl = "", showRoute = true, cameraFollow = true, routePhase = "route", boundsBottomPadding = 220, onRouteInfo, onMapStatus, onDirectionStep },
+  { city = "harare", role = "rider", origin = null, destination = null, driverLocation = null, riderLocation = null, driverPhotoUrl = "", showRoute = true, cameraFollow = true, routePhase = "route", boundsBottomPadding = 220, nearbyDrivers = [], onRouteInfo, onMapStatus, onDirectionStep },
   ref
 ) {
   const mapNodeRef = useRef(null); const mapRef = useRef(null); const directionsRendererRef = useRef(null); const fallbackPolylineRef = useRef(null); const overlayRefs = useRef([]);
@@ -101,7 +101,7 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
     loadGoogleMapsApi().then((google) => {
         if (cancelled || !mapNodeRef.current) return;
         if (!mapRef.current) {
-          mapRef.current = new google.maps.Map(mapNodeRef.current, { center, zoom: 15, minZoom: 4, maxZoom: 21, disableDefaultUI: true, clickableIcons: false, gestureHandling: "greedy", styles: mapStyles, backgroundColor: "#f5f7fb", heading: 0, tilt: 0 });
+          mapRef.current = new google.maps.Map(mapNodeRef.current, { center, zoom: 15, minZoom: 4, maxZoom: 21, disableDefaultUI: true, clickableIcons: false, gestureHandling: "greedy", styles: mapStyles, backgroundColor: "#14251f", heading: 0, tilt: 0 });
           
           // 🔥 FIXED: Changed the line color from Purple (#6100FF) to your Green (#20e28a)
           directionsRendererRef.current = new google.maps.DirectionsRenderer({ 
@@ -127,11 +127,17 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
       const overlay = createHtmlOverlay(google, map, driverPoint, "nx-gmap-car-marker", (div) => renderCar(div, { heading: driverLocation?.heading, photoUrl: driverPhotoUrl, label: role === "driver" ? "You" : "Driver" }), "Driver", 1005);
       if (overlay) overlayRefs.current.push(overlay);
     }
+    (Array.isArray(nearbyDrivers) ? nearbyDrivers : []).forEach((nearby) => {
+      const point = toLatLng(nearby);
+      if (!point) return;
+      const overlay = createHtmlOverlay(google, map, point, "nx-gmap-car-marker is-nearby", (div) => renderCar(div, { heading: nearby.heading, photoUrl: nearby.photoUrl || nearby.driverPhotoUrl || "", label: "" }), nearby.name || "Nearby driver", 990);
+      if (overlay) overlayRefs.current.push(overlay);
+    });
     if (riderPoint) {
       const overlay = createHtmlOverlay(google, map, riderPoint, "nx-gmap-rider-marker", renderRiderDot, "Rider", 1000);
       if (overlay) overlayRefs.current.push(overlay);
     }
-  }, [ready, driverPoint, riderPoint, driverLocation?.heading, driverPhotoUrl, role]);
+  }, [ready, driverPoint, riderPoint, nearbyDrivers, driverLocation?.heading, driverPhotoUrl, role]);
 
   useEffect(() => {
     if (!ready || !cameraFollow || !mapRef.current || !window.google?.maps) return;
@@ -183,7 +189,6 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
     // 1. DRAW AN INSTANT STRAIGHT LINE while Google resolves the road route.
     const p1 = toLatLng(originPoint); const p2 = toLatLng(destinationPoint);
     fallbackPolylineRef.current?.setMap(null);
-    
     if (p1 && p2) {
       fallbackPolylineRef.current = new google.maps.Polyline({ 
         path: [p1, p2], 
@@ -242,9 +247,6 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
         return;
       } else {
         console.error("[NEXRIDE] Google Directions request failed:", status);
-        if (status === "REQUEST_DENIED") {
-          console.error("👉 You need to enable 'Directions API' in your Google Cloud Console!");
-        }
         onMapStatusRef.current?.("route-error");
         onRouteInfoRef.current?.({ source: "unavailable", phase: routePhase, distanceText: "", durationText: "" });
       }
