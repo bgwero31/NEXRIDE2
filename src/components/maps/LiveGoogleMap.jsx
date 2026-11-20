@@ -183,6 +183,7 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
     // 1. DRAW AN INSTANT STRAIGHT LINE while Google resolves the road route.
     const p1 = toLatLng(originPoint); const p2 = toLatLng(destinationPoint);
     fallbackPolylineRef.current?.setMap(null);
+    
     if (p1 && p2) {
       fallbackPolylineRef.current = new google.maps.Polyline({ 
         path: [p1, p2], 
@@ -241,6 +242,9 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
         return;
       } else {
         console.error("[NEXRIDE] Google Directions request failed:", status);
+        if (status === "REQUEST_DENIED") {
+          console.error("👉 You need to enable 'Directions API' in your Google Cloud Console!");
+        }
         onMapStatusRef.current?.("route-error");
         onRouteInfoRef.current?.({ source: "unavailable", phase: routePhase, distanceText: "", durationText: "" });
       }
