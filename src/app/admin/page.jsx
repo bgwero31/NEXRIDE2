@@ -1,577 +1,222 @@
-// File: src/app/admin/page.jsx
-
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { get, onValue, ref } from "firebase/database";
-import { auth, db } from "../../lib/firebase";
+import { auth } from "@/lib/firebase";
+import styles from "./operations.module.css";
 
-import MobileShell from "../../components/ui/MobileShell";
-import FloatingTopBar from "../../components/ui/FloatingTopBar";
-import BottomSheet from "../../components/ui/BottomSheet";
-import MapPlaceholder from "../../components/ui/MapPlaceholder";
-import ActionCard from "../../components/ui/ActionCard";
-
-const cityOptions = [
-  "harare",
-  "bulawayo",
-  "gweru",
-  "mutare",
-  "masvingo",
-  "zvishavane",
-  "kwekwe",
-  "kadoma",
+const tabs = [
+  ["overview", "Overview"], ["review", "Driver approvals"], ["drivers", "Drivers"],
+  ["riders", "Riders"], ["request", "Pending requests"], ["active", "Active rides"],
+  ["completed", "Completed rides"], ["cancelled", "Cancelled rides"],
 ];
-
-function cityLabel(city) {
-  if (!city) return "Unknown";
-  return city.charAt(0).toUpperCase() + city.slice(1);
-}
-
-function statusPill(status) {
-  const base = {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "6px 10px",
-    borderRadius: 999,
-    fontSize: 11,
-    fontWeight: 900,
-    letterSpacing: 0.4,
-    border: "1px solid transparent",
-    textTransform: "uppercase",
-  };
-
-  if (status === "open") {
-    return {
-      ...base,
-      color: "#e0ebfb",
-      background: "rgba(45, 110, 200,0.12)",
-      border: "1px solid rgba(45, 110, 200,0.22)",
-    };
-  }
-
-  if (
-    status === "accepted" ||
-    status === "matched" ||
-    status === "arrived" ||
-    status === "picked" ||
-    status === "enroute"
-  ) {
-    return {
-      ...base,
-      color: "#d9f6ff",
-      background: "rgba(0,198,255,0.12)",
-      border: "1px solid rgba(0,198,255,0.25)",
-    };
-  }
-
-  if (status === "completed") {
-    return {
-      ...base,
-      color: "#e8f0ff",
-      background: "rgba(110,140,255,0.12)",
-      border: "1px solid rgba(110,140,255,0.22)",
-    };
-  }
-
-  return {
-    ...base,
-    color: "#f5f7fa",
-    background: "rgba(255,255,255,0.06)",
-    border: "1px solid rgba(255,255,255,0.10)",
-  };
-}
+const initialData = { people: [], reviews: [], rides: [] };
+const cityName = (value) => value ? value.replaceAll("-", " ") : "—";
+const dateFormat = new Intl.DateTimeFormat("en-ZW", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Harare" });
+const date = (value) => value && Number.isFinite(new Date(value).getTime()) ? dateFormat.format(new Date(value)) : "—";
 
 export default function AdminPage() {
-  const router = useRouter();
-
-  const [authReady, setAuthReady] = useState(false);
-  const [user, setUser] = useState(null);
-  const [profile, setProfile] = useState(null);
-
-  const [city, setCity] = useState("harare");
-
-  const [openRequests, setOpenRequests] = useState([]);
-  const [activeTrips, setActiveTrips] = useState([]);
-  const [completedTrips, setCompletedTrips] = useState([]);
-  const [onlineDrivers, setOnlineDrivers] = useState([]);
-
-  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [account, setAccount] = useState(undefined);
+  const [data, setData] = useState(initialData);
+  const [tab, setTab] = useState("overview");
+  const [city, setCity] = useState("");
+  const [query, setQuery] = useState("");
+  const [menu, setMenu] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
+  const [accessError, setAccessError] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [confirm, setConfirm] = useState(null);
 
-  const totals = useMemo(() => {
-    return {
-      requests: openRequests.length,
-      active: activeTrips.length,
-      completed: completedTrips.length,
-      drivers: onlineDrivers.length,
-    };
-  }, [openRequests, activeTrips, completedTrips, onlineDrivers]);
+  useEffect(() => onAuthStateChanged(auth, (user) => {
+    setData(initialData);
+    setLoaded(false);
+    setAccessError(false);
+    setError("");
+    setAccount(user);
+  }), []);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (currentUser) => {
-      setAuthReady(true);
-
-      if (!currentUser) {
-        router.push("/login");
-        return;
-      }
-
-      setUser(currentUser);
-
+    if (!account) return;
+    let disposed = false;
+    let running = false;
+    async function refresh() {
+      if (running) return;
+      running = true;
       try {
-        setLoadingProfile(true);
-
-        const snap = await get(ref(db, `profiles/${currentUser.uid}`));
-        const profileData = snap.val();
-
-        if (!profileData) {
-          setError("Profile not found.");
-          return;
+        const token = await account.getIdToken();
+        const response = await fetch("/api/admin", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+        const result = await response.json();
+        if (disposed) return;
+        if (!response.ok) {
+          setAccessError(true);
+          setData(initialData);
+          setError(result.error);
+        } else {
+          setData(result);
+          setAccessError(false);
+          setError("");
         }
-
-        setProfile(profileData);
-
-        const savedCity =
-          profileData.city ||
-          (typeof window !== "undefined"
-            ? localStorage.getItem("nexride-last-place")
-            : null) ||
-          "harare";
-
-        setCity(savedCity);
-      } catch (err) {
-        console.error(err);
-        setError("Failed to load admin profile.");
+      } catch {
+        if (!disposed) setError("Could not reach the dashboard. It will retry automatically.");
       } finally {
-        setLoadingProfile(false);
+        running = false;
+        if (!disposed) setLoaded(true);
       }
-    });
-
-    return () => unsub();
-  }, [router]);
-
-  useEffect(() => {
-    if (!city) return;
-
-    const requestsRef = ref(db, `rideRequests/${city}`);
-    const activeTripsRef = ref(db, `activeTrips`);
-    const completedTripsRef = ref(db, `completedTrips`);
-    const driversRef = ref(db, `driversOnline/${city}`);
-
-    const unsubRequests = onValue(requestsRef, (snap) => {
-      const data = snap.val() || {};
-      const arr = Object.entries(data).map(([id, value]) => ({
-        id,
-        ...value,
-      }));
-      setOpenRequests(
-        arr
-          .filter((item) => item.status === "open")
-          .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
-      );
-    });
-
-    const unsubActiveTrips = onValue(activeTripsRef, (snap) => {
-      const data = snap.val() || {};
-      const arr = Object.entries(data).map(([id, value]) => ({
-        id,
-        ...value,
-      }));
-      setActiveTrips(
-        arr
-          .filter((item) => item.city === city)
-          .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
-      );
-    });
-
-    const unsubCompletedTrips = onValue(completedTripsRef, (snap) => {
-      const data = snap.val() || {};
-      const arr = Object.entries(data).map(([id, value]) => ({
-        id,
-        ...value,
-      }));
-      setCompletedTrips(
-        arr
-          .filter((item) => item.city === city)
-          .sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0))
-      );
-    });
-
-    const unsubDrivers = onValue(driversRef, (snap) => {
-      const data = snap.val() || {};
-      const arr = Object.entries(data).map(([id, value]) => ({
-        id,
-        ...value,
-      }));
-      setOnlineDrivers(arr.filter((driver) => driver.online));
-    });
-
-    return () => {
-      unsubRequests();
-      unsubActiveTrips();
-      unsubCompletedTrips();
-      unsubDrivers();
-    };
-  }, [city]);
-
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      router.push("/login");
-    } catch (err) {
-      console.error(err);
-      setError("Failed to logout.");
     }
+    void refresh();
+    const timer = window.setInterval(refresh, 15000);
+    return () => { disposed = true; window.clearInterval(timer); };
+  }, [account]);
+
+  const cities = useMemo(() => [...new Set([...data.people, ...data.rides, ...data.reviews].map((item) => item.city).filter(Boolean))].sort(), [data]);
+  const inCity = (item) => !city || item.city === city;
+  const people = data.people.filter(inCity);
+  const reviews = data.reviews.filter(inCity);
+  const rides = data.rides.filter(inCity);
+  const counts = {
+    review: reviews.filter((item) => item.status === "pending").length,
+    drivers: people.filter((item) => item.role === "driver").length,
+    riders: people.filter((item) => item.role === "rider").length,
+    request: rides.filter((item) => item.group === "request" && item.status !== "cancelled").length,
+    active: rides.filter((item) => item.group === "active").length,
+    completed: rides.filter((item) => item.group === "completed").length,
+    cancelled: rides.filter((item) => item.group === "cancelled" || (item.group === "request" && item.status === "cancelled")).length,
   };
+  const attention = counts.review + counts.request;
+  const online = people.filter((item) => item.role === "driver" && item.online).length;
+  const search = query.trim().toLowerCase();
+  const matches = (item) => !search || Object.values(item).some((value) => typeof value === "string" && value.toLowerCase().includes(search));
+  const shownPeople = people.filter((item) => item.role === (tab === "drivers" ? "driver" : "rider") && matches(item));
+  const shownRides = rides.filter((item) => (tab === "overview" || (tab === "cancelled"
+    ? item.group === "cancelled" || (item.group === "request" && item.status === "cancelled")
+    : item.group === tab && item.status !== "cancelled")) && matches(item));
+  const shownReviews = reviews.filter(matches);
 
-  if (!authReady || loadingProfile) {
-    return (
-      <MobileShell>
-        <div
-          style={{
-            minHeight: "100vh",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 20,
-          }}
-        >
-          <ActionCard style={{ width: "100%", textAlign: "center" }}>
-            <div style={{ fontSize: 24, fontWeight: 1000 }}>
-              Loading admin...
-            </div>
-            <div style={{ fontSize: 13, color: "#9fb3c8", marginTop: 8 }}>
-              Preparing dashboard
-            </div>
-          </ActionCard>
-        </div>
-      </MobileShell>
-    );
+  function navigate(next) {
+    setTab(next);
+    setQuery("");
+    setMenu(false);
   }
 
+  async function applyAction() {
+    setBusy(true);
+    setError("");
+    try {
+      const token = await account.getIdToken();
+      const response = await fetch("/api/admin", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(confirm.request),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error);
+      const change = confirm.request;
+      setData((current) => change.action === "review" ? {
+        ...current,
+        reviews: current.reviews.map((item) => item.id === change.id ? { ...item, status: change.decision } : item),
+        people: current.people.map((item) => item.id === change.id ? { ...item, verification: change.decision } : item),
+      } : {
+        ...current,
+        rides: current.rides.filter((item) => !(item.id === change.id && item.group === change.group && item.city === change.city)),
+      });
+      setConfirm(null);
+    } catch (failure) {
+      setError(failure.message || "The change failed.");
+      setConfirm(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const available = Boolean(account && loaded && !accessError);
   return (
-    <MobileShell>
-      <MapPlaceholder
-        label="Admin overview"
-        sublabel="Requests, trips, and driver monitoring"
-      />
+    <div className={styles.shell}>
+      <header className={styles.header}>
+        <a href="/admin" className={styles.brand}><span className={styles.mark}>N</span><span>NEXRIDE<small>Operations</small></span></a>
+        {available && <button type="button" className={styles.menuToggle} aria-label="Toggle navigation" aria-expanded={menu} aria-controls="ops-navigation" onClick={() => setMenu(!menu)}>
+          <span aria-hidden="true">{menu ? "×" : "☰"}</span>{attention > 0 && <b>{attention}</b>}
+        </button>}
+      </header>
 
-      <FloatingTopBar
-        title="NEXRIDE ADMIN"
-        subtitle={`${profile?.fullName || "Admin"} • ${cityLabel(city)}`}
-        right={
-          <button
-            onClick={handleLogout}
-            style={{
-              border: "1px solid rgba(255,255,255,0.12)",
-              background: "rgba(255,255,255,0.04)",
-              color: "#fff",
-              borderRadius: 14,
-              padding: "10px 14px",
-              fontWeight: 800,
-            }}
-          >
-            Logout
-          </button>
-        }
-      />
+      {available && <nav id="ops-navigation" aria-label="Operations" className={`${styles.nav} ${menu ? styles.open : ""}`}>
+        {tabs.map(([id, label]) => <button key={id} type="button" aria-current={tab === id ? "page" : undefined} onClick={() => navigate(id)}>
+          {label}{counts[id] !== undefined && <span>{counts[id]}</span>}
+        </button>)}
+        <button type="button" onClick={() => signOut(auth).catch(() => setError("Sign-out failed."))}>Sign out</button>
+      </nav>}
 
-      <BottomSheet height="62vh">
-        <div style={{ display: "grid", gap: 12 }}>
-          {error ? (
-            <div
-              style={{
-                padding: 12,
-                borderRadius: 14,
-                background: "rgba(255, 91, 91, 0.08)",
-                border: "1px solid rgba(255, 91, 91, 0.18)",
-                color: "#ffd5d5",
-                fontSize: 13,
-                fontWeight: 700,
-              }}
-            >
-              {error}
-            </div>
-          ) : null}
-
-          <ActionCard>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 12,
-                alignItems: "center",
-                marginBottom: 12,
-              }}
-            >
-              <div>
-                <div style={{ fontSize: 22, fontWeight: 1000 }}>Admin dashboard</div>
-                <div style={{ fontSize: 13, color: "#9fb3c8", marginTop: 4 }}>
-                  Live city overview
-                </div>
-              </div>
-
-              <select
-                className="nx-input"
-                value={city}
-                onChange={(e) => {
-                  const nextCity = e.target.value;
-                  setCity(nextCity);
-                  try {
-                    localStorage.setItem("nexride-last-place", nextCity);
-                  } catch {}
-                }}
-                style={{ maxWidth: 150 }}
-              >
-                {cityOptions.map((item) => (
-                  <option key={item} value={item}>
-                    {cityLabel(item)}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: 10,
-              }}
-            >
-              <div
-                style={{
-                  padding: 14,
-                  borderRadius: 18,
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                }}
-              >
-                <div style={{ fontSize: 12, color: "#9fb3c8" }}>Open requests</div>
-                <div style={{ fontSize: 24, fontWeight: 1000, marginTop: 4 }}>
-                  {totals.requests}
-                </div>
-              </div>
-
-              <div
-                style={{
-                  padding: 14,
-                  borderRadius: 18,
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                }}
-              >
-                <div style={{ fontSize: 12, color: "#9fb3c8" }}>Active trips</div>
-                <div style={{ fontSize: 24, fontWeight: 1000, marginTop: 4 }}>
-                  {totals.active}
-                </div>
-              </div>
-
-              <div
-                style={{
-                  padding: 14,
-                  borderRadius: 18,
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                }}
-              >
-                <div style={{ fontSize: 12, color: "#9fb3c8" }}>Completed</div>
-                <div style={{ fontSize: 24, fontWeight: 1000, marginTop: 4 }}>
-                  {totals.completed}
-                </div>
-              </div>
-
-              <div
-                style={{
-                  padding: 14,
-                  borderRadius: 18,
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                }}
-              >
-                <div style={{ fontSize: 12, color: "#9fb3c8" }}>Drivers online</div>
-                <div style={{ fontSize: 24, fontWeight: 1000, marginTop: 4 }}>
-                  {totals.drivers}
-                </div>
-              </div>
-            </div>
-          </ActionCard>
-
-          <ActionCard>
-            <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 10 }}>
-              Online drivers
-            </div>
-
-            {onlineDrivers.length === 0 ? (
-              <div style={{ fontSize: 13, color: "#9fb3c8" }}>
-                No online drivers in this city.
-              </div>
-            ) : (
-              <div style={{ display: "grid", gap: 10 }}>
-                {onlineDrivers.map((driver) => (
-                  <div
-                    key={driver.id}
-                    style={{
-                      padding: 12,
-                      borderRadius: 16,
-                      background: "rgba(255,255,255,0.03)",
-                      border: "1px solid rgba(255,255,255,0.06)",
-                    }}
-                  >
-                    <div style={{ fontWeight: 900 }}>{driver.name || "Driver"}</div>
-                    <div style={{ fontSize: 13, color: "#9fb3c8", marginTop: 4 }}>
-                      {driver.carName || "Vehicle"} • {driver.plateNumber || "No plate"}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </ActionCard>
-
-          <ActionCard>
-            <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 10 }}>
-              Open requests
-            </div>
-
-            {openRequests.length === 0 ? (
-              <div style={{ fontSize: 13, color: "#9fb3c8" }}>
-                No open requests right now.
-              </div>
-            ) : (
-              <div style={{ display: "grid", gap: 10 }}>
-                {openRequests.map((item) => (
-                  <div
-                    key={item.id}
-                    style={{
-                      padding: 12,
-                      borderRadius: 16,
-                      background: "rgba(255,255,255,0.03)",
-                      border: "1px solid rgba(255,255,255,0.06)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: 10,
-                        alignItems: "flex-start",
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontWeight: 900 }}>
-                          {item.pickupName} → {item.dropoffName}
-                        </div>
-                        <div style={{ fontSize: 13, color: "#9fb3c8", marginTop: 4 }}>
-                          {item.riderName || "Rider"} • $
-                          {Number(item.offerPrice || 0).toFixed(2)}
-                        </div>
-                      </div>
-                      <div style={statusPill(item.status || "open")}>
-                        {item.status || "open"}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </ActionCard>
-
-          <ActionCard>
-            <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 10 }}>
-              Active trips
-            </div>
-
-            {activeTrips.length === 0 ? (
-              <div style={{ fontSize: 13, color: "#9fb3c8" }}>
-                No active trips right now.
-              </div>
-            ) : (
-              <div style={{ display: "grid", gap: 10 }}>
-                {activeTrips.map((trip) => (
-                  <div
-                    key={trip.id}
-                    style={{
-                      padding: 12,
-                      borderRadius: 16,
-                      background: "rgba(255,255,255,0.03)",
-                      border: "1px solid rgba(255,255,255,0.06)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: 10,
-                        alignItems: "flex-start",
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontWeight: 900 }}>
-                          {trip.pickupName} → {trip.dropoffName}
-                        </div>
-                        <div style={{ fontSize: 13, color: "#9fb3c8", marginTop: 4 }}>
-                          {trip.riderName || "Rider"} • {trip.driverName || "Driver"}
-                        </div>
-                      </div>
-                      <div style={statusPill(trip.status || "accepted")}>
-                        {trip.status || "accepted"}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </ActionCard>
-
-          <ActionCard>
-            <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 10 }}>
-              Completed trips
-            </div>
-
-            {completedTrips.length === 0 ? (
-              <div style={{ fontSize: 13, color: "#9fb3c8" }}>
-                No completed trips yet.
-              </div>
-            ) : (
-              <div style={{ display: "grid", gap: 10 }}>
-                {completedTrips.slice(0, 10).map((trip) => (
-                  <div
-                    key={trip.id}
-                    style={{
-                      padding: 12,
-                      borderRadius: 16,
-                      background: "rgba(255,255,255,0.03)",
-                      border: "1px solid rgba(255,255,255,0.06)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: 10,
-                        alignItems: "flex-start",
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontWeight: 900 }}>
-                          {trip.pickupName} → {trip.dropoffName}
-                        </div>
-                        <div style={{ fontSize: 13, color: "#9fb3c8", marginTop: 4 }}>
-                          ${Number(trip.agreedPrice || 0).toFixed(2)} • {trip.driverName || "Driver"}
-                        </div>
-                      </div>
-                      <div style={statusPill("completed")}>completed</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </ActionCard>
+      <main className={styles.main}>
+        <div className={styles.heading}>
+          <h1>{tabs.find(([id]) => id === tab)?.[1]}</h1>
+          {available && <label className={styles.filter}>City
+            <select value={city} onChange={(event) => setCity(event.target.value)}>
+              <option value="">All cities</option>
+              {cities.map((name) => <option key={name} value={name}>{cityName(name)}</option>)}
+            </select>
+          </label>}
         </div>
-      </BottomSheet>
-    </MobileShell>
+
+        {error && <p className={styles.error} role="alert">{error}</p>}
+        {account === undefined || (account && !loaded) ? <p role="status">Loading dashboard…</p> : null}
+        {account === null && <a href="/login" className={styles.primary}>Sign in</a>}
+        {account && accessError && <button type="button" onClick={() => signOut(auth).catch(() => setError("Sign-out failed."))}>Switch account</button>}
+        {available && <>
+          {tab === "overview" ? <>
+            <div className={styles.metrics}>
+              {tabs.slice(1).map(([id, label]) => <button key={id} onClick={() => navigate(id)}>
+                <span>{label}</span><strong>{counts[id]}</strong>
+                {id === "drivers" && <small>{online} online</small>}
+              </button>)}
+            </div>
+            <h2>Recent rides</h2>
+          </> : <input aria-label="Search records" className={styles.search} placeholder="Search records" value={query} onChange={(event) => setQuery(event.target.value)} />}
+
+          {tab === "review" ? <div className={styles.list}>
+            {shownReviews.length === 0 && <p>No driver applications found.</p>}
+            {shownReviews.map((item) => <article className={styles.record} key={item.id}>
+              <div><h3>{item.name || "Driver"}</h3><p>{[cityName(item.city), item.car, item.plate].filter(Boolean).join(" · ")}</p><p>{item.phone || "—"} · {date(item.time)}</p></div>
+              <span className={styles.status}>{item.status}</span>
+              <div className={styles.documents}>{item.documents.map(({ name, url }) => <a key={name} href={url} target="_blank" rel="noreferrer">{name}</a>)}</div>
+              {item.status === "pending" && <div className={styles.actions}>
+                {["approved", "rejected"].map((decision) => <button key={decision} disabled={decision === "approved" && item.documents.length !== 4} onClick={() => setConfirm({
+                  request: { action: "review", id: item.id, decision },
+                  label: decision === "approved" ? "Approve application" : "Reject application", name: item.name,
+                })}>{decision === "approved" ? "Approve" : "Reject"}</button>)}
+              </div>}
+            </article>)}
+          </div> : tab === "drivers" || tab === "riders" ? <div className={styles.list}>
+            {shownPeople.length === 0 && <p>No accounts found.</p>}
+            {shownPeople.map((item) => <article className={styles.record} key={item.id}>
+              <div><h3>{item.name || "Unnamed account"}</h3><p>{[cityName(item.city), item.phone, item.car, item.plate].filter(Boolean).join(" · ")}</p></div>
+              {item.role === "driver" && <span className={styles.status}>{item.online ? "Online" : "Offline"} · {item.verification || "No review"}</span>}
+            </article>)}
+          </div> : <div className={styles.list}>
+            {shownRides.length === 0 && <p>No rides found.</p>}
+            {(tab === "overview" ? shownRides.slice(0, 6) : shownRides).map((item) => <article className={styles.record} key={`${item.group}-${item.city}-${item.id}`}>
+              <div><h3>{item.pickup || "Pickup"} → {item.dropoff || "Drop-off"}</h3>
+                <p>{[cityName(item.city), item.rider, item.driver, date(item.time)].filter(Boolean).join(" · ")}</p>
+                {item.fare != null && <p>${Number(item.fare).toFixed(2)}</p>}
+              </div>
+              <span className={styles.status}>{item.status}</span>
+              {tab !== "overview" && item.group !== "active" && <div className={styles.actions}><button onClick={() => setConfirm({
+                request: { action: "delete", id: item.id, group: item.group, city: item.city },
+                label: "Delete ride record", name: [item.pickup, item.dropoff].filter(Boolean).join(" → "),
+              })}>Delete</button></div>}
+            </article>)}
+          </div>}
+        </>}
+
+        {confirm && <div className={styles.confirm} role="alertdialog" aria-modal="true" aria-labelledby="confirm-operation">
+          <div><h2 id="confirm-operation">{confirm.label}?</h2><p>{confirm.name || "Selected record"}</p>
+            {confirm.request.action === "delete" && <p>This permanently removes the record.</p>}
+            <div className={styles.actions}>
+              <button type="button" disabled={busy} onClick={() => setConfirm(null)}>Cancel</button>
+              <button type="button" disabled={busy} className={styles.primary} onClick={applyAction}>{busy ? "Saving…" : "Confirm"}</button>
+            </div>
+          </div>
+        </div>}
+      </main>
+    </div>
   );
-  }
+}

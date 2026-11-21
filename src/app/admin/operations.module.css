@@ -1,0 +1,88 @@
+.shell {
+  --ink: #182c48;
+  --subtle: #526781;
+  --line: #dbe4ef;
+  --brand: #1754a2;
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: 218px minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  background: #f3f6fa;
+  color: var(--ink);
+  color-scheme: light;
+  font: 14px/1.5 system-ui, sans-serif;
+}
+.header {
+  grid-column: 1 / -1;
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+}
+.brand { display: flex; gap: 10px; align-items: center; color: var(--ink); font-weight: 750; letter-spacing: .03em; }
+.brand small { display: block; color: var(--subtle); font-weight: 500; font-size: 11px; }
+.mark { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 9px; background: #deebff; color: var(--brand); font-size: 19px; }
+.nav { grid-column: 1; background: #fff; padding: 16px 10px; border-right: 1px solid var(--line); }
+.nav button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  text-align: left;
+  width: 100%;
+  margin-bottom: 4px;
+  border-color: transparent;
+}
+.nav button[aria-current] { background: #e9f2ff; color: #134982; font-weight: 700; }
+.nav button span, .menuToggle b, .status {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #e9f2ff;
+  color: #205189;
+  font-weight: 650;
+  font-size: 11px;
+}
+.menuToggle { display: none; }
+.shell button, .shell input, .shell select {
+  font: inherit;
+  color: inherit;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.shell :is(button, a, input, select):focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.shell button:hover { background: #eef4fd; }
+.main { grid-column: 2; padding: 22px clamp(14px, 3vw, 36px); min-width: 0; width: min(100%, 1160px); }
+.heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
+.heading h1 { font-size: clamp(19px, 3vw, 24px); line-height: 1.2; margin: 0; }
+.filter { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--subtle); }
+.filter select { text-transform: capitalize; max-width: 150px; }
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 9px; margin-bottom: 20px; }
+.metrics button { display: grid; gap: 3px; min-height: 87px; align-content: start; text-align: left; padding: 10px 12px; }
+.metrics span, .metrics small { font-size: 12px; color: var(--subtle); }
+.metrics strong { font-size: 22px; line-height: 1.15; }
+.main h2 { margin: 0 0 10px; font-size: 16px; }
+.search { width: min(100%, 320px); margin-bottom: 12px; }
+.list { display: grid; gap: 8px; }
+.record { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 7px 10px; background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+.record h3 { font-size: 14px; margin: 0; overflow-wrap: anywhere; }
+.record p { font-size: 12px; color: var(--subtle); margin: 4px 0 0; overflow-wrap: anywhere; }
+.status { text-transform: capitalize; }
+.documents, .actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.documents a { color: var(--brand); padding: 4px 0; text-decoration: underline; }
+.actions button { font-size: 12px; padding: 6px 10px; }
+.primary, .shell button.primary { display: inline-block; background: var(--brand); color: #fff; border: 1px solid var(--brand); border-radius: 8px; padding: 8px 12px; }
+.error { color: #902621; background: #fff0ee; border: 1px solid #f2d2cd; border-radius: 8px; padding: 10px; }
+.confirm { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: #101e36a0; padding: 16px; }
+.confirm > div { background: #fff; border-radius: 12px; padding: 18px; width: min(100%, 390px); }
+@media (max-width: 700px) {
+  .shell { display: block; }
+  .header { padding: 9px 14px; }
+  .shell .menuToggle { display: flex; align-items: center; gap: 5px; min-height: 42px; min-width: 42px; }
+  .nav { display: none; border-right: 0; border-bottom: 1px solid var(--line); }
+  .nav.open { display: block; }
+  .main { padding: 16px 14px; }
+}
