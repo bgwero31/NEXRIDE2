@@ -1,4 +1,4 @@
-import { cert, getApps, initializeApp } from "firebase-admin/app";
+import { getNexrideAdminApp } from "@/lib/nexrideAdminFirebase";
 import { getAuth } from "firebase-admin/auth";
 import { getDatabase } from "firebase-admin/database";
 
@@ -9,11 +9,9 @@ const json = (data, status = 200) => Response.json(data, { status, headers: { "C
 async function authorize(request) {
   const token = request.headers.get("authorization")?.match(/^Bearer (\S+)$/i)?.[1];
   if (!token) return json({ error: "Sign in to open the admin dashboard." }, 401);
-  const { NEXRIDE_FIREBASE_SERVICE_ACCOUNT_JSON: credentials, NEXRIDE_FIREBASE_DATABASE_URL: databaseURL, NEXRIDE_ADMIN_UIDS: owners } = process.env;
-  if (!credentials || !databaseURL) return json({ error: "The admin dashboard needs Firebase server configuration." }, 503);
-  const name = "nexride-operations";
-  const app = getApps().find((app) => app.name === name) ||
-    initializeApp({ credential: cert(JSON.parse(credentials)), databaseURL }, name);
+  const owners = process.env.NEXRIDE_ADMIN_UIDS;
+  const app = getNexrideAdminApp();
+  if (!app) return json({ error: "The admin dashboard needs Firebase server configuration." }, 503);
   const identity = await getAuth(app).verifyIdToken(token, true).catch(() => null);
   if (!identity) return json({ error: "Sign in again to continue." }, 401);
   if (identity.admin !== true && !owners?.split(",").map((uid) => uid.trim()).includes(identity.uid)) {
@@ -47,8 +45,8 @@ export async function GET(request) {
     const auth = await authorize(request);
     if (auth instanceof Response) return auth;
     const { db } = auth;
-    const [profiles, applications, requests, active, completed, cancelled, drivers] = await Promise.all(
-      ["profiles", "driverVerification", "rideRequests", "activeTrips", "completedTrips", "cancelledTrips", "driversOnline"].map((path) => read(db, path))
+    const [profiles, applications, requests, active, completed, cancelled, drivers, deletionRequests] = await Promise.all(
+      ["profiles", "driverVerification", "rideRequests", "activeTrips", "completedTrips", "cancelledTrips", "driversOnline", "accountDeletionRequests"].map((path) => read(db, path))
     );
     const online = new Set();
     for (const [, city] of entries(drivers)) {
@@ -77,7 +75,10 @@ export async function GET(request) {
       ...entries(completed).map(([id, item]) => ride(id, item, "completed")),
       ...entries(cancelled).map(([id, item]) => ride(id, item, "cancelled")),
     ].sort((a, b) => (b.time || 0) - (a.time || 0));
-    return json({ people, reviews, rides, adminUid: auth.uid });
+    const deletions = entries(deletionRequests).map(([id, item]) => ({
+      id, email: item.email, requestedAt: item.requestedAt,
+    })).sort((a, b) => b.requestedAt - a.requestedAt);
+    return json({ people, reviews, rides, deletions, adminUid: auth.uid });
   } catch {
     return json({ error: "Could not load operations. Check the Firebase server configuration and try again." }, 503);
   }

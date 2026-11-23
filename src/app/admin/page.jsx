@@ -8,9 +8,9 @@ import styles from "./operations.module.css";
 const tabs = [
   ["overview", "Overview"], ["review", "Driver approvals"], ["drivers", "Drivers"],
   ["riders", "Riders"], ["request", "Pending requests"], ["active", "Active rides"],
-  ["completed", "Completed rides"], ["cancelled", "Cancelled rides"],
+  ["completed", "Completed rides"], ["cancelled", "Cancelled rides"], ["deletions", "Account deletion requests"],
 ];
-const initialData = { people: [], reviews: [], rides: [] };
+const initialData = { people: [], reviews: [], rides: [], deletions: [] };
 const cityName = (value) => value ? value.replaceAll("-", " ") : "—";
 const dateFormat = new Intl.DateTimeFormat("en-ZW", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Harare" });
 const date = (value) => value && Number.isFinite(new Date(value).getTime()) ? dateFormat.format(new Date(value)) : "—";
@@ -75,6 +75,7 @@ export default function AdminPage() {
   const reviews = data.reviews.filter(inCity);
   const rides = data.rides.filter(inCity);
   const counts = {
+    deletions: (data.deletions || []).length,
     review: reviews.filter((item) => item.status === "pending").length,
     drivers: people.filter((item) => item.role === "driver").length,
     riders: people.filter((item) => item.role === "rider").length,
@@ -83,7 +84,7 @@ export default function AdminPage() {
     completed: rides.filter((item) => item.group === "completed").length,
     cancelled: rides.filter((item) => item.group === "cancelled" || (item.group === "request" && item.status === "cancelled")).length,
   };
-  const attention = counts.review + counts.request;
+  const attention = counts.review + counts.request + counts.deletions;
   const online = people.filter((item) => item.role === "driver" && item.online).length;
   const search = query.trim().toLowerCase();
   const matches = (item) => !search || Object.values(item).some((value) => typeof value === "string" && value.toLowerCase().includes(search));
@@ -172,7 +173,13 @@ export default function AdminPage() {
             <h2>Recent rides</h2>
           </> : <input aria-label="Search records" className={styles.search} placeholder="Search records" value={query} onChange={(event) => setQuery(event.target.value)} />}
 
-          {tab === "review" ? <div className={styles.list}>
+          {tab === "deletions" ? <div className={styles.list}>
+            {(data.deletions || []).filter(matches).length === 0 && <p>No account deletion requests found.</p>}
+            {(data.deletions || []).filter(matches).map((item) => <article className={styles.record} key={item.id}>
+              <div><h3>{item.email || "NEXRIDE account"}</h3><p>Account ID: {item.id}</p><p>Requested {date(item.requestedAt)}</p></div>
+              <span className={styles.status}>Pending review</span>
+            </article>)}
+          </div> : tab === "review" ? <div className={styles.list}>
             {shownReviews.length === 0 && <p>No driver applications found.</p>}
             {shownReviews.map((item) => <article className={styles.record} key={item.id}>
               <div><h3>{item.name || "Driver"}</h3><p>{[cityName(item.city), item.car, item.plate].filter(Boolean).join(" · ")}</p><p>{item.phone || "—"} · {date(item.time)}</p></div>

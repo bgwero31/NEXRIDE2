@@ -415,6 +415,7 @@ export default function SettingsPage() {
             Logout
           </PremiumButton>
         </form>
+        <a href="/delete-account" className="nx-page-link-card">Delete account</a>
       </div>
     </MobileShell>
   );

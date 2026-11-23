@@ -38,6 +38,10 @@ export default function LoginPage() {
       try { unlockNexrideVoice("rider"); } catch {}
 
       const cred = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
+      if (new URLSearchParams(window.location.search).get("next") === "/delete-account") {
+        router.replace("/delete-account");
+        return;
+      }
       const [profileSnap, userSnap] = await Promise.all([
         get(ref(db, `profiles/${cred.user.uid}`)),
         get(ref(db, `users/${cred.user.uid}`)),

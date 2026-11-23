@@ -1,5 +1,16 @@
 apply plugin: 'com.android.application'
 
+def uploadCredentials = [
+    store: providers.environmentVariable('NEXRIDE_UPLOAD_KEYSTORE').orNull,
+    storePassword: providers.environmentVariable('NEXRIDE_UPLOAD_STORE_PASSWORD').orNull,
+    alias: providers.environmentVariable('NEXRIDE_UPLOAD_KEY_ALIAS').orNull,
+    keyPassword: providers.environmentVariable('NEXRIDE_UPLOAD_KEY_PASSWORD').orNull
+]
+def signRelease = uploadCredentials.values().every { it }
+def releaseCode = providers.gradleProperty('nexrideVersionCode').orElse('1').get().toInteger()
+def releaseName = providers.gradleProperty('nexrideVersionName').orElse('1.0').get()
+
+
 android {
     namespace "com.nexride.app"
     compileSdk rootProject.ext.compileSdkVersion
@@ -7,8 +18,8 @@ android {
         applicationId "com.nexride.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode releaseCode
+        versionName releaseName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +27,19 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (signRelease) {
+            upload {
+                storeFile rootProject.file(uploadCredentials.store)
+                storePassword uploadCredentials.storePassword
+                keyAlias uploadCredentials.alias
+                keyPassword uploadCredentials.keyPassword
+            }
+        }
+    }
     buildTypes {
         release {
+            if (signRelease) signingConfig signingConfigs.upload
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
