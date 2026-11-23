@@ -1,11 +1,38 @@
 "use client";
 
 import { useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { getNexridePush } from "@/lib/nexridePush";
 
+let attemptedNativePrompt = false;
+const NATIVE_PROMPT_KEY = "nexride-native-push-prompt";
+
 export default function NexrideNativeInit() {
+  const pathname = usePathname();
+
+  useEffect(() => {
+    if (pathname !== "/rider" && pathname !== "/driver") return;
+    let stopped = false;
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user || attemptedNativePrompt) return;
+      try {
+        const sdk = await getNexridePush();
+        if (stopped || !sdk || attemptedNativePrompt) return;
+        try { if (localStorage.getItem(NATIVE_PROMPT_KEY) === "yes") return; } catch {}
+        if (await sdk.Notifications.hasPermission() || !await sdk.Notifications.canRequestPermission()) return;
+        if (stopped || attemptedNativePrompt) return;
+        attemptedNativePrompt = true;
+        try { localStorage.setItem(NATIVE_PROMPT_KEY, "yes"); } catch {}
+        if (await sdk.Notifications.requestPermission(false)) await sdk.User.pushSubscription.optIn();
+      } catch (error) {
+        console.warn("[NEXRIDE push] Permission setup failed", error);
+      }
+    });
+    return () => { stopped = true; unsubscribe(); };
+  }, [pathname]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
 

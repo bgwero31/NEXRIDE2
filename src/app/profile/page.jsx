@@ -114,7 +114,9 @@ export default function ProfilePage() {
         <div style={{ height: 104 }} />
 
         <ActionCard className="nx-profile-hero">
-          <div className="nx-profile-avatar-large">{photoUrl ? <img src={photoUrl} alt="" /> : "👤"}</div>
+          <div className="nx-profile-avatar-large"><img src={photoUrl || "/nexride-mark.webp"} alt="" onError={(event) => {
+              if (photoUrl && !event.currentTarget.src.endsWith("/nexride-mark.webp")) event.currentTarget.src = "/nexride-mark.webp";
+            }} /></div>
           <div style={{ minWidth: 0 }}>
             <div className="nx-eyebrow">Profile</div>
             <h1 className="nx-sheet-title">{profile?.fullName || "NEXRIDE user"}</h1>

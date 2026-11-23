@@ -133,7 +133,7 @@ export default function AdminPage() {
   return (
     <div className={styles.shell}>
       <header className={styles.header}>
-        <a href="/admin" className={styles.brand}><span className={styles.mark}>N</span><span>NEXRIDE<small>Operations</small></span></a>
+        <a href="/admin" className={styles.brand}><img className={styles.mark} src="/nexride-mark.webp" alt="" width="36" height="36" /><span>NEXRIDE<small>Operations</small></span></a>
         {available && <button type="button" className={styles.menuToggle} aria-label="Toggle navigation" aria-expanded={menu} aria-controls="ops-navigation" onClick={() => setMenu(!menu)}>
           <span aria-hidden="true">{menu ? "×" : "☰"}</span>{attention > 0 && <b>{attention}</b>}
         </button>}

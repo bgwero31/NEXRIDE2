@@ -2,11 +2,11 @@ import "./globals.css";
 import "./nexride-design.css";
 import "./ride-workspace.css";
 import NexrideNativeInit from "@/components/system/NexrideNativeInit";
-import NexridePermissionGate from "@/components/system/NexridePermissionGate";
-import NexrideSplash from "@/components/system/NexrideSplash"; // <-- Import it here
+import NexrideSplash from "@/components/system/NexrideSplash";
 
 export const metadata = {
   title: "NEXRIDE — Where Every Ride Feels Right",
+  icons: { icon: "/nexride-mark.webp" },
   description: "Request. Negotiate. Ride. Track school transport.",
 };
 
@@ -15,7 +15,6 @@ export default function RootLayout({ children }) {
     <html lang="en">
       <body>
         <NexrideNativeInit />
-        <NexridePermissionGate />
         
         {/* The Splash Screen renders here */}
         <NexrideSplash /> 

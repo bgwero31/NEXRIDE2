@@ -2,69 +2,54 @@
 
 import { useState } from "react";
 import MobileShell from "../../components/ui/MobileShell";
-import FloatingTopBar from "../../components/ui/FloatingTopBar";
+import NexrideBrand from "../../components/ui/NexrideBrand";
 import PremiumButton from "../../components/ui/PremiumButton";
-import { getNexrideLocation, nexrideDeviceNotify } from "../../lib/nexrideNative";
+import { getNexrideLocation } from "../../lib/nexrideNative";
+import { getNexridePush } from "../../lib/nexridePush";
 import { unlockNexrideVoice } from "../../lib/nexrideVoice";
 
-export default function PermissionsPage() {
-  const [log, setLog] = useState([]);
-  const add = (msg) => setLog((old) => [msg, ...old].slice(0, 8));
+export default function DeviceHelpPage() {
+  const [status, setStatus] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const enableGps = async () => {
-    add("Requesting GPS permission...");
-    let loc = null;
+  async function checkDevice(action) {
+    setBusy(true);
+    setStatus("Checking…");
     try {
-      if (typeof window !== "undefined" && typeof window.nexrideRequestGpsPermission === "function") {
-        const result = await window.nexrideRequestGpsPermission();
-        loc = result?.location || null;
+      if (action === "location") {
+        const location = await getNexrideLocation({ allowWeak: true });
+        setStatus(location ? "Location is working." : "Location is unavailable. Check location access for NEXRIDE in your device or browser settings.");
+      } else if (action === "alerts") {
+        const sdk = await getNexridePush();
+        if (!sdk) setStatus("Ride push alerts are available in the configured NEXRIDE Android app.");
+        else if (await sdk.Notifications.requestPermission(true)) {
+          await sdk.User.pushSubscription.optIn();
+          setStatus("Ride alerts enabled.");
+        } else setStatus("Allow notifications for NEXRIDE in Android settings to receive ride alerts.");
+      } else {
+        const ok = await unlockNexrideVoice("rider");
+        setStatus(ok ? "Voice test started." : "Voice is unavailable. Check your media volume and text-to-speech settings.");
       }
-      if (!loc) loc = await getNexrideLocation({ allowWeak: true });
-      add(loc ? `GPS ready: ${Number(loc.lat).toFixed(5)}, ${Number(loc.lng).toFixed(5)} • ${Math.round(Number(loc.accuracy || 0))}m` : "GPS blocked or unavailable.");
-    } catch (err) { add(`GPS failed: ${String(err?.message || err)}`); }
-  };
-
-  const enableNotifications = async () => {
-    add("Requesting notification permission...");
-    try {
-      const result = typeof window !== "undefined" && typeof window.nexrideRequestNotifications === "function" ? await window.nexrideRequestNotifications({ permission_page: "yes" }) : null;
-      await nexrideDeviceNotify("NEXRIDE permissions", "Notification test from NEXRIDE is working.", { type: "permissions" });
-      add(result?.oneSignal || result?.local ? "Notifications ready." : "Notification permission may be blocked. Check Android app settings.");
-    } catch (err) { add(`Notification failed: ${String(err?.message || err)}`); }
-  };
-
-  const enableVoice = async () => {
-    add("Testing NEXRIDE voice...");
-    const ok = await unlockNexrideVoice("rider");
-    add(ok ? "Voice ready." : "Voice failed. Check phone media volume/Text-to-Speech settings.");
-  };
-
-  const checkOneSignal = async () => {
-    try {
-      const state = typeof window !== "undefined" && typeof window.nexrideGetOneSignalState === "function" ? await window.nexrideGetOneSignalState() : null;
-      add(state ? `OneSignal: ${state.optedIn ? "subscribed" : "not subscribed yet"} • ${state.id || "no id"}` : "OneSignal native bridge not ready.");
-    } catch (err) { add(`OneSignal check failed: ${String(err?.message || err)}`); }
-  };
+    } catch {
+      setStatus("Could not check this device. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
-    <MobileShell>
-      <FloatingTopBar title="NEXRIDE" subtitle="Device permissions" role="rider" />
+    <MobileShell decorators={false}>
       <main className="nx-page-pad nx-school-page">
+        <NexrideBrand size="small" />
         <section className="nx-school-hero nx-glass-panel compact">
-          <div className="nx-eyebrow">NEXRIDE APK setup</div>
-          <h1>Permission center</h1>
-          <p>Use this page in the APK to force Android to ask for GPS, notifications and voice testing before ride or school tracking.</p>
+          <h1>Device help</h1>
+          <p>Location starts when you open the ride map. Use these checks if something stops working.</p>
         </section>
         <section className="nx-card-pro nx-stack">
-          <PremiumButton type="button" onClick={enableGps}>Enable GPS</PremiumButton>
-          <PremiumButton type="button" onClick={enableNotifications}>Enable notifications</PremiumButton>
-          <PremiumButton type="button" onClick={enableVoice}>Enable/test voice</PremiumButton>
-          <button className="nx-btn nx-btn-secondary" onClick={checkOneSignal}>Check OneSignal subscription</button>
-          <a className="nx-btn nx-btn-ghost" href="/device-check">Open advanced device check</a>
-        </section>
-        <section className="nx-card-pro nx-stack">
-          <div className="nx-eyebrow">Live log</div>
-          {log.length ? log.map((item, i) => <p className="nx-school-log" key={`${item}-${i}`}>{item}</p>) : <p className="nx-sheet-copy">Tap a button to test the APK bridge.</p>}
+          <PremiumButton disabled={busy} onClick={() => checkDevice("location")}>Check location</PremiumButton>
+          <PremiumButton variant="secondary" disabled={busy} onClick={() => checkDevice("alerts")}>Check ride alerts</PremiumButton>
+          <PremiumButton variant="secondary" disabled={busy} onClick={() => checkDevice("voice")}>Test voice</PremiumButton>
+          {status && <p className="nx-sheet-copy" role="status">{status}</p>}
         </section>
       </main>
     </MobileShell>

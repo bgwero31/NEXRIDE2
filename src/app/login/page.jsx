@@ -20,24 +20,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Permissions Popup State
-  const [showPermissions, setShowPermissions] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-    
-    // Check if user has already seen the permissions popup
-    const hasSeenPerms = localStorage.getItem("nexride-perms-shown");
-    if (!hasSeenPerms) {
-      setShowPermissions(true);
-    }
-  }, []);
-
-  const handleContinue = () => {
-    localStorage.setItem("nexride-perms-shown", "true");
-    setShowPermissions(false);
-    try { unlockNexrideVoice("rider"); } catch {}
-  };
+  useEffect(() => { setMounted(true); }, []);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -71,48 +54,15 @@ export default function LoginPage() {
 
   return (
     <main className="nx-login-container">
-      {/* FULL BACKGROUND IMAGE */}
-      <div className="nx-login-bg">
-        <div className="nx-login-bg-overlay" />
+      <div className="nx-login-brand-hero" aria-hidden="true">
+        <img src="/nexride-wordmark.webp" alt="" width="1200" height="600" />
       </div>
-
-      {/* 3D PERMISSIONS POPUP */}
-      {showPermissions && (
-        <div className="nx-permission-backdrop">
-          <div className="nx-permission-3d-card">
-            <h2>Enable NEXRIDE</h2>
-            <p>Turn on GPS, alerts, and voice for live rides.</p>
-            
-            <div className="nx-permission-actions">
-              <button className="nx-pill-btn">📍 Enable GPS</button>
-              <button className="nx-pill-btn">🔔 Notifications</button>
-              <button className="nx-pill-btn">🔊 Test Voice</button>
-            </div>
-
-            <div className="nx-status-ready">🟢 Ready</div>
-
-            <button 
-              className="nx-btn nx-btn-primary nx-btn-block" 
-              onClick={handleContinue}
-            >
-              Continue to NEXRIDE
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* GLASS LOGIN SHEET */}
       <section className={`nx-login-sheet ${mounted ? "mounted" : ""}`}>
-        {/* FIXED: Changed to nx-sheet-handle to match the CSS */}
-        <div className="nx-sheet-handle" style={{ margin: "0 auto 20px" }} />
-        
         <div className="nx-login-brand-mini">
-          <img src="/nexridebackground10.jpg" alt="NEXRIDE" className="nx-mini-logo" />
-          <div>
-            <h1 className="nx-mini-title">NEXRIDE</h1>
-            {/* MOTTO HERE */}
-            <p className="nx-mini-sub">Where Every Ride Feels Right</p>
-          </div>
+          <img src="/nexride-mark.webp" alt="" className="nx-mini-logo" />
+          <h1 className="nx-mini-title">NEXRIDE</h1>
         </div>
 
         <h2 className="nx-auth-sheet-title" style={{ marginTop: 24 }}>Welcome</h2>

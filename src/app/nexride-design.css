@@ -220,3 +220,20 @@ body { background: #090e16; color: var(--ink); }
 .nx-school-map-shell .nx-school-kid-tabs button { background: #fff; border-color: #cddff6; }
 .nx-school-map-shell .nx-school-kid-tabs button.active { background: #1654a5; color: #fff; }
 .nx-school-map-shell .nx-alert-error { color: #832522; }
+
+.nx-splash-overlay.nx-branded-splash { background: #101827; padding: 20px; }
+.nx-branded-splash img,
+.nx-login-brand-hero img { display: block; width: min(100%, 560px); height: auto; }
+.nx-login-container:has(.nx-login-brand-hero) {
+  background: #101827;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  min-height: 100dvh;
+  height: auto;
+}
+.nx-login-brand-hero {
+  margin: auto auto 0;
+  width: min(100%, 560px);
+  padding: 8px 16px 0;
+}

@@ -92,7 +92,7 @@ function menuItems(role) {
   return [
     { href: "/profile", label: "Profile", icon: ICON.profile },
     { href: "/school", label: "School transport", icon: ICON.school },
-    { href: "/permissions", label: "Device permissions", icon: ICON.shield },
+    { href: "/permissions", label: "Device help", icon: ICON.shield },
     { href: "/profile#history", label: "Completed rides", icon: ICON.history },
     opposite,
     { href: "/notifications", label: "Notifications", icon: ICON.bell },
@@ -247,11 +247,9 @@ export default function FloatingTopBar({
         {/* Header: avatar + name + role badge */}
         <div className="nx-drawer-profile">
           <div className="nx-drawer-avatar">
-            {avatarUrl ? (
-              <img src={avatarUrl} alt="" />
-            ) : (
-              (displayName || "N").slice(0, 1).toUpperCase()
-            )}
+            <img src={avatarUrl || "/nexride-mark.webp"} alt="" onError={(event) => {
+              if (avatarUrl && !event.currentTarget.src.endsWith("/nexride-mark.webp")) event.currentTarget.src = "/nexride-mark.webp";
+            }} />
           </div>
           <div className="nx-drawer-identity">
             <div className="nx-drawer-name">{displayName || "NEXRIDE"}</div>

@@ -97,7 +97,7 @@ export default function RequestSheet({
   const dropoffInputRef = useRef(null);
   const pickupAutocompleteRef = useRef(null);
   const dropoffAutocompleteRef = useRef(null);
-  const hasAutoLocatedRef = useRef(false);
+  const pickupEditedRef = useRef(false);
   const appSettingsRef = useRef(appSettings);
 
   useEffect(() => { appSettingsRef.current = appSettings; }, [appSettings]);
@@ -147,6 +147,7 @@ export default function RequestSheet({
         const pl = pAC.getPlace();
         const f = pl.formatted_address || pl.name || pickupInputRef.current?.value || "";
         const loc = pl.geometry?.location;
+        pickupEditedRef.current = true;
         if (f) setPickupName(f);
         if (loc) setPickupCoords({ lat: loc.lat(), lng: loc.lng() });
       });
@@ -184,19 +185,20 @@ export default function RequestSheet({
   }, [city]);
 
   /* GPS */
-  const useCurrentLocation = useCallback(() => {
+  const useCurrentLocation = useCallback(({ automatic = false } = {}) => {
     setError("");
     if (typeof navigator === "undefined" || !navigator.geolocation) {
-      setError("GPS not available. Type pickup manually.");
+      if (!automatic) setError("GPS not available. Type pickup manually.");
       return;
     }
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
+        if (automatic && pickupEditedRef.current) { setLocating(false); return; }
         const gpsPoint = buildGpsPointFromPosition(pos);
         const accuracy = Number(gpsPoint?.accuracy || 9999);
         if (!gpsPoint || accuracy > 250) {
-          setError("GPS too weak. Type pickup manually.");
+          if (!automatic) setError("GPS too weak. Type pickup manually.");
           setLocating(false);
           return;
         }
@@ -206,23 +208,20 @@ export default function RequestSheet({
         saveDetectedCityLocal(detectedCity);
         saveDetectedCity({ db, ref, update, uid: user?.uid, cityKey: detectedCity }).catch(() => {});
         setPickupCoords({ lat: gpsPoint.lat, lng: gpsPoint.lng, accuracy, source: "phone-gps" });
-        setPickupName((c) => (c?.trim() && c !== "Current GPS pickup" ? c : "Current GPS pickup"));
+        setPickupName("Current GPS pickup");
         setLocating(false);
       },
-      () => { setError("Could not read GPS."); setLocating(false); },
+      () => { if (!automatic) setError("Could not read GPS. Type your pickup address."); setLocating(false); },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
     );
   }, [city, user?.uid]);
 
   useEffect(() => {
-    if (hasAutoLocatedRef.current || pickupCoords) return;
-    const saved = readStored("nexride-default-pickup");
-    if (saved && saved.trim() && saved !== "Current GPS pickup") {
-      hasAutoLocatedRef.current = true;
-      return;
-    }
-    hasAutoLocatedRef.current = true;
-    const t = setTimeout(() => useCurrentLocation(), 400);
+    const saved = readStored("nexride-default-pickup") || appSettingsRef.current?.defaultPickup;
+    if (saved?.trim() && saved !== "Current GPS pickup") return;
+    const t = setTimeout(() => {
+      if (!pickupEditedRef.current) useCurrentLocation({ automatic: true });
+    }, 400);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -374,10 +373,10 @@ export default function RequestSheet({
             aria-label="Pickup location"
             placeholder="Pickup"
             value={pickupName}
-            onChange={(e) => { setPickupName(e.target.value); if (!e.target.value.trim()) setPickupCoords(null); }}
+            onChange={(e) => { pickupEditedRef.current = true; setPickupName(e.target.value); setPickupCoords(null); }}
             autoComplete="off"
           />
-          <button type="button" className="nx-rs-gps" onClick={useCurrentLocation} disabled={locating} aria-label="Use my current location">
+          <button type="button" className="nx-rs-gps" onClick={() => useCurrentLocation()} disabled={locating} aria-label="Use my current location">
             {locating ? "…" : "📍"}
           </button>
         </div>

@@ -18,35 +18,10 @@ export default function NexrideSplash() {
     return () => clearTimeout(timer);
   }, []);
 
+  if (isDone) return null;
   return (
-    <div className={`nx-splash-overlay ${isDone ? "is-done" : ""}`}>
-      <div className="nx-splash-road" />
-      
-      {/* The Blue Arrow Car */}
-      <div className="nx-splash-car">
-        <svg viewBox="0 0 64 64" aria-hidden="true">
-          <ellipse cx="32" cy="58" rx="10" ry="3" fill="#06152b" opacity="0.22"/>
-          <circle cx="32" cy="32" r="22" fill="#ffffff"/>
-          <path
-            d="M32 12 L48 48 L32 40 L16 48 Z"
-            fill="#1b5bb4"
-            stroke="#1b5bb4"
-            strokeWidth="1"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M32 12 L46 44"
-            stroke="#b2cef5"
-            strokeWidth="1.4"
-            strokeLinecap="round"
-            fill="none"
-            opacity="0.75"
-          />
-        </svg>
-      </div>
-
-      <div className="nx-splash-text">NEXRIDE</div>
-      <div className="nx-splash-sub">Where Every Ride Feels Right</div>
+    <div className="nx-splash-overlay nx-branded-splash" aria-hidden="true">
+      <img src="/nexride-wordmark.webp" alt="" width="1200" height="600" fetchPriority="high" />
     </div>
   );
 }

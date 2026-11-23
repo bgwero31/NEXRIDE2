@@ -21,8 +21,7 @@ export default function NexrideBrand({
   }, [avatarUrl]);
 
   const hasAvatar = Boolean(avatarUrl) && !imageError;
-  // USE YOUR ACTUAL LOGO FILE HERE
-  const logoSrc = hasAvatar ? avatarUrl : "/nexridebackground10.jpg"; 
+  const logoSrc = hasAvatar ? avatarUrl : "/nexride-mark.webp";
 
   const classes = [
     "nx-brand",
@@ -38,17 +37,12 @@ export default function NexrideBrand({
         className={`nx-brand-mark ${hasAvatar ? "has-photo" : ""}`}
         aria-hidden="true"
       >
-        {imageError ? (
-          <span style={{ fontWeight: 1000, fontSize: "24px", color: "#fff" }}>N</span>
-        ) : (
-          <img
-            src={logoSrc}
-            alt="NEXRIDE"
-            loading="lazy"
-            decoding="async"
-            onError={() => setImageError(true)}
-          />
-        )}
+        <img
+          src={logoSrc}
+          alt=""
+          decoding="async"
+          onError={hasAvatar ? () => setImageError(true) : undefined}
+        />
       </div>
       <div className="nx-brand-copy">
         <div className="nx-brand-text">NEXRIDE</div>
