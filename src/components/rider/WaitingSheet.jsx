@@ -40,14 +40,14 @@ function statusCopy({ viewCount, offersCount, driversNearby }) {
     return {
       eyebrow: "Request is live",
       title: viewCount === 1 ? "1 driver viewed your ride" : `${viewCount} drivers viewed your ride`,
-      copy: "Negotiations are happening. Sit tight — offers usually land within a minute.",
+      copy: "Offers appear here when drivers respond.",
     };
   }
   if (driversNearby > 0) {
     return {
       eyebrow: "Request is live",
       title: `Waiting for drivers`,
-      copy: `${driversNearby} driver${driversNearby === 1 ? " is" : "s are"} nearby. Your request is visible to them now.`,
+      copy: `${driversNearby} driver${driversNearby === 1 ? " is" : "s are"} online in your city. Your request is visible to them now.`,
     };
   }
   return {

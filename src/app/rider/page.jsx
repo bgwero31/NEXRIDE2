@@ -7,8 +7,9 @@ import { useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { get, onValue, ref, remove, set, update, push, runTransaction } from "firebase/database";
 import { auth, db } from "../../lib/firebase";
-import { googleMapsDirectionsUrl } from "../../lib/googleMaps";
+import { getGoogleRouteDetails, googleMapsDirectionsUrl, pointFromRecord } from "../../lib/googleMaps";
 import {
+  getNearestCityFromPoint,
   normalizeCity,
   saveDetectedCity,
   saveDetectedCityLocal,
@@ -24,6 +25,7 @@ import FloatingTopBar from "../../components/ui/FloatingTopBar";
 import BottomSheet from "../../components/ui/BottomSheet";
 import ActionCard from "../../components/ui/ActionCard";
 import RiderMap from "../../components/rider/RiderMap";
+import PickupEditor from "../../components/rider/PickupEditor";
 import RequestSheet from "../../components/rider/RequestSheet";
 import WaitingSheet from "../../components/rider/WaitingSheet";
 import OffersSheet from "../../components/rider/OffersSheet";
@@ -74,7 +76,12 @@ export default function RiderPage() {
   /* ---------- Request / offer state ---------- */
   const [requestId, setRequestId] = useState("");
   const [requestData, setRequestData] = useState(null);
-  const [offers, setOffers] = useState([]);
+  const [pickupEditorId, setPickupEditorId] = useState(null);
+  const [pickupPoint, setPickupPoint] = useState(null);
+  const [receivedOffers, setOffers] = useState([]);
+  const offers = useMemo(() => receivedOffers.filter(
+    (offer) => (offer.pickupRevision || 0) === (requestData?.pickupRevision || 0)
+  ), [receivedOffers, requestData?.pickupRevision]);
   const [viewCount, setViewCount] = useState(0);
   const [viewers, setViewers] = useState([]);
 
@@ -407,11 +414,12 @@ export default function RiderPage() {
         const reqId = requestIdRef.current || requestId;
 
         // Fresh read to avoid stale pickup/dropoff if a new offer raced in
-        let freshRequest = requestData;
-        try {
-          const snap = await get(ref(db, `rideRequests/${cityKey}/${reqId}`));
-          if (snap.exists()) freshRequest = { ...(requestData || {}), ...snap.val() };
-        } catch {}
+        const snap = await get(ref(db, `rideRequests/${cityKey}/${reqId}`));
+        const freshRequest = snap.val();
+        if (freshRequest && (freshRequest.pickupRevision || 0) !== (offer.pickupRevision || 0)) {
+          setError("Pickup changed. Wait for a new offer.");
+          return;
+        }
 
         if (!freshRequest) {
           setError("This ride request is no longer available.");
@@ -498,7 +506,8 @@ export default function RiderPage() {
         // 1. Claim the request atomically. Another driver or client may race.
         const requestNode = ref(db, `rideRequests/${cityKey}/${reqId}`);
         const claim = await runTransaction(requestNode, (current) => {
-          if (!current || (current.status || "open") !== "open") return;
+          if (!current || (current.status || "open") !== "open" ||
+              (current.pickupRevision || 0) !== (offer.pickupRevision || 0)) return;
           return {
             ...current,
             status: "matched",
@@ -592,6 +601,43 @@ export default function RiderPage() {
     // rebuild this callback on every snapshot update.
     [user, profile, requestId, offers]
   );
+
+  const handleEditPickup = async (pickup) => {
+    const current = requestData;
+    const requestNode = ref(db, `rideRequests/${city}/${requestId}`);
+    const destination = pointFromRecord(current, "dropoff") || current.dropoffName;
+    const route = await getGoogleRouteDetails({ origin: pickup, destination, city });
+    if (!route?.pickupCoords) throw new Error("Pickup could not be located. Try a more specific address.");
+    const detected = getNearestCityFromPoint(route.pickupCoords);
+    if (detected?.cityKey && detected.cityKey !== city) {
+      throw new Error("Choose a pickup in the same city.");
+    }
+
+    const revision = current.pickupRevision || 0;
+    const result = await runTransaction(requestNode, (latest) => {
+      if (!latest || latest.riderId !== user?.uid || (latest.status || "open") !== "open" ||
+          (latest.pickupRevision || 0) !== revision) return;
+      return {
+        ...latest,
+        pickupName: route.startAddress || (typeof pickup === "string" ? pickup : "Updated map pickup"),
+        pickupLat: route.pickupCoords.lat,
+        pickupLng: route.pickupCoords.lng,
+        distanceText: route.distanceText,
+        distanceMeters: route.distanceMeters,
+        durationText: route.durationText,
+        durationSeconds: route.durationSeconds,
+        routeSource: route.source || "google",
+        mapsUrl: googleMapsDirectionsUrl({ origin: route.pickupCoords, destination, city }),
+        pickupRevision: revision + 1,
+        offersCount: 0,
+        updatedAt: Date.now(),
+      };
+    }, { applyLocally: false });
+
+    if (!result.committed) throw new Error("The request changed. Check the current ride details.");
+    setSuccess("Pickup updated. Drivers can send new offers.");
+    setError("");
+  };
 
   const handleCancelRequest = useCallback(async () => {
     if (!requestId || !city) return;
@@ -788,6 +834,7 @@ export default function RiderPage() {
         onDriversCountChange={setNearbyDriversCount}
         onRouteInfoChange={setLiveRouteInfo}
         onCityDetected={handleDetectedCity}
+        onMapClick={pickupEditorId && pickupEditorId === requestId && requestData?.status === "open" ? setPickupPoint : undefined}
       />
 
       <FloatingTopBar
@@ -857,6 +904,19 @@ export default function RiderPage() {
           />
         )}
 
+        {(mode === "waiting" || mode === "offers") && (requestData?.status || "open") === "open" && (
+          <PickupEditor
+            key={requestId}
+            onSave={handleEditPickup}
+            point={pickupEditorId === requestId ? pickupPoint : null}
+            onClearPoint={() => setPickupPoint(null)}
+            onEditingChange={(editing) => {
+              setPickupEditorId(editing ? requestId : null);
+              setPickupPoint(null);
+            }}
+          />
+        )}
+
         {mode === "waiting" && (
           <WaitingSheet
             requestData={requestData}
@@ -879,6 +939,7 @@ export default function RiderPage() {
           <OffersSheet
             requestData={requestData}
             offers={offers}
+            driversNearby={nearbyDriversCount}
             viewCount={viewCount}
             onAcceptOffer={handleAcceptOffer}
             onCancelRequest={handleCancelRequest}

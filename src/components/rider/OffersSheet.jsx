@@ -3,6 +3,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import DriverVerificationBadge from "./DriverVerificationBadge";
 import ActionCard from "../ui/ActionCard";
 import PremiumButton from "../ui/PremiumButton";
 
@@ -96,6 +97,7 @@ export default function OffersSheet({
   requestData,
   offers = [],
   viewCount = 0,
+  driversNearby = 0,
   onAcceptOffer,
   onCancelRequest,
   onBoostFare, // optional
@@ -152,7 +154,7 @@ export default function OffersSheet({
             best one.
           </p>
         </div>
-        <div className="nx-price-badge">{viewCount} views</div>
+        <div className="nx-price-badge">{viewCount} viewed · {driversNearby} online in your city</div>
       </div>
 
       {/* Empty state with a boost path */}
@@ -225,8 +227,9 @@ export default function OffersSheet({
                     <span className="nx-offer-rating">★ {rate}</span>
                   ) : null}
                 </h3>
+                <DriverVerificationBadge driverId={offer.driverId} />
                 <p className="nx-sheet-copy">
-                  {offer.carName || "Verified driver"}
+                  {offer.carName || "Vehicle details unavailable"}
                   {offer.plateNumber ? ` • ${offer.plateNumber}` : ""}
                   {eta ? ` • ${eta}` : ""}
                 </p>

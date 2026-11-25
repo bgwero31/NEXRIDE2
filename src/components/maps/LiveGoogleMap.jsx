@@ -98,7 +98,7 @@ function renderPlacePin(div, label, variant = "pickup") {
 }
 
 const LiveGoogleMap = forwardRef(function LiveGoogleMap(
-  { city = "harare", role = "rider", origin = null, destination = null, driverLocation = null, riderLocation = null, pickupLocation = null, dropoffLocation = null, markers = [], followTarget = "auto", driverPhotoUrl = "", showRoute = true, cameraFollow = true, routePhase = "route", boundsBottomPadding = 220, lightMap = false, nearbyDrivers = [], onRouteInfo, onMapStatus, onDirectionStep },
+  { city = "harare", role = "rider", origin = null, destination = null, driverLocation = null, riderLocation = null, pickupLocation = null, dropoffLocation = null, markers = [], followTarget = "auto", driverPhotoUrl = "", showRoute = true, cameraFollow = true, routePhase = "route", boundsBottomPadding = 220, lightMap = false, nearbyDrivers = [], onRouteInfo, onMapStatus, onDirectionStep, onMapClick },
   ref
 ) {
   const mapNodeRef = useRef(null); const mapRef = useRef(null); const directionsRendererRef = useRef(null); const fallbackPolylineRef = useRef(null); const overlayRefs = useRef([]);
@@ -157,6 +157,14 @@ const LiveGoogleMap = forwardRef(function LiveGoogleMap(
     }).catch((err) => { if (!cancelled) { setError("Google Maps failed to load"); onMapStatusRef.current?.("fallback"); } });
     return () => { cancelled = true; };
   }, [center, lightMap]);
+
+  useEffect(() => {
+    if (!ready || !mapRef.current || !onMapClick) return;
+    const listener = mapRef.current.addListener("click", (event) => {
+      if (event.latLng) onMapClick(event.latLng.toJSON());
+    });
+    return () => listener.remove();
+  }, [ready, onMapClick]);
 
   useEffect(() => { return () => { routeRequestIdRef.current += 1; try { overlayRefs.current.forEach((o) => o.setMap(null)); fallbackPolylineRef.current?.setMap(null); directionsRendererRef.current?.setMap(null); } catch {} overlayRefs.current = []; }; }, []);
 

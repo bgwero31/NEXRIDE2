@@ -249,7 +249,8 @@ export default function RequestSheet({
     (pickupCoords || pickupName.trim() !== "Current GPS pickup") &&
     dropoffName.trim() && Number(offerPrice) > 0 && Number(people) > 0
   );
-  const suggested = routePreview ? suggestFare(routePreview.distanceMeters) : null;
+  const suggested = routePreview?.distanceMeters > 0 ? suggestFare(routePreview.distanceMeters) : null;
+  const fareDifference = suggested ? Number(offerPrice) - suggested : 0;
 
   useEffect(() => {
     onDraftRouteChange?.({
@@ -423,10 +424,18 @@ export default function RequestSheet({
         <button type="button" className="nx-rs-step" onClick={() => bumpFare(0.5)} aria-label="Raise offered fare">+</button>
         {suggested && Number(offerPrice) !== suggested ? (
           <button type="button" className="nx-rs-suggest" onClick={() => setOfferPrice(suggested.toFixed(2))}>
-            ${suggested.toFixed(2)}
+            Use ${suggested.toFixed(2)}
           </button>
         ) : null}
       </div>
+
+      {suggested ? (
+        <p className="nx-sheet-copy" style={{ color: fareDifference < -0.5 ? "#92400e" : "#166534" }}>
+          Suggested fare: ${suggested.toFixed(2)}.{" "}
+          {fareDifference < -0.5 ? "Below the suggestion." :
+            fareDifference > 0.5 ? "Above the suggestion." : "Close to the suggestion."}
+        </p>
+      ) : null}
 
       {/* Payment pills */}
       <div className="nx-rs-pills">

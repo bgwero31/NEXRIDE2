@@ -518,7 +518,8 @@ export default function DriverPage() {
       const requestNode = ref(db, `rideRequests/${cityRef.current}/${requestItem.id}`);
       const freshSnap = await get(requestNode);
       const fresh = freshSnap.val() || {};
-      if (!freshSnap.exists() || (fresh.status || "open") !== "open") {
+      if (!freshSnap.exists() || (fresh.status || "open") !== "open" ||
+          (fresh.pickupRevision || 0) !== (requestItem.pickupRevision || 0)) {
         throw new Error("Request is no longer available.");
       }
 
@@ -596,7 +597,8 @@ export default function DriverPage() {
 
       // Atomic claim prevents two honest drivers from accepting the same ride.
       const claim = await runTransaction(requestNode, (current) => {
-        if (!current || (current.status || "open") !== "open") return;
+        if (!current || (current.status || "open") !== "open" ||
+            (current.pickupRevision || 0) !== (requestItem.pickupRevision || 0)) return;
         return {
           ...current,
           status: "matched",
@@ -683,6 +685,14 @@ export default function DriverPage() {
     setSuccess("");
 
     try {
+      const reqRef = ref(db, `rideRequests/${cityRef.current}/${negotiatingFor.id}`);
+      const request = (await get(reqRef)).val();
+      const pickupRevision = negotiatingFor.pickupRevision || 0;
+      if (!request || (request.status || "open") !== "open" || (request.pickupRevision || 0) !== pickupRevision) {
+        setNegotiatingFor(null);
+        setError("This request changed. Check the pickup before making another offer.");
+        return;
+      }
       const offerRef = push(ref(db, `rideOffers/${negotiatingFor.id}`));
       await set(offerRef, {
         id: offerRef.key,
@@ -696,19 +706,26 @@ export default function DriverPage() {
         driverPhotoUrl: profile.photoUrl || profile.profilePhotoUrl || "",
         proposedPrice: priceNumber,
         originalPrice: Number(negotiatingFor.offerPrice || 0),
+        pickupRevision,
         message: proposedMessage.trim(),
         status: "pending",
         createdAt: Date.now(),
       });
 
       // Atomic increment of offersCount
-      const reqRef = ref(db, `rideRequests/${cityRef.current}/${negotiatingFor.id}`);
-      await runTransaction(reqRef, (current) => {
-        if (!current) return current;
+      const counted = await runTransaction(reqRef, (current) => {
+        if (!current || (current.status || "open") !== "open" ||
+            (current.pickupRevision || 0) !== pickupRevision) return;
         current.offersCount = Number(current.offersCount || 0) + 1;
         current.updatedAt = Date.now();
         return current;
       });
+
+      if (!counted.committed) {
+        setNegotiatingFor(null);
+        setError("This request changed before the offer was sent.");
+        return;
+      }
 
       queueNexrideEvent({
         type: nexrideNotificationTypes.OFFER_SENT,

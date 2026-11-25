@@ -36,6 +36,7 @@ export default function RiderMap({
   onDriversCountChange,
   onRouteInfoChange,
   onCityDetected,
+  onMapClick,
 }) {
   const cityKey = normalizeCity(city || "zvishavane");
 
@@ -249,6 +250,7 @@ export default function RiderMap({
         boundsBottomPadding={boundsBottomPadding}
         onRouteInfo={setRouteInfo}
         onMapStatus={setMapStatus}
+        onMapClick={onMapClick}
       />
 
       <div className="nx-map-control-stack">
