@@ -1,4 +1,4 @@
-import { cert, getApps, initializeApp } from "firebase-admin/app";
+import { getOperationsApp } from "../../../lib/nexrideOperations";
 import { getAuth } from "firebase-admin/auth";
 import { getDatabase } from "firebase-admin/database";
 
@@ -11,9 +11,7 @@ async function authorize(request) {
   if (!token) return json({ error: "Sign in to open the admin dashboard." }, 401);
   const { NEXRIDE_FIREBASE_SERVICE_ACCOUNT_JSON: credentials, NEXRIDE_FIREBASE_DATABASE_URL: databaseURL, NEXRIDE_ADMIN_UIDS: owners } = process.env;
   if (!credentials || !databaseURL) return json({ error: "The admin dashboard needs Firebase server configuration." }, 503);
-  const name = "nexride-operations";
-  const app = getApps().find((app) => app.name === name) ||
-    initializeApp({ credential: cert(JSON.parse(credentials)), databaseURL }, name);
+  const app = getOperationsApp();
   const identity = await getAuth(app).verifyIdToken(token, true).catch(() => null);
   if (!identity) return json({ error: "Sign in again to continue." }, 401);
   if (identity.admin !== true && !owners?.split(",").map((uid) => uid.trim()).includes(identity.uid)) {

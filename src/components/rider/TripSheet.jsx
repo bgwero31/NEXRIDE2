@@ -3,6 +3,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import DriverVerificationBadge from "./DriverVerificationBadge";
 import ActionCard from "../ui/ActionCard";
 import PremiumButton from "../ui/PremiumButton";
 import {
@@ -157,8 +158,9 @@ export default function TripSheet({
                 </span>
               ) : null}
             </h3>
+            <DriverVerificationBadge driverId={tripData.driverId} />
             <p className="nx-sheet-copy">
-              {tripData.carName || "Verified car"}
+              {tripData.carName || "Vehicle details unavailable"}
               {tripData.plateNumber ? ` • ${tripData.plateNumber}` : ""}
             </p>
           </div>
