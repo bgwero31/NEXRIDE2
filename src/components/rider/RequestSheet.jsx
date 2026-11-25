@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { push, ref, set, update } from "firebase/database";
 import { db } from "../../lib/firebase";
 import {
@@ -18,7 +18,6 @@ import {
   normalizeCity,
   saveDetectedCity,
   saveDetectedCityLocal,
-  SERVICE_CITY_KEYS,
 } from "../../lib/nexrideCity";
 import {
   nexrideNotificationTypes,
@@ -26,8 +25,6 @@ import {
 } from "../../lib/nexrideNotifications";
 import ActionCard from "../ui/ActionCard";
 import PremiumButton from "../ui/PremiumButton";
-
-const cityOptions = SERVICE_CITY_KEYS;
 
 const PAYMENT_OPTIONS = [
   { value: "cash", label: "Cash" },
@@ -77,7 +74,8 @@ export default function RequestSheet({
   onRequestCreated,
   onDraftRouteChange,
 }) {
-  const [city, setCity] = useState(normalizeCity(initialCity || profile?.city || "zvishavane"));
+  const [detectedCity, setDetectedCity] = useState("");
+  const city = detectedCity || normalizeCity(initialCity);
   const [pickupName, setPickupName] = useState("");
   const [dropoffName, setDropoffName] = useState("");
   const [offerPrice, setOfferPrice] = useState("3");
@@ -105,14 +103,9 @@ export default function RequestSheet({
   /* Hydrate once */
   useEffect(() => {
     const settings = appSettingsRef.current || {};
-    const savedPickup = readStored("nexride-default-pickup") || settings.defaultPickup || "";
     const savedDropoff = readStored("nexride-default-dropoff") || settings.defaultDropoff || "";
     const savedPayment = readStored("nexride-preferred-payment") || settings.preferredPayment || "cash";
     const savedRideMode = readStored("nexride-ride-mode") || settings.rideMode || "standard";
-    const savedCity = readStored("nexride-gps-detected-city") || readStored("nexride-last-place") || initialCity || profile?.city || "zvishavane";
-
-    setCity(normalizeCity(savedCity));
-    if (savedPickup) setPickupName(savedPickup);
     setDropoffName(savedDropoff);
     setPreferredPayment(savedPayment);
     setRideMode(savedRideMode);
@@ -187,50 +180,52 @@ export default function RequestSheet({
   /* GPS */
   const useCurrentLocation = useCallback(({ automatic = false } = {}) => {
     setError("");
-    if (typeof navigator === "undefined" || !navigator.geolocation) {
-      if (!automatic) setError("GPS not available. Type pickup manually.");
+    setDetectedCity("");
+    if (!navigator.geolocation) {
+      setError("Location is unavailable on this device.");
       return;
     }
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        if (automatic && pickupEditedRef.current) { setLocating(false); return; }
+      (pos) => {
+        setLocating(false);
         const gpsPoint = buildGpsPointFromPosition(pos);
-        const accuracy = Number(gpsPoint?.accuracy || 9999);
-        if (!gpsPoint || accuracy > 250) {
-          if (!automatic) setError("GPS too weak. Type pickup manually.");
-          setLocating(false);
+        if (!gpsPoint || gpsPoint.accuracy > 250) {
+          setError("Location is too weak. Try using GPS again.");
           return;
         }
         const detected = getNearestCityFromPoint(gpsPoint);
-        const detectedCity = detected?.cityKey || city;
-        setCity(detectedCity);
-        saveDetectedCityLocal(detectedCity);
-        saveDetectedCity({ db, ref, update, uid: user?.uid, cityKey: detectedCity }).catch(() => {});
-        setPickupCoords({ lat: gpsPoint.lat, lng: gpsPoint.lng, accuracy, source: "phone-gps" });
-        setPickupName("Current GPS pickup");
-        setLocating(false);
+        if (!detected?.insideServiceArea) {
+          setError("NEXRIDE is unavailable at your current location.");
+          return;
+        }
+        setDetectedCity(detected.cityKey);
+        saveDetectedCityLocal(detected.cityKey);
+        saveDetectedCity({ db, ref, update, uid: user?.uid, cityKey: detected.cityKey }).catch(() => {});
+        if (!automatic || !pickupEditedRef.current) {
+          setPickupCoords({ lat: gpsPoint.lat, lng: gpsPoint.lng, accuracy: gpsPoint.accuracy, source: "phone-gps" });
+          setPickupName("Current GPS pickup");
+        }
       },
-      () => { if (!automatic) setError("Could not read GPS. Type your pickup address."); setLocating(false); },
+      () => {
+        setLocating(false);
+        setError("Allow location access, then tap the GPS button to try again.");
+      },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
     );
-  }, [city, user?.uid]);
+  }, [user?.uid]);
 
   useEffect(() => {
-    const saved = readStored("nexride-default-pickup") || appSettingsRef.current?.defaultPickup;
-    if (saved?.trim() && saved !== "Current GPS pickup") return;
-    const t = setTimeout(() => {
-      if (!pickupEditedRef.current) useCurrentLocation({ automatic: true });
-    }, 400);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const timer = setTimeout(() => useCurrentLocation({ automatic: true }), 400);
+    return () => clearTimeout(timer);
+  }, [useCurrentLocation]);
 
   /* Route preview */
   useEffect(() => {
     const cp = pickupName.trim();
     const cd = dropoffName.trim();
-    if (!cp || !cd) { setRoutePreview(null); return; }
+    setRoutePreview(null);
+    if (!cp || !cd) return;
     let cancelled = false;
     const timer = setTimeout(async () => {
       try {
@@ -243,7 +238,7 @@ export default function RequestSheet({
     return () => { cancelled = true; clearTimeout(timer); };
   }, [city, dropoffCoords, dropoffName, pickupCoords, pickupName]);
 
-  const cleanCity = useMemo(() => normalizeCity(city || "zvishavane"), [city]);
+  const cleanCity = detectedCity;
   const canSubmit = Boolean(
     user?.uid && cleanCity && pickupName.trim() &&
     (pickupCoords || pickupName.trim() !== "Current GPS pickup") &&
@@ -280,6 +275,7 @@ export default function RequestSheet({
     const peopleNumber = Number(people || 1);
 
     if (!user?.uid) return setError("Login again before requesting.");
+    if (!cleanCity) return setError("Detect your current city with GPS first.");
     if (!cp || !cd) return setError("Add pickup and destination.");
     if (cp === "Current GPS pickup" && !pickupCoords) {
       setError("Allow GPS or type pickup.");
@@ -299,12 +295,12 @@ export default function RequestSheet({
       }
       const rp = googleRoute?.pickupCoords || pickupCoords || null;
       const rd = googleRoute?.dropoffCoords || dropoffCoords || null;
-      const detected = getNearestCityFromPoint(rp || pickupCoords);
-      const requestCity = detected?.cityKey || cleanCity;
-
-      setCity(requestCity);
-      saveDetectedCityLocal(requestCity);
-      saveDetectedCity({ db, ref, update, uid: user.uid, cityKey: requestCity }).catch(() => {});
+      const pickupCity = getNearestCityFromPoint(rp);
+      if (!pickupCity?.insideServiceArea || pickupCity.cityKey !== cleanCity) {
+        setError(`Choose a pickup in ${cityLabel(cleanCity)}.`);
+        return;
+      }
+      const requestCity = cleanCity;
 
       const requestRef = push(ref(db, `rideRequests/${requestCity}`));
       const now = Date.now();
@@ -343,7 +339,6 @@ export default function RequestSheet({
 
       writeStored("nexride-last-request-id", requestRef.key);
       writeStored("nexride-last-place", requestCity);
-      writeStored("nexride-default-pickup", cp);
       writeStored("nexride-default-dropoff", cd);
 
       onRequestCreated?.({ ...payload, id: requestRef.key });
@@ -399,9 +394,9 @@ export default function RequestSheet({
 
       {/* Route info + city — one compact row */}
       <div className="nx-rs-info">
-        <select aria-label="City" className="nx-rs-city" value={city} onChange={(e) => setCity(e.target.value)}>
-          {cityOptions.map((c) => <option key={c} value={c}>{cityLabel(c)}</option>)}
-        </select>
+        <span className="nx-rs-city-locked" role="status">
+          {detectedCity ? cityLabel(detectedCity) : locating ? "Detecting city…" : "City requires GPS"}
+        </span>
         <span className="nx-rs-sep">•</span>
         <span className="nx-rs-pax">
           <button type="button" onClick={() => setPeople((p) => String(Math.max(1, Number(p) - 1)))} aria-label="Remove one passenger">−</button>
